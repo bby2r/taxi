@@ -2,8 +2,10 @@
 
 Last updated: 2026-04-07
 
+## Done
+- [x] Phase 1: Foundation — Database Models & Enums (2026-04-07)
+
 ## In Progress
-- [ ] Phase 1: Foundation — Database Models & Enums — starting 1.1
 
 ## Next
 - Phase 2: Authentication
@@ -13,5 +15,3 @@ Last updated: 2026-04-07
 - Phase 6: Driver React Native App
 - Phase 7: Admin Web Panel
 - Phase 8: Push Notifications & Distribution
-
-## Done
