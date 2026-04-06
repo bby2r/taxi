@@ -1,0 +1,3 @@
+[submodule ".ai/shared-skills"]
+	path = .ai/shared-skills
+	url = ssh://git@gitcloud.top:2224/ai/skills.git
