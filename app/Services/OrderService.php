@@ -19,6 +19,7 @@ class OrderService
     public function __construct(
         private readonly TariffService $tariffService,
         private readonly GeoService $geoService,
+        private readonly ExpoPushService $pushService,
     ) {}
 
     /**
@@ -87,6 +88,16 @@ class OrderService
             ->delay(now()->addSeconds(10));
 
         event(new OrderOfferedToDriver($order, $driver->user_id));
+
+        $driverUser = User::find($driver->user_id);
+        if ($driverUser) {
+            $this->pushService->sendToUser(
+                $driverUser,
+                'New ride request',
+                "A client is looking for a ride from {$order->pickup_address}",
+                ['order_id' => $order->id, 'type' => 'new_order'],
+            );
+        }
     }
 
     /**
@@ -94,7 +105,7 @@ class OrderService
      */
     public function acceptOrder(Order $order, User $driver): Order
     {
-        return DB::transaction(function () use ($order, $driver) {
+        $order = DB::transaction(function () use ($order, $driver) {
             $order = Order::lockForUpdate()->findOrFail($order->id);
 
             if ($order->status !== OrderStatus::Searching) {
@@ -117,6 +128,20 @@ class OrderService
 
             return $order;
         });
+
+        $client = User::find($order->client_id);
+        $driverProfile = $driver->driverProfile;
+
+        if ($client) {
+            $this->pushService->sendToUser(
+                $client,
+                'Driver found!',
+                "{$driver->name} is on the way in a {$driverProfile?->car_model}",
+                ['order_id' => $order->id, 'type' => 'order_accepted'],
+            );
+        }
+
+        return $order;
     }
 
     /**
@@ -153,7 +178,7 @@ class OrderService
      */
     public function driverArrived(Order $order, User $driver): Order
     {
-        return DB::transaction(function () use ($order, $driver) {
+        $order = DB::transaction(function () use ($order, $driver) {
             $order = Order::lockForUpdate()->findOrFail($order->id);
 
             if ($order->status !== OrderStatus::Accepted || $order->driver_id !== $driver->id) {
@@ -169,6 +194,19 @@ class OrderService
 
             return $order;
         });
+
+        $client = User::find($order->client_id);
+
+        if ($client) {
+            $this->pushService->sendToUser(
+                $client,
+                'Driver arrived',
+                "{$driver->name} has arrived at your pickup point",
+                ['order_id' => $order->id, 'type' => 'driver_arrived'],
+            );
+        }
+
+        return $order;
     }
 
     /**
@@ -199,7 +237,7 @@ class OrderService
      */
     public function completeOrder(Order $order, User $driver): Order
     {
-        return DB::transaction(function () use ($order, $driver) {
+        $order = DB::transaction(function () use ($order, $driver) {
             $order = Order::lockForUpdate()->findOrFail($order->id);
 
             if ($order->status !== OrderStatus::InProgress || $order->driver_id !== $driver->id) {
@@ -215,6 +253,26 @@ class OrderService
 
             return $order;
         });
+
+        $client = User::find($order->client_id);
+
+        if ($client) {
+            $this->pushService->sendToUser(
+                $client,
+                'Ride completed',
+                "Your ride is complete. Total: {$order->price} KGS",
+                ['order_id' => $order->id, 'type' => 'order_completed'],
+            );
+        }
+
+        $this->pushService->sendToUser(
+            $driver,
+            'Ride completed',
+            "Ride completed. Earned: {$order->price} KGS",
+            ['order_id' => $order->id, 'type' => 'order_completed'],
+        );
+
+        return $order;
     }
 
     /**
@@ -222,7 +280,7 @@ class OrderService
      */
     public function cancelOrder(Order $order, string $cancelledBy): Order
     {
-        return DB::transaction(function () use ($order, $cancelledBy) {
+        $order = DB::transaction(function () use ($order, $cancelledBy) {
             $order = Order::lockForUpdate()->findOrFail($order->id);
 
             if (! $order->isCancellable()) {
@@ -247,6 +305,29 @@ class OrderService
 
             return $order;
         });
+
+        $client = User::find($order->client_id);
+        $driver = $order->driver_id ? User::find($order->driver_id) : null;
+
+        if ($client) {
+            $this->pushService->sendToUser(
+                $client,
+                'Ride cancelled',
+                'Your ride has been cancelled',
+                ['order_id' => $order->id, 'type' => 'order_cancelled'],
+            );
+        }
+
+        if ($driver) {
+            $this->pushService->sendToUser(
+                $driver,
+                'Ride cancelled',
+                'The ride has been cancelled',
+                ['order_id' => $order->id, 'type' => 'order_cancelled'],
+            );
+        }
+
+        return $order;
     }
 
     /**

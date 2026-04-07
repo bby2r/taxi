@@ -15,5 +15,10 @@ Last updated: 2026-04-07
   - [x] Step 7.3: Admin Driver Management (CRUD)
   - [x] Step 7.4: Admin Order List
 
-## Next
+## In Progress
 - Phase 8: Push Notifications & Distribution
+  - [x] Step 8.1: Expo Push Notifications
+  - [ ] Step 8.2: EAS Distribution
+
+## Next
+(none)
