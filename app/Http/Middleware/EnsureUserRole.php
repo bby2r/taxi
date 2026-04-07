@@ -18,9 +18,13 @@ class EnsureUserRole
         $user = $request->user();
 
         if (! $user || ! in_array($user->role->value, $roles, true)) {
-            return response()->json([
-                'message' => 'Forbidden. Required role: '.implode(' or ', $roles).'.',
-            ], 403);
+            if ($request->expectsJson()) {
+                return response()->json([
+                    'message' => 'Forbidden. Required role: '.implode(' or ', $roles).'.',
+                ], 403);
+            }
+
+            return redirect()->route('admin.login');
         }
 
         return $next($request);
