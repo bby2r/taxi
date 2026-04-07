@@ -1,0 +1,777 @@
+---
+title: "Implementation Plan: Village Taxi Service"
+date: 2026-03-06
+status: draft
+tags: [taxi, pwa, api, realtime, village]
+summary: "Simple taxi dispatch replacement for a small village with Client PWA, Driver PWA, and Admin web panel"
+phases: 8
+---
+
+# Implementation Plan: Village Taxi Service
+
+## Overview
+
+Build a simple taxi dispatch system for a small village. Three roles: Client, Driver, Admin. Fixed pricing (80 som day / 120 som night). Client requests a ride, system finds nearest online driver via Haversine distance, driver accepts/declines within 10 seconds, auto-cascades to next driver.
+
+**Tech stack**: Laravel 12 API backend + PWA (Blade + Tailwind CSS 4 + Alpine.js) for mobile-first client/driver interfaces + Blade admin panel. Real-time via Laravel Broadcasting (Reverb/Pusher). Push via Firebase Cloud Messaging (or Web Push).
+
+## Design Direction
+
+- **Tone**: Minimal, clean, functional — village simplicity
+- **Palette**: Primary — Yellow `#FBBF24` (taxi), Dark — `#1F2937`, Success — `#10B981`, Danger — `#EF4444`, Background — `#F9FAFB`
+- **Typography**: Display — "Inter", Body — "Inter" (system fallback: sans-serif)
+- **Theme**: Light only (simple)
+- **Framework**: Blade + Tailwind CSS 4 + Alpine.js
+- **References**: Uber-lite, InDriver minimal
+
+---
+
+## Phase 1: Foundation — Database Models & Enums
+
+**Goal**: Create all database tables, Eloquent models, enums, factories, and seeders.
+
+### 1.1 Order Status Enum
+**Complexity**: simple
+**Requires**: nothing
+
+**Implementation**:
+- **Enum**: `App\Enums\OrderStatus` (string-backed)
+  - `Searching = 'searching'`
+  - `Accepted = 'accepted'`
+  - `Arrived = 'arrived'`
+  - `Completed = 'completed'`
+  - `Cancelled = 'cancelled'`
+- **Enum**: `App\Enums\UserRole` (string-backed)
+  - `Client = 'client'`
+  - `Driver = 'driver'`
+  - `Admin = 'admin'`
+- **Tests (PHPUnit)**:
+  - Unit: Enum values are correct strings, all cases exist
+- **Browser Test**: N/A (no UI in this step)
+
+✓ Done when: Enums exist, unit tests pass
+
+### 1.2 Modify User Model for Roles
+**Complexity**: medium
+**Requires**: 1.1 Enums
+
+**Implementation**:
+- **Migration**: `add_role_and_phone_to_users_table`
+  - `role` enum('client','driver','admin') default 'client'
+  - `phone` string(20) unique, nullable
+  - `phone_verified_at` timestamp nullable
+  - Remove `email` unique constraint requirement (make nullable)
+  - Remove `password` requirement (make nullable, clients use OTP)
+- **Model**: `User` — add:
+  - Cast `role` to `UserRole` enum
+  - Scopes: `scopeClients()`, `scopeDrivers()`, `scopeAdmins()`
+  - Helper methods: `isClient()`, `isDriver()`, `isAdmin()`
+  - Fillable: add `phone`, `role`, `phone_verified_at`
+- **Factory**: Update `UserFactory` — add states: `client()`, `driver()`, `admin()`
+- **Tests (PHPUnit)**:
+  - Unit: role scopes return correct users, helper methods work
+  - Database: factory states create correct roles
+- **Browser Test**: N/A (no UI in this step)
+
+✓ Done when: User model has roles, migration runs, tests pass
+
+### 1.3 Driver Profile Model
+**Complexity**: medium
+**Requires**: 1.2 User Model
+
+**Implementation**:
+- **Migration**: `create_driver_profiles_table`
+  - `id` bigIncrements
+  - `user_id` foreignId → users, unique, cascadeOnDelete
+  - `car_model` string(100)
+  - `car_number` string(20)
+  - `is_online` boolean default false
+  - `latitude` decimal(10,7) nullable
+  - `longitude` decimal(10,7) nullable
+  - `location_updated_at` timestamp nullable
+  - `timestamps`
+- **Model**: `DriverProfile`
+  - Relations: `belongsTo User`
+  - Scopes: `scopeOnline()`, `scopeNearby(lat, lng)` (Haversine raw query)
+  - Casts: `is_online` → boolean
+  - Fillable: all columns except id/timestamps
+- **Factory**: `DriverProfileFactory` — states: `online()`, `offline()`, `atLocation($lat, $lng)`
+- **Inverse relation on User**: `hasOne DriverProfile` (driverProfile)
+- **Seeder**: `DriverProfileSeeder` — 5 sample drivers with locations
+- **Tests (PHPUnit)**:
+  - Database: factory creates profile, relationship works both ways
+  - Unit: scopeOnline returns only online drivers, scopeNearby sorts by distance
+- **Browser Test**: N/A (no UI in this step)
+
+✓ Done when: DriverProfile model works with scopes, Haversine nearby query tested
+
+### 1.4 Order Model
+**Complexity**: medium
+**Requires**: 1.2 User, 1.3 DriverProfile, 1.1 Enums
+
+**Implementation**:
+- **Migration**: `create_orders_table`
+  - `id` bigIncrements
+  - `client_id` foreignId → users
+  - `driver_id` foreignId → users, nullable
+  - `status` string default 'searching'
+  - `pickup_latitude` decimal(10,7)
+  - `pickup_longitude` decimal(10,7)
+  - `pickup_address` string(255) nullable
+  - `price` integer (in soms)
+  - `accepted_at` timestamp nullable
+  - `arrived_at` timestamp nullable
+  - `completed_at` timestamp nullable
+  - `cancelled_at` timestamp nullable
+  - `cancelled_by` foreignId → users, nullable
+  - `timestamps`
+- **Model**: `Order`
+  - Relations: `belongsTo User` (client), `belongsTo User` (driver)
+  - Casts: `status` → OrderStatus, dates cast
+  - Scopes: `scopeActive()`, `scopeForClient($userId)`, `scopeForDriver($userId)`
+  - Methods: `calculatePrice(): int` — static, returns 80 or 120 based on current hour
+  - Fillable: all columns except id/timestamps
+- **Factory**: `OrderFactory` — states: `searching()`, `accepted()`, `arrived()`, `completed()`, `cancelled()`
+- **Tests (PHPUnit)**:
+  - Unit: calculatePrice returns 80 during 07-21, 120 during 21-07
+  - Database: relationships work, scopes filter correctly
+  - Database: factory states set correct status + timestamps
+- **Browser Test**: N/A (no UI in this step)
+
+⚠️ Warning: Price calculation depends on server timezone — ensure `config('app.timezone')` is set to the village's timezone
+✓ Done when: Order model with price calculation, relationships, factory states all tested
+
+### 1.5 OTP Verification Model
+**Complexity**: simple
+**Requires**: 1.2 User
+
+**Implementation**:
+- **Migration**: `create_otp_codes_table`
+  - `id` bigIncrements
+  - `phone` string(20)
+  - `code` string(6)
+  - `expires_at` timestamp
+  - `verified_at` timestamp nullable
+  - `timestamps`
+- **Model**: `OtpCode`
+  - Scopes: `scopeValid($phone)` — not expired, not verified
+  - Methods: `isExpired(): bool`, `markVerified(): void`
+  - Fillable: phone, code, expires_at
+- **Factory**: `OtpCodeFactory` — states: `expired()`, `verified()`
+- **Tests (PHPUnit)**:
+  - Unit: isExpired returns correctly, markVerified sets timestamp
+  - Database: scopeValid filters correctly
+- **Browser Test**: N/A (no UI in this step)
+
+✓ Done when: OtpCode model works, tests pass
+
+---
+
+## Phase 2: Authentication
+
+**Goal**: Phone OTP auth for clients, credential auth for drivers, Sanctum API tokens.
+
+### 2.1 Install & Configure Laravel Sanctum
+**Complexity**: simple
+**Requires**: Phase 1
+
+**Implementation**:
+- **Install**: `composer require laravel/sanctum` (if not present)
+- **Publish config**: `php artisan vendor:publish --provider="Laravel\Sanctum\SanctumServiceProvider"`
+- **Migration**: Sanctum's `personal_access_tokens` table (auto)
+- **Model**: Add `HasApiTokens` trait to `User`
+- **Config**: Set Sanctum guard and expiration in `config/sanctum.php`
+- **Middleware**: Add Sanctum middleware to `bootstrap/app.php` for API routes
+- **Routes file**: Create `routes/api.php` and register in `bootstrap/app.php`
+- **Tests (PHPUnit)**:
+  - Feature: Authenticated user can access protected API route, unauthenticated gets 401
+- **Browser Test**: N/A (no UI in this step)
+
+✓ Done when: Sanctum installed, API routes protected, test passes
+
+### 2.2 OTP Send & Verify Endpoints
+**Complexity**: medium
+**Requires**: 1.5 OtpCode, 2.1 Sanctum
+
+**Implementation**:
+- **Service**: `App\Services\OtpService`
+  - `send(string $phone): OtpCode` — generate 4-digit code, save, dispatch SMS notification (stub)
+  - `verify(string $phone, string $code): User` — verify code, create/find user, return with token
+- **Notification**: `App\Notifications\OtpNotification` — via `log` channel (stub for SMS)
+- **Controller**: `App\Http\Controllers\Api\AuthController`
+  - `sendOtp(Request)` — POST `/api/auth/send-otp` — validate phone, call service
+  - `verifyOtp(Request)` — POST `/api/auth/verify-otp` — validate phone+code, return token+user
+  - `logout(Request)` — POST `/api/auth/logout` — revoke current token
+  - `me(Request)` — GET `/api/auth/me` — return authenticated user
+- **Form Requests**: `SendOtpRequest` (phone: required, regex), `VerifyOtpRequest` (phone+code)
+- **Routes**: `POST /api/auth/send-otp`, `POST /api/auth/verify-otp` (public), `POST /api/auth/logout`, `GET /api/auth/me` (auth:sanctum)
+- **Tests (PHPUnit)**:
+  - Feature: send-otp creates OTP record, returns 200
+  - Feature: verify-otp with valid code returns token, creates user if new
+  - Feature: verify-otp with invalid code returns 422
+  - Feature: verify-otp with expired code returns 422
+  - Feature: logout revokes token
+  - Feature: me returns user data
+  - Validation: SendOtpRequest rejects invalid phone formats
+- **Browser Test**: N/A (no UI in this step)
+
+✓ Done when: Client can authenticate via OTP, get token, access protected endpoints
+
+### 2.3 Driver Login Endpoint
+**Complexity**: simple
+**Requires**: 2.1 Sanctum
+
+**Implementation**:
+- **Controller**: Add to `AuthController`
+  - `driverLogin(Request)` — POST `/api/auth/driver/login` — validate phone+password, return token
+- **Form Request**: `DriverLoginRequest` (phone: required, password: required)
+- **Routes**: `POST /api/auth/driver/login` (public)
+- **Tests (PHPUnit)**:
+  - Feature: valid credentials return token, invalid return 401
+  - Feature: non-driver role returns 403
+- **Browser Test**: N/A (no UI in this step)
+
+✓ Done when: Drivers can login with phone+password, tests pass
+
+---
+
+## Phase 3: Core Business Logic — Order Service & Driver Assignment
+
+**Goal**: Implement order creation, Haversine-based driver matching, and cascading assignment with 10s timeout.
+
+### 3.1 Tariff Service
+**Complexity**: simple
+**Requires**: Phase 1
+
+**Implementation**:
+- **Service**: `App\Services\TariffService`
+  - `getCurrentPrice(): int` — returns 80 (07:00-21:00) or 120 (21:00-07:00)
+  - `isDayTime(): bool` — helper
+- **Tests (PHPUnit)**:
+  - Unit: returns 80 at 08:00, 12:00, 20:59
+  - Unit: returns 120 at 21:00, 23:00, 00:00, 06:59
+  - Unit: boundary test at exactly 07:00 and 21:00
+- **Browser Test**: N/A (no UI in this step)
+
+✓ Done when: TariffService returns correct prices with boundary cases tested
+
+### 3.2 Haversine Distance Helper
+**Complexity**: simple
+**Requires**: nothing
+
+**Implementation**:
+- **Helper**: `App\Services\GeoService`
+  - `haversineDistance(float $lat1, float $lng1, float $lat2, float $lng2): float` — returns km
+  - `getNearbyDrivers(float $lat, float $lng, float $radiusKm = 50): Collection` — returns online DriverProfiles sorted by distance
+- **Tests (PHPUnit)**:
+  - Unit: known coordinates return expected distance (±0.1 km tolerance)
+  - Unit: same coordinates return 0
+  - Unit: getNearbyDrivers returns sorted collection, excludes offline
+- **Browser Test**: N/A (no UI in this step)
+
+✓ Done when: Haversine calculation accurate, nearby driver query works
+
+### 3.3 Order Creation & Driver Assignment Service
+**Complexity**: complex
+**Requires**: 3.1 Tariff, 3.2 GeoService, Phase 1 models
+
+**Implementation**:
+- **Service**: `App\Services\OrderService`
+  - `createOrder(User $client, float $lat, float $lng, ?string $address): Order`
+    - Calculate price via TariffService
+    - Create order with status `searching`
+    - Dispatch `FindDriverJob`
+  - `acceptOrder(Order $order, User $driver): Order` — set status `accepted`, assign driver
+  - `declineOrder(Order $order, User $driver): void` — move to next driver
+  - `arriveAtPickup(Order $order): Order` — set status `arrived`
+  - `completeOrder(Order $order): Order` — set status `completed`
+  - `cancelOrder(Order $order, User $cancelledBy): Order` — set status `cancelled`
+- **Job**: `App\Jobs\FindDriverJob` (ShouldQueue)
+  - Accept order ID
+  - Get nearby online drivers
+  - Send offer to closest driver (broadcast event)
+  - Schedule `DriverOfferTimeoutJob` for 10 seconds
+- **Job**: `App\Jobs\DriverOfferTimeoutJob` (ShouldQueue, delay 10s)
+  - If order still `searching` and current offer not accepted → decline and try next
+  - If no more drivers → cancel order, notify client
+- **Events**:
+  - `OrderCreated` — broadcast to driver channels
+  - `DriverOffered` — broadcast to specific driver
+  - `OrderAccepted` — broadcast to client
+  - `DriverArrived` — broadcast to client
+  - `OrderCompleted` — broadcast to client + driver
+  - `OrderCancelled` — broadcast to client + driver
+- **Migration**: `add_current_driver_offer_to_orders_table`
+  - `offered_driver_id` foreignId → users, nullable
+  - `offered_at` timestamp nullable
+  - `declined_drivers` json nullable (array of driver IDs who declined)
+- **Tests (PHPUnit)**:
+  - Feature: createOrder sets correct price, status=searching, dispatches job
+  - Feature: acceptOrder sets driver, status=accepted
+  - Feature: declineOrder marks driver as declined, triggers next
+  - Feature: completeOrder sets status + completed_at
+  - Feature: cancelOrder sets status + cancelled_at + cancelled_by
+  - Unit: FindDriverJob selects nearest driver
+  - Unit: DriverOfferTimeoutJob cascades to next driver
+  - Unit: No drivers available → order cancelled
+- **Browser Test**: N/A (no UI in this step)
+
+⚠️ Warning: Race conditions — use DB transactions and locking for order state transitions
+✓ Done when: Full order lifecycle works, driver cascading assignment with 10s timeout tested
+
+### 3.4 Broadcasting Setup
+**Complexity**: medium
+**Requires**: 3.3 Events
+
+**Implementation**:
+- **Install**: `php artisan install:broadcasting` (Laravel Reverb or configure Pusher)
+- **Channels**: `routes/channels.php`
+  - `private-client.{userId}` — only that client
+  - `private-driver.{userId}` — only that driver
+  - `private-drivers.available` — all online drivers (for new order broadcasts)
+- **Events**: Implement `ShouldBroadcast` on all events from 3.3
+  - Each event returns appropriate channel + payload
+- **Config**: Broadcasting driver in `.env`
+- **Tests (PHPUnit)**:
+  - Feature: Events broadcast to correct channels
+  - Feature: Channel authorization works
+- **Browser Test**: N/A (no UI in this step)
+
+✓ Done when: Events broadcast on correct private channels, authorization tested
+
+---
+
+## Phase 4: API Endpoints
+
+**Goal**: RESTful API for client and driver mobile apps.
+
+### 4.1 Client API Endpoints
+**Complexity**: medium
+**Requires**: Phase 2, Phase 3
+
+**Implementation**:
+- **Controller**: `App\Http\Controllers\Api\Client\OrderController`
+  - `store(Request)` — POST `/api/client/orders` — create order (lat, lng, address)
+  - `show(Order)` — GET `/api/client/orders/{order}` — current order details
+  - `cancel(Order)` — POST `/api/client/orders/{order}/cancel` — cancel order
+  - `history()` — GET `/api/client/orders` — past orders (paginated)
+  - `current()` — GET `/api/client/orders/current` — active order if any
+- **Form Request**: `CreateOrderRequest` — lat (required, numeric, -90 to 90), lng (required, numeric, -180 to 180), address (optional, string, max:255)
+- **Resource**: `OrderResource` — id, status, price, driver (name, car_model, car_number, phone), timestamps
+- **Policy**: `OrderPolicy` — client can only view/cancel own orders
+- **Routes**: All under `middleware('auth:sanctum')` + role check middleware
+- **Middleware**: `App\Http\Middleware\EnsureUserRole` — check user role
+- **Tests (PHPUnit)**:
+  - Feature: Client can create order, receives order with price
+  - Feature: Client can view own order, cannot view others'
+  - Feature: Client can cancel searching/accepted order
+  - Feature: Client cannot cancel completed order
+  - Feature: History returns paginated past orders
+  - Feature: Current returns active order or 404
+  - Validation: CreateOrderRequest rejects invalid coordinates
+- **Browser Test**: N/A (no UI in this step)
+
+✓ Done when: All client API endpoints work with proper authorization
+
+### 4.2 Driver API Endpoints
+**Complexity**: medium
+**Requires**: Phase 2, Phase 3
+
+**Implementation**:
+- **Controller**: `App\Http\Controllers\Api\Driver\StatusController`
+  - `goOnline(Request)` — POST `/api/driver/online` — set online + update location
+  - `goOffline()` — POST `/api/driver/offline` — set offline
+  - `updateLocation(Request)` — POST `/api/driver/location` — update GPS
+- **Controller**: `App\Http\Controllers\Api\Driver\OrderController`
+  - `accept(Order)` — POST `/api/driver/orders/{order}/accept`
+  - `decline(Order)` — POST `/api/driver/orders/{order}/decline`
+  - `arrive(Order)` — POST `/api/driver/orders/{order}/arrive`
+  - `complete(Order)` — POST `/api/driver/orders/{order}/complete`
+  - `current()` — GET `/api/driver/orders/current` — active order
+  - `stats()` — GET `/api/driver/stats` — income stats (today, week, month, total)
+- **Form Request**: `UpdateLocationRequest` — lat, lng (required, numeric)
+- **Resource**: `DriverOrderResource` — id, status, client (name, phone), pickup coordinates, price
+- **Service**: `App\Services\DriverStatsService`
+  - `getStats(User $driver): array` — today/week/month/total earnings + ride counts
+- **Tests (PHPUnit)**:
+  - Feature: Driver can go online/offline, location updates
+  - Feature: Driver can accept offered order
+  - Feature: Driver can decline, order moves to next driver
+  - Feature: Driver can mark arrived, complete order
+  - Feature: Stats return correct earnings
+  - Feature: Non-driver cannot access driver endpoints
+- **Browser Test**: N/A (no UI in this step)
+
+✓ Done when: All driver API endpoints work with proper authorization
+
+---
+
+## Phase 5: Client PWA (Mobile-First Web App)
+
+**Goal**: Mobile-first web interface for clients — phone login, GPS, call taxi, track driver.
+
+### 5.1 Client Auth Pages
+**Complexity**: medium
+**Requires**: Phase 2 (Auth API)
+
+**Design Brief**:
+- **Purpose**: Phone number entry + OTP verification for village taxi clients
+- **Tone**: Clean, minimal, large touch targets for all ages
+- **Key Screens / States**:
+  - Phone entry: single input, country prefix +996, large "Send Code" button
+  - OTP entry: 4 digit input boxes, auto-focus, countdown timer for resend
+  - Loading: spinner overlay during API calls
+  - Error: inline red text below input
+- **Components**:
+  - `PhoneInput` — country prefix, phone number field, submit button
+  - `OtpInput` — 4 separate digit boxes with auto-advance
+- **Responsive**: Full-screen mobile, centered card on desktop
+- **Accessibility**: Large font (18px+), high contrast, auto-focus
+
+**Implementation**:
+- **Routes**: `GET /login` → phone form, `GET /verify` → OTP form
+- **Blade Views**: `resources/views/client/auth/login.blade.php`, `verify.blade.php`
+- **Layout**: `resources/views/layouts/client.blade.php` — mobile-first, no nav for auth
+- **Alpine.js**: Form submission via fetch to API, token storage in localStorage
+- **Tests (PHPUnit)**:
+  - Feature: GET /login returns 200
+  - Feature: GET /verify returns 200
+- **Browser Test**:
+  - Visit /login → see phone input
+  - Enter phone → redirected to /verify
+  - Enter valid OTP → redirected to /client/home
+
+✓ Done when: Client can login via phone OTP, token stored
+
+### 5.2 Client Home — Call Taxi
+**Complexity**: complex
+**Requires**: 5.1 Auth, 4.1 Client API
+
+**Design Brief**:
+- **Purpose**: Main screen — GPS auto-detect + single "Call Taxi" button
+- **Tone**: Bold, clear — one primary action
+- **Key Screens / States**:
+  - Default: Map with user location marker, large yellow "Вызвать такси" button at bottom, price displayed (80/120 сом)
+  - Searching: Pulsing animation, "Ищем водителя..." text, cancel button
+  - Accepted: Driver card (name, car, phone, call button), "Водитель едет к вам"
+  - Arrived: Driver card, "Водитель прибыл!" with push notification
+  - Completed: "Поездка завершена", price, rate button (optional)
+  - Error: GPS denied → prompt to enable, no drivers → "Нет свободных водителей"
+- **Components**:
+  - `MapView` — Leaflet.js or Yandex Maps, user marker, driver marker when assigned
+  - `CallTaxiButton` — large yellow button with price
+  - `SearchingOverlay` — pulsing animation + cancel
+  - `DriverCard` — photo placeholder, name, car info, phone call link
+  - `TripCompleteCard` — summary with price
+- **Responsive**: Full viewport mobile, max-width 480px centered on desktop
+- **Accessibility**: Large buttons (min 48px), high contrast text
+
+**Implementation**:
+- **Route**: `GET /client/home` → `ClientController@home` (auth:sanctum middleware)
+- **Blade View**: `resources/views/client/home.blade.php`
+- **Alpine.js Component**: Handles GPS, API calls, state transitions, WebSocket listening
+- **JS**: Geolocation API for auto-detect, Leaflet.js for map (free, no API key)
+- **Echo/WebSocket**: Listen on `private-client.{userId}` for order events
+- **Tests (PHPUnit)**:
+  - Feature: GET /client/home requires auth
+  - Feature: Authenticated client sees home page
+- **Browser Test**:
+  - Visit /client/home → see map and call button
+  - Click "Вызвать такси" → see searching state
+  - When driver accepts → see driver card
+  - When driver arrives → see arrival notification
+
+✓ Done when: Client can call taxi, see real-time status updates, view driver info
+
+### 5.3 Client Order History
+**Complexity**: simple
+**Requires**: 5.1 Auth, 4.1 Client API
+
+**Design Brief**:
+- **Purpose**: List of past completed/cancelled rides
+- **Tone**: Clean list, minimal info per row
+- **Key Screens / States**:
+  - Default: List of rides (date, price, status badge)
+  - Empty: "У вас пока нет поездок"
+- **Components**:
+  - `OrderHistoryList` — scrollable list
+  - `OrderHistoryItem` — date, price, status badge (green=completed, red=cancelled)
+
+**Implementation**:
+- **Route**: `GET /client/history` → `ClientController@history`
+- **Blade View**: `resources/views/client/history.blade.php`
+- **Alpine.js**: Fetch from API, infinite scroll or simple pagination
+- **Tests (PHPUnit)**:
+  - Feature: GET /client/history requires auth, returns 200
+- **Browser Test**:
+  - Visit /client/history → see list of past orders
+
+✓ Done when: Client can browse past rides
+
+---
+
+## Phase 6: Driver PWA (Mobile-First Web App)
+
+**Goal**: Mobile-first web interface for drivers — login, online/offline toggle, accept orders, navigate to client.
+
+### 6.1 Driver Auth Page
+**Complexity**: simple
+**Requires**: 2.3 Driver Login
+
+**Design Brief**:
+- **Purpose**: Phone + password login for drivers
+- **Tone**: Dark themed, professional
+- **Key Screens / States**:
+  - Login form: phone + password inputs, login button
+  - Error: invalid credentials message
+
+**Implementation**:
+- **Route**: `GET /driver/login` → login form
+- **Blade View**: `resources/views/driver/auth/login.blade.php`
+- **Layout**: `resources/views/layouts/driver.blade.php`
+- **Tests (PHPUnit)**:
+  - Feature: GET /driver/login returns 200
+- **Browser Test**:
+  - Visit /driver/login → see login form
+  - Enter valid credentials → redirected to /driver/home
+
+✓ Done when: Driver can login, token stored
+
+### 6.2 Driver Home — Order Management
+**Complexity**: complex
+**Requires**: 6.1 Auth, 4.2 Driver API, 3.4 Broadcasting
+
+**Design Brief**:
+- **Purpose**: Main driver screen — toggle online, receive & manage orders
+- **Tone**: Dark, clear status indicators, large touch targets
+- **Key Screens / States**:
+  - Offline: Large "Выйти на линию" toggle, greyed out
+  - Online/Waiting: Green "На линии" badge, "Ожидание заказов..."
+  - New Order: Order card with distance, price, pickup address, Accept(10s countdown)/Decline buttons
+  - Accepted: Map with route to client, client info, "Прибыл" button
+  - In Progress: "Завершить поездку" button, client info
+  - Completed: Trip summary (price), auto-return to waiting
+- **Components**:
+  - `OnlineToggle` — large switch with status badge
+  - `OrderOfferCard` — distance, price, 10s countdown progress bar, accept/decline
+  - `NavigationMap` — Leaflet map with route polyline to client
+  - `ClientInfoCard` — name, phone (call link)
+  - `ActionButton` — "Прибыл" / "Завершить" — large, full-width
+
+**Implementation**:
+- **Route**: `GET /driver/home` → `DriverController@home`
+- **Blade View**: `resources/views/driver/home.blade.php`
+- **Alpine.js**: GPS tracking (continuous), online/offline toggle, order state machine
+- **Echo/WebSocket**: Listen on `private-driver.{userId}` for order offers
+- **JS**: Continuous geolocation for driver position, Leaflet for map + routing
+- **Tests (PHPUnit)**:
+  - Feature: GET /driver/home requires driver auth
+- **Browser Test**:
+  - Visit /driver/home → see offline state
+  - Toggle online → status changes to "На линии"
+  - Receive order → see offer card with countdown
+  - Accept → see map with route to client
+  - Click "Прибыл" → see in-progress state
+  - Click "Завершить" → see trip summary
+
+✓ Done when: Full driver order lifecycle works through UI
+
+### 6.3 Driver Stats Page
+**Complexity**: simple
+**Requires**: 6.1 Auth, 4.2 Stats API
+
+**Design Brief**:
+- **Purpose**: Income statistics dashboard for driver
+- **Tone**: Dark, data-focused
+- **Key Screens / States**:
+  - Default: Today's earnings, rides count, weekly/monthly summary
+  - Empty: "Пока нет данных"
+- **Components**:
+  - `StatCard` — label, value (large number), icon
+  - `StatsGrid` — 2x2 grid of stat cards
+
+**Implementation**:
+- **Route**: `GET /driver/stats` → `DriverController@stats`
+- **Blade View**: `resources/views/driver/stats.blade.php`
+- **Tests (PHPUnit)**:
+  - Feature: GET /driver/stats requires driver auth, returns 200
+- **Browser Test**:
+  - Visit /driver/stats → see earnings summary
+
+✓ Done when: Driver can view income stats
+
+---
+
+## Phase 7: Admin Web Panel
+
+**Goal**: Simple admin panel for managing drivers, viewing orders, and basic analytics.
+
+### 7.1 Admin Auth & Layout
+**Complexity**: simple
+**Requires**: Phase 2
+
+**Design Brief**:
+- **Purpose**: Admin login and dashboard layout
+- **Tone**: Clean, professional, standard admin
+- **Components**:
+  - Sidebar navigation: Dashboard, Drivers, Orders
+  - Top bar: admin name, logout
+
+**Implementation**:
+- **Route**: `GET /admin/login`, `POST /admin/login`
+- **Middleware**: `EnsureUserRole:admin`
+- **Layout**: `resources/views/layouts/admin.blade.php` — sidebar + content
+- **Blade View**: `resources/views/admin/auth/login.blade.php`
+- **Controller**: `App\Http\Controllers\Admin\AuthController`
+- **Tests (PHPUnit)**:
+  - Feature: Admin login works, non-admin rejected
+  - Feature: Admin routes require admin role
+- **Browser Test**:
+  - Visit /admin/login → see login form
+  - Login as admin → see dashboard
+
+✓ Done when: Admin can login, layout with sidebar renders
+
+### 7.2 Admin Dashboard
+**Complexity**: medium
+**Requires**: 7.1 Auth
+
+**Design Brief**:
+- **Purpose**: Overview statistics — active orders, online drivers, today's revenue
+- **Components**:
+  - `StatCard` — count with label (Active Orders, Online Drivers, Today Revenue, Total Rides)
+  - `RecentOrdersTable` — last 10 orders with status badges
+
+**Implementation**:
+- **Route**: `GET /admin/dashboard` → `DashboardController@index`
+- **Controller**: `App\Http\Controllers\Admin\DashboardController`
+- **Blade View**: `resources/views/admin/dashboard.blade.php`
+- **Tests (PHPUnit)**:
+  - Feature: Dashboard shows correct stats
+- **Browser Test**:
+  - Visit /admin/dashboard → see stats and recent orders
+
+✓ Done when: Dashboard renders with live stats
+
+### 7.3 Admin Driver Management
+**Complexity**: medium
+**Requires**: 7.1 Auth, Phase 1 Models
+
+**Design Brief**:
+- **Purpose**: CRUD for drivers — create accounts, toggle active, view info
+- **Components**:
+  - `DriversTable` — name, phone, car, online status, actions
+  - `DriverForm` — create/edit driver form (name, phone, password, car model, car number)
+
+**Implementation**:
+- **Controller**: `App\Http\Controllers\Admin\DriverController` — index, create, store, edit, update, destroy
+- **Form Requests**: `StoreDriverRequest`, `UpdateDriverRequest`
+- **Routes**: Resource routes under `/admin/drivers`
+- **Blade Views**: `index.blade.php`, `create.blade.php`, `edit.blade.php`
+- **Tests (PHPUnit)**:
+  - Feature: Admin can list, create, edit, delete drivers
+  - Validation: Required fields enforced
+- **Browser Test**:
+  - Visit /admin/drivers → see driver list
+  - Click "Add Driver" → fill form → see new driver in list
+
+✓ Done when: Full driver CRUD works
+
+### 7.4 Admin Order List
+**Complexity**: simple
+**Requires**: 7.1 Auth
+
+**Design Brief**:
+- **Purpose**: View all orders with filters
+- **Components**:
+  - `OrdersTable` — date, client, driver, status, price, with status filter
+
+**Implementation**:
+- **Controller**: `App\Http\Controllers\Admin\OrderController` — index, show
+- **Routes**: `GET /admin/orders`, `GET /admin/orders/{order}`
+- **Blade Views**: `index.blade.php`, `show.blade.php`
+- **Tests (PHPUnit)**:
+  - Feature: Admin can list and view orders, filter by status
+- **Browser Test**:
+  - Visit /admin/orders → see orders table
+  - Filter by status → see filtered results
+
+✓ Done when: Admin can view and filter all orders
+
+---
+
+## Phase 8: PWA & Push Notifications
+
+**Goal**: Make the app installable as PWA, add push notifications for key events.
+
+### 8.1 PWA Manifest & Service Worker
+**Complexity**: medium
+**Requires**: Phase 5, Phase 6
+
+**Implementation**:
+- **Manifest**: `public/manifest.json` — name, icons, theme color, start_url, display: standalone
+- **Service Worker**: `public/sw.js` — cache static assets, offline fallback page
+- **Icons**: Generate app icons (192x192, 512x512) — simple taxi/car icon
+- **Meta tags**: Add to layouts — `<link rel="manifest">`, theme-color, apple-touch-icon
+- **Blade View**: `resources/views/offline.blade.php` — simple offline message
+- **Tests (PHPUnit)**:
+  - Feature: GET /manifest.json returns valid JSON
+- **Browser Test**:
+  - Visit app → prompt to install (on mobile)
+
+✓ Done when: App installable on mobile, works offline for static pages
+
+### 8.2 Push Notifications (Firebase Cloud Messaging)
+**Complexity**: complex
+**Requires**: 8.1 PWA, 3.4 Broadcasting
+
+**Implementation**:
+- **NPM**: Install Firebase JS SDK
+- **Config**: Firebase project config in `.env`
+- **JS**: Firebase messaging integration in service worker
+- **Controller**: `App\Http\Controllers\Api\PushTokenController` — store FCM token
+- **Migration**: `add_fcm_token_to_users_table` — `fcm_token` string nullable
+- **Notification channels**: Custom FCM channel for sending pushes
+- **Push events**:
+  - Client: "Водитель принял заказ", "Водитель прибыл", "Поездка завершена"
+  - Driver: "Новый заказ рядом"
+- **Tests (PHPUnit)**:
+  - Feature: Store FCM token endpoint works
+  - Unit: Push notification payload is correct
+- **Browser Test**: N/A (push notifications tested manually)
+
+⚠️ Warning: FCM requires HTTPS — ensure production has SSL
+✓ Done when: Push notifications delivered for key order events
+
+---
+
+## Verification Checklist
+
+- [ ] All PHPUnit tests passing (`composer test`)
+- [ ] Code style clean (`vendor/bin/pint --dirty`)
+- [ ] All migrations run cleanly
+- [ ] Client can: login by phone → call taxi → see driver → complete ride
+- [ ] Driver can: login → go online → accept order → navigate → arrive → complete
+- [ ] Admin can: login → see dashboard → manage drivers → view orders
+- [ ] PWA installable on mobile
+- [ ] Push notifications work for key events
+- [ ] Price is 80 som (07-21) and 120 som (21-07)
+- [ ] Driver assignment cascades on 10s timeout
+
+## Rollback Plan
+
+Each phase is independently deployable. Rollback = revert migration + remove code for that phase. Database migrations should have proper `down()` methods.
+
+## Execution Order
+
+```
+Phase 1 (Models) → Phase 2 (Auth) → Phase 3 (Business Logic) → Phase 4 (API)
+                                                                      ↓
+Phase 7 (Admin) ←←←←←←←←←←←←←←←←←←←←←←←←←←←←←←←←←←←←←←←←←←←←← Phase 5 (Client PWA)
+                                                                      ↓
+                                                                 Phase 6 (Driver PWA)
+                                                                      ↓
+                                                                 Phase 8 (PWA + Push)
+```
+
+Phases 5, 6, 7 can be worked on in parallel after Phase 4 is complete.
