@@ -5,7 +5,12 @@ set -e
 export PORT="${PORT:-80}"
 sed -i "s/PORT_PLACEHOLDER/$PORT/g" /etc/nginx/nginx.conf
 
-# Cache configuration for production
+# Clear stale caches
+php artisan config:clear
+php artisan route:clear
+php artisan view:clear
+
+# Cache for production
 php artisan config:cache
 php artisan view:cache
 
@@ -23,5 +28,10 @@ php artisan make:admin \
 
 # Create storage link if it doesn't exist
 php artisan storage:link 2>/dev/null || true
+
+# Debug: print all client routes
+echo "=== REGISTERED ROUTES (client) ==="
+php artisan route:list --path=client 2>&1
+echo "==================================="
 
 exec "$@"
