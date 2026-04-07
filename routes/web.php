@@ -3,6 +3,7 @@
 use App\Http\Controllers\Admin\AuthController;
 use App\Http\Controllers\Admin\DashboardController;
 use App\Http\Controllers\Admin\DriverController;
+use App\Http\Controllers\Admin\OrderController;
 use App\Http\Middleware\EnsureUserRole;
 use Illuminate\Support\Facades\Route;
 
@@ -23,7 +24,6 @@ Route::prefix('admin')->name('admin.')->group(function () {
 
         Route::resource('drivers', DriverController::class)->except(['show']);
 
-        // Placeholder routes — full controllers added in later steps
-        Route::get('orders', fn () => '')->name('orders.index');
+        Route::resource('orders', OrderController::class)->only(['index', 'show']);
     });
 });
