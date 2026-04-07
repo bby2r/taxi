@@ -1,6 +1,8 @@
 <?php
 
 use App\Http\Controllers\Api\V1\AuthController;
+use App\Http\Controllers\Api\V1\ClientOrderController;
+use App\Http\Controllers\Api\V1\DriverController;
 use Illuminate\Support\Facades\Route;
 
 Route::prefix('v1')->group(function () {
@@ -28,5 +30,31 @@ Route::prefix('v1')->group(function () {
         Route::put('/push-token', [AuthController::class, 'updatePushToken'])
             ->middleware('auth:sanctum')
             ->name('api.v1.auth.push-token');
+    });
+});
+
+Route::prefix('v1')->middleware('auth:sanctum')->group(function () {
+    // Client routes
+    Route::prefix('client')->middleware('role:client')->group(function () {
+        Route::get('/orders/active', [ClientOrderController::class, 'active'])->name('api.v1.client.orders.active');
+        Route::get('/orders', [ClientOrderController::class, 'index'])->name('api.v1.client.orders.index');
+        Route::post('/orders', [ClientOrderController::class, 'store'])->name('api.v1.client.orders.store');
+        Route::get('/orders/{order}', [ClientOrderController::class, 'show'])->name('api.v1.client.orders.show');
+        Route::post('/orders/{order}/cancel', [ClientOrderController::class, 'cancel'])->name('api.v1.client.orders.cancel');
+    });
+
+    // Driver routes
+    Route::prefix('driver')->middleware('role:driver')->group(function () {
+        Route::post('/go-online', [DriverController::class, 'goOnline'])->name('api.v1.driver.go-online');
+        Route::post('/go-offline', [DriverController::class, 'goOffline'])->name('api.v1.driver.go-offline');
+        Route::post('/location', [DriverController::class, 'updateLocation'])->name('api.v1.driver.location');
+        Route::get('/profile', [DriverController::class, 'profile'])->name('api.v1.driver.profile');
+        Route::get('/orders/active', [DriverController::class, 'activeOrder'])->name('api.v1.driver.orders.active');
+        Route::get('/orders', [DriverController::class, 'orders'])->name('api.v1.driver.orders.index');
+        Route::post('/orders/{order}/accept', [DriverController::class, 'acceptOrder'])->name('api.v1.driver.orders.accept');
+        Route::post('/orders/{order}/decline', [DriverController::class, 'declineOrder'])->name('api.v1.driver.orders.decline');
+        Route::post('/orders/{order}/arrived', [DriverController::class, 'arrived'])->name('api.v1.driver.orders.arrived');
+        Route::post('/orders/{order}/start', [DriverController::class, 'startRide'])->name('api.v1.driver.orders.start');
+        Route::post('/orders/{order}/complete', [DriverController::class, 'completeOrder'])->name('api.v1.driver.orders.complete');
     });
 });
