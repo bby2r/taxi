@@ -13,9 +13,9 @@ class AppServiceProvider extends ServiceProvider
     public function register(): void
     {
         $this->app->singleton(NikitaSmsService::class, fn ($app) => new NikitaSmsService(
-            login: config('nikita.login', ''),
-            password: config('nikita.password', ''),
-            sender: config('nikita.sender', 'Taxi'),
+            login: (string) config('nikita.login', ''),
+            password: (string) config('nikita.password', ''),
+            sender: (string) config('nikita.sender', 'Taxi'),
             enabled: (bool) config('nikita.enabled', false),
         ));
     }
