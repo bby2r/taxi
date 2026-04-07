@@ -2,6 +2,7 @@
 
 use App\Http\Controllers\Admin\AuthController;
 use App\Http\Controllers\Admin\DashboardController;
+use App\Http\Controllers\Admin\DriverController;
 use App\Http\Middleware\EnsureUserRole;
 use Illuminate\Support\Facades\Route;
 
@@ -20,8 +21,9 @@ Route::prefix('admin')->name('admin.')->group(function () {
         Route::get('/', fn () => redirect()->route('admin.dashboard'));
         Route::get('dashboard', [DashboardController::class, 'index'])->name('dashboard');
 
+        Route::resource('drivers', DriverController::class)->except(['show']);
+
         // Placeholder routes — full controllers added in later steps
-        Route::get('drivers', fn () => '')->name('drivers.index');
         Route::get('orders', fn () => '')->name('orders.index');
     });
 });
