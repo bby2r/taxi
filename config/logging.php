@@ -127,6 +127,22 @@ return [
             'path' => storage_path('logs/laravel.log'),
         ],
 
+        'api_request' => [
+            'driver' => 'daily',
+            'path' => storage_path('logs/api_request.log'),
+            'level' => 'debug',
+            'days' => 14,
+            'replace_placeholders' => true,
+        ],
+
+        'api_response' => [
+            'driver' => 'daily',
+            'path' => storage_path('logs/api_response.log'),
+            'level' => 'debug',
+            'days' => 14,
+            'replace_placeholders' => true,
+        ],
+
     ],
 
 ];
