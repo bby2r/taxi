@@ -1,0 +1,151 @@
+import React, { useState, useEffect, useCallback } from 'react';
+import {
+  View,
+  Text,
+  FlatList,
+  StyleSheet,
+  ActivityIndicator,
+  TouchableOpacity,
+} from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
+import { Order } from '../../api/types';
+import { getOrderHistory } from '../../api/orders';
+import OrderHistoryItem from '../../components/OrderHistoryItem';
+import { ClientColors } from '../../theme/colors';
+import { Typography } from '../../theme/typography';
+
+export default function HistoryScreen(): React.ReactNode {
+  const [orders, setOrders] = useState<Order[]>([]);
+  const [page, setPage] = useState<number>(1);
+  const [lastPage, setLastPage] = useState<number>(1);
+  const [loading, setLoading] = useState<boolean>(true);
+  const [refreshing, setRefreshing] = useState<boolean>(false);
+  const [loadingMore, setLoadingMore] = useState<boolean>(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const fetchOrders = useCallback(async (pageNum: number, isRefresh: boolean = false) => {
+    if (isRefresh) {
+      setRefreshing(true);
+    } else if (pageNum === 1) {
+      setLoading(true);
+    } else {
+      setLoadingMore(true);
+    }
+    try {
+      const response = await getOrderHistory(pageNum);
+      if (isRefresh || pageNum === 1) {
+        setOrders(response.data);
+      } else {
+        setOrders((prev) => [...prev, ...response.data]);
+      }
+      setPage(response.meta.current_page);
+      setLastPage(response.meta.last_page);
+      setError(null);
+    } catch {
+      setError('Не удалось загрузить историю');
+    } finally {
+      setLoading(false);
+      setRefreshing(false);
+      setLoadingMore(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    fetchOrders(1);
+  }, [fetchOrders]);
+
+  const handleRefresh = useCallback(() => {
+    fetchOrders(1, true);
+  }, [fetchOrders]);
+
+  const handleEndReached = useCallback(() => {
+    if (!loadingMore && page < lastPage) {
+      fetchOrders(page + 1);
+    }
+  }, [loadingMore, page, lastPage, fetchOrders]);
+
+  if (loading) {
+    return (
+      <SafeAreaView style={styles.centered}>
+        <ActivityIndicator size="large" color={ClientColors.primary} />
+      </SafeAreaView>
+    );
+  }
+
+  if (error && orders.length === 0) {
+    return (
+      <SafeAreaView style={styles.centered}>
+        <Text style={[Typography.body, { color: ClientColors.textSecondary, marginBottom: 16 }]}>
+          {error}
+        </Text>
+        <TouchableOpacity style={styles.retryButton} onPress={() => fetchOrders(1)}>
+          <Text style={[Typography.button, { color: ClientColors.white }]}>Повторить</Text>
+        </TouchableOpacity>
+      </SafeAreaView>
+    );
+  }
+
+  return (
+    <SafeAreaView style={styles.container} edges={['top']}>
+      <Text style={styles.header}>История поездок</Text>
+      <FlatList
+        data={orders}
+        renderItem={({ item }) => <OrderHistoryItem order={item} />}
+        keyExtractor={(item) => item.id.toString()}
+        onRefresh={handleRefresh}
+        refreshing={refreshing}
+        onEndReached={handleEndReached}
+        onEndReachedThreshold={0.5}
+        contentContainerStyle={{ flexGrow: 1 }}
+        ListFooterComponent={
+          loadingMore ? (
+            <ActivityIndicator
+              size="small"
+              color={ClientColors.primary}
+              style={{ paddingVertical: 16 }}
+            />
+          ) : null
+        }
+        ListEmptyComponent={
+          <View style={styles.emptyContainer}>
+            <Text style={[Typography.body, { color: ClientColors.textSecondary }]}>
+              У вас пока нет поездок
+            </Text>
+          </View>
+        }
+      />
+    </SafeAreaView>
+  );
+}
+
+const styles = StyleSheet.create({
+  container: {
+    flex: 1,
+    backgroundColor: ClientColors.background,
+  },
+  centered: {
+    flex: 1,
+    backgroundColor: ClientColors.background,
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingHorizontal: 32,
+  },
+  header: {
+    ...Typography.h2,
+    color: ClientColors.dark,
+    paddingHorizontal: 16,
+    paddingTop: 12,
+    paddingBottom: 16,
+  },
+  emptyContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  retryButton: {
+    backgroundColor: ClientColors.primary,
+    borderRadius: 12,
+    paddingHorizontal: 24,
+    paddingVertical: 12,
+  },
+});
