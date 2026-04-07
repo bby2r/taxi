@@ -1,58 +1,59 @@
 # Plan Memory: Village Taxi Service
 
-Last updated: 2026-04-07 (after Phase 4)
+Last updated: 2026-04-07 (after Phase 5)
 
 ## Established Patterns
+
+### Backend (Laravel)
 - Models use `#[Fillable]` and `#[Hidden]` PHP 8.4 attribute syntax
-- Casts defined via `protected function casts(): array` method
-- Relations use PHPDoc generics: `/** @return BelongsTo<User, $this> */`
-- Factories use `fake()` convention, not `$this->faker`
-- Scopes return `Builder` type
+- Casts via `protected function casts(): array`, relations use PHPDoc generics
+- Factories use `fake()` convention
 - Pint auto-formats method names to snake_case in test files
 - Controllers use constructor injection with `private readonly`
-- API controllers namespaced under `App\Http\Controllers\Api\V1\`
-- Routes use `Route::prefix('v1')` grouping with named routes `api.v1.*`
-- Artisan commands use Laravel 13 PHP attribute syntax (#[Signature], #[Description])
-- Services use constructor injection with `private readonly` properties
-- All order state transitions use `DB::transaction()` + `lockForUpdate()`
+- API controllers: `App\Http\Controllers\Api\V1\`, routes: `api.v1.*`
+- Artisan commands use Laravel 13 attribute syntax (#[Signature], #[Description])
+- All order state transitions: `DB::transaction()` + `lockForUpdate()`
 - Events implement `ShouldBroadcast` with private channels
-- RuntimeException from services caught in controllers → 422 JSON response
-- Ownership checks: client_id match → 403, driver profile missing → 404
-- API Resources: OrderResource, UserResource, DriverProfileResource under V1/
-- EnsureUserRole middleware: `role:client`, `role:driver`, `role:admin`
+- RuntimeException → 422 JSON, ownership mismatch → 403, missing → 404
+- Use `Event::fake()` + `Queue::fake()` in order-related tests
+
+### Mobile (React Native / Expo)
+- Expo SDK 54, managed workflow, TypeScript
+- Components return `React.ReactNode` (not JSX.Element) for React 19 compat
+- Theme: `ClientColors`/`DriverColors` in `theme/colors.ts`, `Typography` in `theme/typography.ts`
+- Hooks in `src/hooks/`, screens in `src/screens/{role}/`, navigation in `src/navigation/`
+- API: Axios client with auth interceptor (src/api/client.ts), modules per domain
+- Auth: SecureStore for tokens, AuthContext with session restore + 401 auto-logout
+- State machines: discriminated unions (e.g., ClientOrderState with phase + order)
+- Real-time: usePusher hook (primary) + setInterval polling (10s fallback)
+- Navigation: type-safe ParamLists, auth-based routing in RootNavigator
+- Testing: jest-expo, @testing-library/react-native, jest.mock() at module level
+- jest.config.js: filtered jest-expo setup files, custom transformIgnorePatterns for axios/pusher-js
+- UNSAFE_getByType for ActivityIndicator (no progressbar role in jest-expo)
 
 ## Key Decisions
 - Timezone: Asia/Bishkek (UTC+6)
-- OrderStatus: Searching, Accepted, Arrived, InProgress, Completed, Cancelled
-- cancelled_by is string ('client'/'driver'/'system')
+- OrderStatus: searching, accepted, arrived, in_progress, completed, cancelled
+- cancelled_by: string ('client'/'driver'/'system')
 - OTP: 4-digit string, preserves leading zeros
-- User email/password nullable (clients use phone OTP)
 - Sanctum tokens: 30-day expiry, all revoked on new login
 - Phone: Kyrgyz regex `/^\+996[0-9]{9}$/`
-- Expo push token: `/^ExponentPushToken\[.+\]$/`
-- Pricing: 80 som day (07:00-20:59), 120 som night, 50 som cancellation fee
-- Price locked at order creation
+- Pricing: 80 som day / 120 som night, 50 som cancellation fee, locked at creation
 - Driver cascade: 10s timeout, nearest first, auto-cancel when none
-- Pusher broadcasting (cluster ap1)
+- Pusher: cluster ap1, channels `private-client.{userId}`, `private-driver.{userId}`
+- Default coords: 42.87, 74.59 (Bishkek)
+- Date formatting: dayjs with Russian locale
 
 ## Current Architecture State
-- 4 models: User, DriverProfile, Order, OtpCode
-- 2 enums: UserRole, OrderStatus
-- 5 services: NikitaSmsService, OtpService, TariffService, GeoService, OrderService
-- 3 controllers: AuthController (6 methods), ClientOrderController (5), DriverController (11)
-- 6 form requests: SendOtp, VerifyOtp, DriverLogin, UpdatePushToken, CreateOrder, UpdateLocation
-- 1 middleware: EnsureUserRole (alias: 'role')
-- 3 API resources: OrderResource, UserResource, DriverProfileResource
-- 1 job: OfferTimeoutJob
-- 6 events (all broadcastable)
-- 1 artisan command: make:admin
-- 22 API routes (6 auth + 5 client + 11 driver)
-- 2 broadcast channels
-- 190 tests passing
+- Backend: 4 models, 2 enums, 5 services, 3 controllers, 6 form requests, 1 middleware, 3 API resources, 1 job, 6 events, 1 command, 22 routes, 190 PHP tests
+- Mobile: AuthContext, 4 hooks, 4 components, 4 screens, 4 navigation files, 6 API/util modules, 92 Jest tests
+- Client app complete: auth flow, home (map + order lifecycle), history, tab navigation
+- Driver app: placeholder in RootNavigator, to be built in Phase 6
 
 ## Gotchas & Warnings
-- /orders/active route MUST come before /orders/{order} to avoid model binding conflict
+- /orders/active route MUST precede /orders/{order} (model binding conflict)
 - DriverProfile.user_id has unique constraint
 - Order.declined_drivers JSON cast, default null not []
-- Use Event::fake() + Queue::fake() in order-related tests
-- Haversine calc in PHP (village-scale OK)
+- usePusher omits `events` from deps array (safe with memoized callbacks only)
+- jest-expo setup file filtered out in jest.config.js (causes React 19 issues)
+- Use --legacy-peer-deps for some dev deps (React 19 peer conflicts)
