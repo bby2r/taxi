@@ -6,6 +6,7 @@ use App\Enums\UserRole;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Auth\DriverLoginRequest;
 use App\Http\Requests\Auth\SendOtpRequest;
+use App\Http\Requests\Auth\UpdatePushTokenRequest;
 use App\Http\Requests\Auth\VerifyOtpRequest;
 use App\Models\User;
 use App\Services\OtpService;
@@ -134,6 +135,20 @@ class AuthController extends Controller
                 'phone' => $user->phone,
                 'role' => $user->role,
             ],
+        ]);
+    }
+
+    /**
+     * Update the authenticated user's Expo push token.
+     */
+    public function updatePushToken(UpdatePushTokenRequest $request): JsonResponse
+    {
+        $request->user()->update([
+            'expo_push_token' => $request->validated('expo_push_token'),
+        ]);
+
+        return response()->json([
+            'message' => 'Push token updated.',
         ]);
     }
 }

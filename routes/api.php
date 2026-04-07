@@ -24,5 +24,9 @@ Route::prefix('v1')->group(function () {
         Route::get('/me', [AuthController::class, 'me'])
             ->middleware('auth:sanctum')
             ->name('api.v1.auth.me');
+
+        Route::put('/push-token', [AuthController::class, 'updatePushToken'])
+            ->middleware('auth:sanctum')
+            ->name('api.v1.auth.push-token');
     });
 });
