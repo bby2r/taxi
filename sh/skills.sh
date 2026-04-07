@@ -5,9 +5,18 @@ cd "$ROOT"
 
 SHARED=".ai/shared-skills/skills"
 LOCAL=".ai/skills"
+SUBMODULE_PATH=".ai/shared-skills"
+SUBMODULE_URL="ssh://git@gitcloud.top:2224/ai/skills.git"
 
-cd .ai/shared-skills && git checkout -- . && cd "$ROOT"
-git submodule update --remote .ai/shared-skills
+mkdir -p "$LOCAL"
+
+if [ ! -d "$SUBMODULE_PATH/.git" ] && [ ! -f "$SUBMODULE_PATH/.git" ]; then
+    echo "Submodule not found, adding..."
+    git submodule add "$SUBMODULE_URL" "$SUBMODULE_PATH"
+fi
+
+cd "$SUBMODULE_PATH" && git checkout -- . && cd "$ROOT"
+git submodule update --remote "$SUBMODULE_PATH"
 
 for skill in "$SHARED"/*/; do
     name=$(basename "$skill")
@@ -32,4 +41,8 @@ for skill in "$LOCAL"/*/; do
 done
 echo ""
 echo "Submodule commit: $(cd "$ROOT/.ai/shared-skills" && git rev-parse --short HEAD)"
+echo ""
+
+php artisan boost:update
+
 echo "Done."
