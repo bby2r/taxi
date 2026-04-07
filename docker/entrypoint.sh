@@ -1,6 +1,10 @@
 #!/bin/sh
 set -e
 
+# Replace port placeholder in nginx config (Render provides PORT env var)
+export PORT="${PORT:-80}"
+sed -i "s/PORT_PLACEHOLDER/$PORT/g" /etc/nginx/nginx.conf
+
 # Cache configuration for production
 php artisan config:cache
 php artisan route:cache

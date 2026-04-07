@@ -25,6 +25,7 @@ FROM php:8.4-fpm-alpine
 RUN apk add --no-cache \
         nginx \
         supervisor \
+        curl \
         postgresql-dev \
         libzip-dev \
         icu-dev \
@@ -61,12 +62,12 @@ COPY --from=frontend /app/public/build ./public/build
 RUN chown -R www-data:www-data storage bootstrap/cache \
     && chmod -R 775 storage bootstrap/cache
 
-# Expose port
-EXPOSE 80
+# Expose port (Render provides PORT env var, default 80)
+EXPOSE ${PORT:-80}
 
 # Health check
 HEALTHCHECK --interval=30s --timeout=5s --retries=3 \
-    CMD curl -f http://localhost/up || exit 1
+    CMD curl -f http://localhost:${PORT:-80}/up || exit 1
 
 # Entrypoint
 COPY docker/entrypoint.sh /entrypoint.sh
