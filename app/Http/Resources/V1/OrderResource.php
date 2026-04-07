@@ -1,0 +1,49 @@
+<?php
+
+namespace App\Http\Resources\V1;
+
+use Illuminate\Http\Request;
+use Illuminate\Http\Resources\Json\JsonResource;
+
+class OrderResource extends JsonResource
+{
+    /**
+     * Transform the resource into an array.
+     *
+     * @return array<string, mixed>
+     */
+    public function toArray(Request $request): array
+    {
+        return [
+            'id' => $this->id,
+            'status' => $this->status->value,
+            'pickup_latitude' => $this->pickup_latitude,
+            'pickup_longitude' => $this->pickup_longitude,
+            'pickup_address' => $this->pickup_address,
+            'dropoff_latitude' => $this->dropoff_latitude,
+            'dropoff_longitude' => $this->dropoff_longitude,
+            'dropoff_address' => $this->dropoff_address,
+            'price' => $this->price,
+            'cancellation_fee' => $this->cancellation_fee,
+            'cancelled_by' => $this->cancelled_by,
+            'client' => [
+                'id' => $this->client->id,
+                'name' => $this->client->name,
+                'phone' => $this->client->phone,
+            ],
+            'driver' => $this->when($this->driver_id, fn () => [
+                'id' => $this->driver->id,
+                'name' => $this->driver->name,
+                'phone' => $this->driver->phone,
+                'car_model' => $this->driver->driverProfile?->car_model,
+                'car_number' => $this->driver->driverProfile?->car_number,
+            ]),
+            'accepted_at' => $this->accepted_at?->toISOString(),
+            'arrived_at' => $this->arrived_at?->toISOString(),
+            'in_progress_at' => $this->in_progress_at?->toISOString(),
+            'completed_at' => $this->completed_at?->toISOString(),
+            'cancelled_at' => $this->cancelled_at?->toISOString(),
+            'created_at' => $this->created_at->toISOString(),
+        ];
+    }
+}
