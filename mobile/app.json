@@ -12,7 +12,7 @@
       "backgroundColor": "#FBBF24"
     },
     "updates": {
-      "url": "https://u.expo.dev/YOUR_EAS_PROJECT_ID"
+      "url": "https://u.expo.dev/ca4f91d1-a8f4-488b-9c14-0eb60aa286b8"
     },
     "runtimeVersion": {
       "policy": "appVersion"
@@ -23,7 +23,9 @@
       "infoPlist": {
         "NSLocationWhenInUseUsageDescription": "Нужен доступ к геолокации для определения точки подачи такси",
         "NSLocationAlwaysAndWhenInUseUsageDescription": "Нужен доступ к геолокации для отслеживания маршрута",
-        "UIBackgroundModes": ["location"]
+        "UIBackgroundModes": [
+          "location"
+        ]
       }
     },
     "android": {
@@ -32,11 +34,20 @@
         "backgroundColor": "#FBBF24"
       },
       "package": "kg.villagetaxi.app",
-      "permissions": ["ACCESS_FINE_LOCATION", "ACCESS_COARSE_LOCATION", "ACCESS_BACKGROUND_LOCATION"]
+      "permissions": [
+        "ACCESS_FINE_LOCATION",
+        "ACCESS_COARSE_LOCATION",
+        "ACCESS_BACKGROUND_LOCATION",
+        "android.permission.ACCESS_COARSE_LOCATION",
+        "android.permission.ACCESS_FINE_LOCATION",
+        "android.permission.ACCESS_BACKGROUND_LOCATION",
+        "android.permission.FOREGROUND_SERVICE",
+        "android.permission.FOREGROUND_SERVICE_LOCATION"
+      ]
     },
     "extra": {
       "eas": {
-        "projectId": "YOUR_EAS_PROJECT_ID"
+        "projectId": "ca4f91d1-a8f4-488b-9c14-0eb60aa286b8"
       }
     },
     "plugins": [
@@ -50,6 +61,7 @@
       ],
       "expo-notifications",
       "expo-secure-store"
-    ]
+    ],
+    "owner": "bby2r"
   }
 }
