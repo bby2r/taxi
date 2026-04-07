@@ -7,7 +7,6 @@ sed -i "s/PORT_PLACEHOLDER/$PORT/g" /etc/nginx/nginx.conf
 
 # Cache configuration for production
 php artisan config:cache
-php artisan route:cache
 php artisan view:cache
 
 # Run migrations
