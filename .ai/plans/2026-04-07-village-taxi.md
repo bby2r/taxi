@@ -1,0 +1,117 @@
+---
+title: "Implementation Plan: Village Taxi Service"
+date: 2026-04-07
+status: draft
+tags: [taxi, react-native, expo, laravel, api, realtime]
+summary: "Village taxi dispatch — Laravel 13 API + React Native (Expo) mobile + Blade admin"
+phases: 8
+reviewer: PASS (after fixes)
+---
+
+# Implementation Plan: Village Taxi Service
+
+## Overview
+
+Simple taxi dispatch system for a small village. Three roles: Client, Driver, Admin. Fixed pricing (80 som day / 120 som night, Asia/Bishkek timezone). Client requests a ride, system finds nearest online driver via Haversine distance, driver accepts/declines within 10 seconds, auto-cascades to next driver.
+
+## Tech Stack
+
+- **Backend**: Laravel 13 (PHP 8.4), SQLite, Sanctum (token auth), Pusher (broadcasting)
+- **SMS**: Nikita.kg (local Kyrgyz provider for +996 numbers)
+- **Mobile**: React Native (Expo managed workflow), TypeScript, React Navigation, react-native-maps, expo-location, expo-notifications, pusher-js
+- **Admin**: Laravel Blade + TailwindCSS 4 (web only)
+
+## Design Direction
+
+- **Tone**: Minimal, clean, functional — village simplicity
+- **Palette**: Primary `#FBBF24` (yellow), Dark `#1F2937`, Success `#10B981`, Danger `#EF4444`, Background `#F9FAFB`
+- **Client app**: Light theme
+- **Driver app**: Dark theme
+- **Typography**: System fonts (San Francisco / Roboto)
+- **UI Language**: Russian
+
+## Business Rules
+
+- **Pricing**: 80 som (07:00-21:00) / 120 som (21:00-07:00), Asia/Bishkek timezone
+- **Cancellation**: Client can cancel after driver accepts, 50 som penalty
+- **Driver assignment**: Cascade — nearest driver gets 10s, then next, then auto-cancel
+- **Admin creation**: `php artisan make:admin` artisan command
+- **Race conditions**: DB transactions + pessimistic locking for order state transitions
+
+## Phases
+
+### Phase 1: Foundation — Database Models & Enums
+**Goal**: Enums, models, migrations, factories, seeders
+**Sub-tasks**: 1.1 Enums, 1.2 User Model, 1.3 DriverProfile, 1.4 Order, 1.5 OtpCode
+**Depends on**: nothing
+**File**: `phases/phase-1-foundation.md`
+
+### Phase 2: Authentication
+**Goal**: Sanctum, OTP via Nikita.kg SMS, driver login, push token, make:admin
+**Sub-tasks**: 2.1 NikitaSmsService, 2.2 OtpService + AuthController, 2.3 Driver Login, 2.4 Push Token + make:admin
+**Depends on**: Phase 1
+**File**: `phases/phase-2-authentication.md`
+
+### Phase 3: Core Business Logic
+**Goal**: Tariff, Haversine geo, order service with cascade, broadcasting
+**Sub-tasks**: 3.1 TariffService, 3.2 GeoService, 3.3 OrderService + Jobs, 3.4 Broadcasting
+**Depends on**: Phase 1, 2
+**File**: `phases/phase-3-business-logic.md`
+
+### Phase 4: API Endpoints
+**Goal**: RESTful JSON API for mobile apps
+**Sub-tasks**: 4.1 Middleware + Resources, 4.2 Client + Driver Controllers
+**Depends on**: Phase 2, 3
+**File**: `phases/phase-4-api-endpoints.md`
+
+### Phase 5: Client React Native App
+**Goal**: Native mobile app — OTP login, GPS, call taxi, track driver
+**Sub-tasks**: 5.0 Expo Setup, 5.1 Auth Screens, 5.2 Home/Map, 5.3 History, 5.4 Navigation
+**Depends on**: Phase 4
+**File**: `phases/phase-5-client-app.md`
+
+### Phase 6: Driver React Native App
+**Goal**: Native mobile app — login, online/offline, accept orders, GPS tracking
+**Sub-tasks**: 6.0 Setup, 6.1 Login, 6.2 Home/Orders, 6.3 Active Order, 6.4 Stats, 6.5 Navigation
+**Depends on**: Phase 4, 5.0 (shared Expo project)
+**File**: `phases/phase-6-driver-app.md`
+
+### Phase 7: Admin Web Panel
+**Goal**: Blade admin — dashboard, driver CRUD, order list
+**Sub-tasks**: 7.1 Auth/Layout, 7.2 Dashboard, 7.3 Driver Management, 7.4 Order List
+**Depends on**: Phase 1-4
+**File**: `phases/phase-7-admin-panel.md`
+
+### Phase 8: Push Notifications & Distribution
+**Goal**: Expo Push Notifications + EAS Build
+**Sub-tasks**: 8.1 ExpoPushService, 8.2 EAS Distribution
+**Depends on**: Phase 4, 5, 6
+**File**: `phases/phase-8-push-distribution.md`
+
+## Execution Order
+
+```
+Phase 1 → Phase 2 → Phase 3 → Phase 4
+                                  ↓ (parallel)
+                    Phase 5 (Client RN) + Phase 6 (Driver RN) + Phase 7 (Admin Blade)
+                                  ↓
+                              Phase 8 (Push + EAS)
+```
+
+Phases 5, 6, 7 can run in parallel after Phase 4. Phase 5.0 (Expo setup) must complete before Phase 6 starts.
+
+## Verification Checklist
+
+- [ ] All PHPUnit tests passing (`php artisan test --compact`)
+- [ ] Code style clean (`vendor/bin/pint --dirty --format agent`)
+- [ ] All migrations run cleanly
+- [ ] Expo app builds for iOS and Android
+- [ ] Client: login by OTP → call taxi → see driver on map → complete ride
+- [ ] Driver: login → go online → accept order → navigate → arrive → complete
+- [ ] Admin: login → dashboard → manage drivers → view orders
+- [ ] Push notifications for key events
+- [ ] Real-time updates via Pusher WebSocket
+- [ ] Background GPS tracking for drivers
+- [ ] Price: 80 som (07-21) / 120 som (21-07)
+- [ ] Driver cascade on 10s timeout
+- [ ] Cancellation with 50 som penalty after acceptance
