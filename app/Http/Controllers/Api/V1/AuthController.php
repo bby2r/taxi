@@ -4,12 +4,14 @@ namespace App\Http\Controllers\Api\V1;
 
 use App\Enums\UserRole;
 use App\Http\Controllers\Controller;
+use App\Http\Requests\Auth\DriverLoginRequest;
 use App\Http\Requests\Auth\SendOtpRequest;
 use App\Http\Requests\Auth\VerifyOtpRequest;
 use App\Models\User;
 use App\Services\OtpService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Hash;
 
 class AuthController extends Controller
 {
@@ -66,6 +68,42 @@ class AuthController extends Controller
                 'name' => $user->name,
                 'phone' => $user->phone,
                 'role' => $user->role,
+            ],
+        ]);
+    }
+
+    /**
+     * Authenticate an existing driver user with phone + password.
+     */
+    public function driverLogin(DriverLoginRequest $request): JsonResponse
+    {
+        $validated = $request->validated();
+
+        $user = User::where('phone', $validated['phone'])->first();
+
+        if (! $user || ! Hash::check($validated['password'], $user->password)) {
+            return response()->json([
+                'message' => 'Invalid phone number or password.',
+            ], 422);
+        }
+
+        if ($user->role !== UserRole::Driver) {
+            return response()->json([
+                'message' => 'This account is not a driver account.',
+            ], 403);
+        }
+
+        $user->tokens()->delete();
+        $token = $user->createToken('mobile', expiresAt: now()->addDays(30));
+
+        return response()->json([
+            'message' => 'Login successful.',
+            'token' => $token->plainTextToken,
+            'user' => [
+                'id' => $user->id,
+                'name' => $user->name,
+                'phone' => $user->phone,
+                'role' => $user->role->value,
             ],
         ]);
     }

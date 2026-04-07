@@ -9,7 +9,7 @@ Last updated: 2026-04-07
 - Phase 2: Authentication
   - [x] Step 2.1: SMS & OTP Services (2026-04-07)
   - [x] Step 2.2: Auth Controllers — Send OTP & Verify OTP (2026-04-07)
-  - [ ] Step 2.3: Driver Login
+  - [x] Step 2.3: Driver Login (2026-04-07)
   - [ ] Step 2.4: Push Token + make:admin command
 
 ## Next

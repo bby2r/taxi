@@ -13,6 +13,10 @@ Route::prefix('v1')->group(function () {
             ->middleware('throttle:10,1')
             ->name('api.v1.auth.verify-otp');
 
+        Route::post('/driver-login', [AuthController::class, 'driverLogin'])
+            ->middleware('throttle:10,1')
+            ->name('api.v1.auth.driver-login');
+
         Route::post('/logout', [AuthController::class, 'logout'])
             ->middleware('auth:sanctum')
             ->name('api.v1.auth.logout');
