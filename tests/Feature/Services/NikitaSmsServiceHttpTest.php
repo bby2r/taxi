@@ -30,7 +30,8 @@ class NikitaSmsServiceHttpTest extends TestCase
         Http::assertSent(function ($request) {
             return str_contains($request->url(), 'smspro.nikita.kg')
                 && str_contains($request->body(), '+996700123456')
-                && str_contains($request->body(), 'Test message');
+                && str_contains($request->body(), 'Test message')
+                && str_contains($request->body(), '<test>1</test>');
         });
     }
 

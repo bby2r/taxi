@@ -65,4 +65,38 @@ class NikitaSmsServiceTest extends TestCase
         $this->assertStringNotContainsString('<script>', $xml);
         $this->assertStringContainsString('&lt;script&gt;', $xml);
     }
+
+    #[Test]
+    public function test_build_xml_includes_transaction_id(): void
+    {
+        $service = new NikitaSmsService(
+            login: 'test',
+            password: 'test',
+            sender: 'Taxi',
+            enabled: false,
+        );
+
+        $reflection = new \ReflectionMethod($service, 'buildXml');
+
+        $xml = $reflection->invoke($service, '+996700123456', 'Hello');
+
+        $this->assertMatchesRegularExpression('/<id>\w+<\/id>/', $xml);
+    }
+
+    #[Test]
+    public function test_build_xml_includes_test_flag_in_non_production(): void
+    {
+        $service = new NikitaSmsService(
+            login: 'test',
+            password: 'test',
+            sender: 'Taxi',
+            enabled: false,
+        );
+
+        $reflection = new \ReflectionMethod($service, 'buildXml');
+
+        $xml = $reflection->invoke($service, '+996700123456', 'Hello');
+
+        $this->assertStringContainsString('<test>1</test>', $xml);
+    }
 }

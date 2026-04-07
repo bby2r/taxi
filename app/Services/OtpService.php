@@ -3,6 +3,7 @@
 namespace App\Services;
 
 use App\Models\OtpCode;
+use Illuminate\Support\Facades\Log;
 
 class OtpService
 {
@@ -27,6 +28,10 @@ class OtpService
             'code' => $code,
             'expires_at' => now()->addMinutes(5),
         ]);
+
+        if (! app()->environment('production')) {
+            Log::info("Code for $phone is $code");
+        }
 
         $this->sms->send($phone, "Ваш код подтверждения: {$code}");
 

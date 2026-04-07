@@ -4,6 +4,7 @@ namespace App\Services;
 
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Str;
 
 class NikitaSmsService
 {
@@ -67,18 +68,20 @@ class NikitaSmsService
         $sender = htmlspecialchars($this->sender, ENT_XML1, 'UTF-8');
         $phone = htmlspecialchars($phone, ENT_XML1, 'UTF-8');
         $message = htmlspecialchars($message, ENT_XML1, 'UTF-8');
+        $id = Str::random(8);
+        $test = app()->environment('production') ? '' : '<test>1</test>';
 
-        return <<<XML
-        <?xml version="1.0" encoding="UTF-8"?>
-        <message>
-            <login>{$login}</login>
-            <pwd>{$password}</pwd>
-            <sender>{$sender}</sender>
-            <text>{$message}</text>
-            <phones>
-                <phone>{$phone}</phone>
-            </phones>
-        </message>
-        XML;
+        return '<?xml version="1.0" encoding="UTF-8"?>'.
+            '<message>'.
+                "<login>$login</login>".
+                "<pwd>$password</pwd>".
+                "<id>$id</id>".
+                "<sender>$sender</sender>".
+                "<text>$message</text>".
+                '<phones>'.
+                    "<phone>$phone</phone>".
+                '</phones>'.
+                $test.
+            '</message>';
     }
 }
