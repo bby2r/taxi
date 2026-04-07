@@ -1,0 +1,32 @@
+{
+  "expo": {
+    "name": "Village Taxi",
+    "slug": "village-taxi",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "icon": "./assets/icon.png",
+    "userInterfaceStyle": "automatic",
+    "splash": {
+      "image": "./assets/splash-icon.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#FBBF24"
+    },
+    "ios": {
+      "supportsTablet": false,
+      "bundleIdentifier": "com.villagetaxi.app",
+      "infoPlist": {
+        "NSLocationWhenInUseUsageDescription": "Нужен доступ к геолокации для определения точки подачи такси",
+        "NSLocationAlwaysAndWhenInUseUsageDescription": "Нужен доступ к геолокации для отслеживания маршрута"
+      }
+    },
+    "android": {
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/adaptive-icon.png",
+        "backgroundColor": "#FBBF24"
+      },
+      "package": "com.villagetaxi.app",
+      "permissions": ["ACCESS_FINE_LOCATION", "ACCESS_COARSE_LOCATION"]
+    },
+    "plugins": ["expo-location", "expo-notifications", "expo-secure-store"]
+  }
+}

@@ -1,0 +1,31 @@
+export const ClientColors = {
+  background: '#F9FAFB',
+  primary: '#FBBF24',
+  primaryDark: '#D97706',
+  dark: '#1F2937',
+  darkSecondary: '#374151',
+  textPrimary: '#1F2937',
+  textSecondary: '#6B7280',
+  textMuted: '#9CA3AF',
+  success: '#10B981',
+  danger: '#EF4444',
+  white: '#FFFFFF',
+  border: '#E5E7EB',
+  cardBackground: '#FFFFFF',
+  mapOverlay: 'rgba(255,255,255,0.95)',
+} as const;
+
+export const DriverColors = {
+  background: '#1F2937',
+  backgroundSecondary: '#111827',
+  primary: '#FBBF24',
+  primaryDark: '#D97706',
+  textPrimary: '#FFFFFF',
+  textSecondary: '#D1D5DB',
+  textMuted: '#9CA3AF',
+  success: '#10B981',
+  danger: '#EF4444',
+  cardBackground: '#374151',
+  border: '#4B5563',
+  white: '#FFFFFF',
+} as const;
