@@ -4,13 +4,13 @@ Last updated: 2026-04-07
 
 ## Done
 - [x] Phase 1: Foundation — Database Models & Enums (2026-04-07)
+- [x] Phase 2: Authentication (2026-04-07)
+  - [x] Step 2.1: SMS & OTP Services
+  - [x] Step 2.2: Auth Controllers — Send OTP & Verify OTP
+  - [x] Step 2.3: Driver Login
+  - [x] Step 2.4: Push Token + make:admin command
 
 ## In Progress
-- Phase 2: Authentication
-  - [x] Step 2.1: SMS & OTP Services (2026-04-07)
-  - [x] Step 2.2: Auth Controllers — Send OTP & Verify OTP (2026-04-07)
-  - [x] Step 2.3: Driver Login (2026-04-07)
-  - [x] Step 2.4: Push Token + make:admin command (2026-04-07)
 
 ## Next
 - Phase 3: Core Business Logic
