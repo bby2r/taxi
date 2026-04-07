@@ -18,7 +18,7 @@ Last updated: 2026-04-07
 ## In Progress
 - Phase 8: Push Notifications & Distribution
   - [x] Step 8.1: Expo Push Notifications
-  - [ ] Step 8.2: EAS Distribution
+  - [x] Step 8.2: EAS Distribution
 
 ## Next
 (none)

@@ -11,9 +11,15 @@
       "resizeMode": "contain",
       "backgroundColor": "#FBBF24"
     },
+    "updates": {
+      "url": "https://u.expo.dev/YOUR_EAS_PROJECT_ID"
+    },
+    "runtimeVersion": {
+      "policy": "appVersion"
+    },
     "ios": {
       "supportsTablet": false,
-      "bundleIdentifier": "com.villagetaxi.app",
+      "bundleIdentifier": "kg.villagetaxi.app",
       "infoPlist": {
         "NSLocationWhenInUseUsageDescription": "Нужен доступ к геолокации для определения точки подачи такси",
         "NSLocationAlwaysAndWhenInUseUsageDescription": "Нужен доступ к геолокации для отслеживания маршрута",
@@ -25,8 +31,13 @@
         "foregroundImage": "./assets/adaptive-icon.png",
         "backgroundColor": "#FBBF24"
       },
-      "package": "com.villagetaxi.app",
+      "package": "kg.villagetaxi.app",
       "permissions": ["ACCESS_FINE_LOCATION", "ACCESS_COARSE_LOCATION", "ACCESS_BACKGROUND_LOCATION"]
+    },
+    "extra": {
+      "eas": {
+        "projectId": "YOUR_EAS_PROJECT_ID"
+      }
     },
     "plugins": [
       [
