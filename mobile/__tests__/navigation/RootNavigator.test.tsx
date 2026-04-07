@@ -22,6 +22,14 @@ jest.mock('../../src/navigation/ClientTabs', () => {
   };
 });
 
+jest.mock('../../src/navigation/DriverStack', () => {
+  const { Text } = require('react-native');
+  return {
+    __esModule: true,
+    default: () => <Text>DriverStack</Text>,
+  };
+});
+
 jest.mock('@react-navigation/native', () => ({
   NavigationContainer: ({ children }: { children: React.ReactNode }) => children,
 }));
@@ -88,7 +96,7 @@ describe('RootNavigator', () => {
     expect(getByText('ClientTabs')).toBeTruthy();
   });
 
-  it('shows driver placeholder when authenticated as driver', () => {
+  it('shows DriverStack when authenticated as driver', () => {
     mockedUseAuth.mockReturnValue({
       user: { id: 2, name: 'Driver', phone: '+996555111111', role: 'driver' },
       isLoading: false,
@@ -97,10 +105,9 @@ describe('RootNavigator', () => {
       logout: jest.fn(),
     });
 
-    const { UNSAFE_getByType, queryByText } = render(<RootNavigator />);
+    const { getByText, queryByText } = render(<RootNavigator />);
 
-    // DriverPlaceholder renders an ActivityIndicator, not ClientTabs or AuthStack
-    expect(UNSAFE_getByType(ActivityIndicator)).toBeTruthy();
+    expect(getByText('DriverStack')).toBeTruthy();
     expect(queryByText('ClientTabs')).toBeNull();
     expect(queryByText('AuthStack')).toBeNull();
   });

@@ -1,0 +1,29 @@
+import React from 'react';
+import { createNativeStackNavigator } from '@react-navigation/native-stack';
+import DriverHomeScreen from '../screens/driver/HomeScreen';
+import OrderActiveScreen from '../screens/driver/OrderActiveScreen';
+import StatsScreen from '../screens/driver/StatsScreen';
+import { DriverStackParamList } from './types';
+import { DriverColors } from '../theme/colors';
+
+const Stack = createNativeStackNavigator<DriverStackParamList>();
+
+export default function DriverStack(): React.ReactNode {
+  return (
+    <Stack.Navigator
+      screenOptions={{
+        headerShown: false,
+        contentStyle: { backgroundColor: DriverColors.background },
+        animation: 'slide_from_right',
+      }}
+    >
+      <Stack.Screen name="DriverHome" component={DriverHomeScreen} />
+      <Stack.Screen
+        name="OrderActive"
+        component={OrderActiveScreen}
+        options={{ gestureEnabled: false }}
+      />
+      <Stack.Screen name="Stats" component={StatsScreen} />
+    </Stack.Navigator>
+  );
+}

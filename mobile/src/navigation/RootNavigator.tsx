@@ -6,6 +6,7 @@ import { useAuth } from '../context/AuthContext';
 import { useNotifications } from '../hooks/useNotifications';
 import AuthStack from './AuthStack';
 import ClientTabs from './ClientTabs';
+import DriverStack from './DriverStack';
 import { RootStackParamList } from './types';
 import { ClientColors } from '../theme/colors';
 
@@ -30,20 +31,12 @@ export default function RootNavigator(): React.ReactNode {
         {!isAuthenticated ? (
           <Stack.Screen name="Auth" component={AuthStack} />
         ) : user?.role === 'driver' ? (
-          <Stack.Screen name="DriverApp" component={DriverPlaceholder} />
+          <Stack.Screen name="DriverApp" component={DriverStack} />
         ) : (
           <Stack.Screen name="ClientApp" component={ClientTabs} />
         )}
       </Stack.Navigator>
     </NavigationContainer>
-  );
-}
-
-function DriverPlaceholder(): React.ReactNode {
-  return (
-    <View style={styles.loading}>
-      <ActivityIndicator size="large" color={ClientColors.primary} />
-    </View>
   );
 }
 

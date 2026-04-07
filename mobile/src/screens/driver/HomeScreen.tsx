@@ -61,9 +61,18 @@ export default function HomeScreen(): React.ReactNode {
         <Text style={[Typography.h2, { color: DriverColors.textPrimary }]}>
           Привет, {auth.user?.name}
         </Text>
-        <TouchableOpacity onPress={auth.logout} activeOpacity={0.7}>
-          <Text style={[Typography.body, { color: DriverColors.danger }]}>Выйти</Text>
-        </TouchableOpacity>
+        <View style={styles.headerRight}>
+          <TouchableOpacity
+            onPress={() => navigation.navigate('Stats')}
+            activeOpacity={0.7}
+            style={styles.statsButton}
+          >
+            <Text style={{ fontSize: 22 }}>📊</Text>
+          </TouchableOpacity>
+          <TouchableOpacity onPress={auth.logout} activeOpacity={0.7}>
+            <Text style={[Typography.body, { color: DriverColors.danger }]}>Выйти</Text>
+          </TouchableOpacity>
+        </View>
       </View>
 
       {error && (
@@ -107,6 +116,14 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     paddingHorizontal: 20,
     paddingVertical: 16,
+  },
+  headerRight: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 16,
+  },
+  statsButton: {
+    padding: 4,
   },
   errorBanner: {
     paddingHorizontal: 20,
