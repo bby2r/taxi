@@ -1,6 +1,6 @@
 export const API_BASE_URL = __DEV__
-  ? 'http://taxi.test'
-  : 'https://api.villagetaxi.kg';
+  ? 'http://192.168.0.114:8000'
+  : 'https://taxi-l1jn.onrender.com';
 
 export const PUSHER_KEY = 'your-pusher-key';
 export const PUSHER_CLUSTER = 'ap1';
