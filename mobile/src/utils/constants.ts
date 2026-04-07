@@ -1,5 +1,5 @@
 export const API_BASE_URL = __DEV__
-  ? 'http://192.168.1.100:8000'
+  ? 'http://taxi.test'
   : 'https://api.villagetaxi.kg';
 
 export const PUSHER_KEY = 'your-pusher-key';
