@@ -1,6 +1,7 @@
 export type AuthStackParamList = {
   PhoneLogin: undefined;
   OtpVerify: { phone: string };
+  DriverLogin: undefined;
 };
 
 export type ClientTabParamList = {

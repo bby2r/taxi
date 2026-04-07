@@ -14,6 +14,14 @@ jest.mock('../../src/screens/client/OtpVerifyScreen', () => {
   };
 });
 
+jest.mock('../../src/screens/driver/LoginScreen', () => {
+  const { Text } = require('react-native');
+  return {
+    __esModule: true,
+    default: () => <Text>DriverLoginScreen</Text>,
+  };
+});
+
 jest.mock('@react-navigation/native', () => ({
   NavigationContainer: ({ children }: { children: React.ReactNode }) => children,
 }));

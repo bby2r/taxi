@@ -8,6 +8,7 @@ import {
   Platform,
   SafeAreaView,
   Alert,
+  TouchableOpacity,
 } from 'react-native';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { AuthStackParamList } from '../../navigation/types';
@@ -94,6 +95,15 @@ export default function PhoneLoginScreen({ navigation }: Props): React.ReactNode
             disabled={phone.length < 9}
             style={styles.button}
           />
+
+          <TouchableOpacity
+            onPress={() => navigation.navigate('DriverLogin')}
+            style={styles.driverLink}
+          >
+            <Text style={[Typography.caption, { color: ClientColors.textSecondary }]}>
+              Я водитель
+            </Text>
+          </TouchableOpacity>
         </View>
       </KeyboardAvoidingView>
     </SafeAreaView>
@@ -159,6 +169,11 @@ const styles = StyleSheet.create({
     marginBottom: 8,
   },
   button: {
+    marginTop: 8,
+  },
+  driverLink: {
+    alignSelf: 'center',
+    paddingVertical: 12,
     marginTop: 8,
   },
 });
