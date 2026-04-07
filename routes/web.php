@@ -1,6 +1,7 @@
 <?php
 
 use App\Http\Controllers\Admin\AuthController;
+use App\Http\Controllers\Admin\DashboardController;
 use App\Http\Middleware\EnsureUserRole;
 use Illuminate\Support\Facades\Route;
 
@@ -17,6 +18,10 @@ Route::prefix('admin')->name('admin.')->group(function () {
     Route::middleware(['auth', EnsureUserRole::class.':admin'])->group(function () {
         Route::post('logout', [AuthController::class, 'logout'])->name('logout');
         Route::get('/', fn () => redirect()->route('admin.dashboard'));
-        // Dashboard, drivers, orders routes added in later steps
+        Route::get('dashboard', [DashboardController::class, 'index'])->name('dashboard');
+
+        // Placeholder routes — full controllers added in later steps
+        Route::get('drivers', fn () => '')->name('drivers.index');
+        Route::get('orders', fn () => '')->name('orders.index');
     });
 });
