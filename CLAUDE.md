@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-Taxi application built on **Laravel 13** (PHP 8.3+) with SQLite (default), Vite + TailwindCSS v4 frontend, and **Laravel Boost** MCP integration.
+Taxi application built on **Laravel 13** (PHP 8.3+) with PostgreSQL, Vite + TailwindCSS v4 frontend, and **Laravel Boost** MCP integration.
 
 ## Common Commands
 
