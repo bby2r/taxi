@@ -16,7 +16,8 @@
       "bundleIdentifier": "com.villagetaxi.app",
       "infoPlist": {
         "NSLocationWhenInUseUsageDescription": "Нужен доступ к геолокации для определения точки подачи такси",
-        "NSLocationAlwaysAndWhenInUseUsageDescription": "Нужен доступ к геолокации для отслеживания маршрута"
+        "NSLocationAlwaysAndWhenInUseUsageDescription": "Нужен доступ к геолокации для отслеживания маршрута",
+        "UIBackgroundModes": ["location"]
       }
     },
     "android": {
@@ -25,8 +26,19 @@
         "backgroundColor": "#FBBF24"
       },
       "package": "com.villagetaxi.app",
-      "permissions": ["ACCESS_FINE_LOCATION", "ACCESS_COARSE_LOCATION"]
+      "permissions": ["ACCESS_FINE_LOCATION", "ACCESS_COARSE_LOCATION", "ACCESS_BACKGROUND_LOCATION"]
     },
-    "plugins": ["expo-location", "expo-notifications", "expo-secure-store"]
+    "plugins": [
+      [
+        "expo-location",
+        {
+          "locationAlwaysAndWhenInUsePermission": "Нужен доступ к геолокации для передачи вашего местоположения пассажирам и диспетчеру",
+          "isAndroidBackgroundLocationEnabled": true,
+          "isAndroidForegroundServiceEnabled": true
+        }
+      ],
+      "expo-notifications",
+      "expo-secure-store"
+    ]
   }
 }
