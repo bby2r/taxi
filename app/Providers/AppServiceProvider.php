@@ -2,7 +2,9 @@
 
 namespace App\Providers;
 
+use App\Models\DriverChangeRequest;
 use App\Services\NikitaSmsService;
+use Illuminate\Support\Facades\Route;
 use Illuminate\Support\ServiceProvider;
 
 class AppServiceProvider extends ServiceProvider
@@ -25,6 +27,6 @@ class AppServiceProvider extends ServiceProvider
      */
     public function boot(): void
     {
-        //
+        Route::model('ticket', DriverChangeRequest::class);
     }
 }

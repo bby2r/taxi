@@ -3,6 +3,7 @@
 use App\Http\Controllers\Admin\AuthController;
 use App\Http\Controllers\Admin\DashboardController;
 use App\Http\Controllers\Admin\DriverController;
+use App\Http\Controllers\Admin\DriverTicketController;
 use App\Http\Controllers\Admin\OrderController;
 use App\Http\Middleware\EnsureUserRole;
 use Illuminate\Support\Facades\Route;
@@ -25,5 +26,9 @@ Route::prefix('admin')->name('admin.')->group(function () {
         Route::resource('drivers', DriverController::class)->except(['show']);
 
         Route::resource('orders', OrderController::class)->only(['index', 'show']);
+
+        Route::resource('tickets', DriverTicketController::class)->only(['index', 'show']);
+        Route::post('tickets/{ticket}/approve', [DriverTicketController::class, 'approve'])->name('tickets.approve');
+        Route::post('tickets/{ticket}/reject', [DriverTicketController::class, 'reject'])->name('tickets.reject');
     });
 });
