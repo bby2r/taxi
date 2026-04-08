@@ -36,6 +36,21 @@ export async function cancelOrder(id: number): Promise<Order> {
   return data.data;
 }
 
+export async function createRegionalOrder(
+  latitude: number,
+  longitude: number,
+  regionId: number,
+  address?: string
+): Promise<Order> {
+  const { data } = await apiClient.post<{ data: Order }>('/api/v1/client/orders/regional', {
+    pickup_latitude: latitude,
+    pickup_longitude: longitude,
+    region_id: regionId,
+    pickup_address: address,
+  });
+  return data.data;
+}
+
 export async function getOrderHistory(page: number = 1): Promise<PaginatedResponse<Order>> {
   const { data } = await apiClient.get<PaginatedResponse<Order>>('/api/v1/client/orders', {
     params: { page },

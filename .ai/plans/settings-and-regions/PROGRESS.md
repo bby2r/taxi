@@ -17,8 +17,9 @@
 - [x] 3.3 Region + price API endpoints
 - [x] 3.4 Regional order support
 
-## In Progress
-### Phase 4: Mobile — Region Order Selector
-- [ ] 4.1 Regions API integration
-- [ ] 4.2 RegionSelector popup component
-- [ ] 4.3 HomeScreen + useOrder updates
+### Phase 4: Mobile — Region Order Selector (2026-04-09)
+- [x] 4.1 Regions API integration
+- [x] 4.2 RegionSelector popup component
+- [x] 4.3 HomeScreen + useOrder updates
+
+## All phases complete.

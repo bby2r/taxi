@@ -49,6 +49,12 @@ export interface PaginatedResponse<T> {
   };
 }
 
+export interface Region {
+  id: number;
+  name: string;
+  price: number;
+}
+
 export interface DriverStats {
   today: { orders: number; earnings: number };
   week: { orders: number; earnings: number };

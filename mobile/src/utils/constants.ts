@@ -1,6 +1,6 @@
 export const API_BASE_URL = __DEV__
   ? 'http://192.168.0.114:8000'
-  : 'https://taxi-l1jn.onrender.com';
+  : 'https://glottal-brigid-oversensibly.ngrok-free.dev';
 
 export const PUSHER_KEY = 'your-pusher-key';
 export const PUSHER_CLUSTER = 'ap1';
@@ -23,5 +23,3 @@ export const DEFAULT_MAP_REGION = {
   latitudeDelta: 0.02,
   longitudeDelta: 0.02,
 };
-
-export const FIXED_PRICE = 80;

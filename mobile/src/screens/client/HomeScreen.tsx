@@ -1,4 +1,4 @@
-import React, { useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import {
   View,
   Text,
@@ -7,15 +7,18 @@ import {
   Modal,
   Animated,
   Easing,
+  Platform,
+  StatusBar,
 } from 'react-native';
 import MapView, { Marker, Region } from 'react-native-maps';
 import { useLocation } from '../../hooks/useLocation';
 import { useOrder } from '../../hooks/useOrder';
 import ActionButton from '../../components/ActionButton';
 import DriverCard from '../../components/DriverCard';
+import RegionSelector from '../../components/RegionSelector';
 import { ClientColors } from '../../theme/colors';
 import { Typography } from '../../theme/typography';
-import { FIXED_PRICE } from '../../utils/constants';
+import { getCurrentPrice } from '../../api/regions';
 
 function PulsingDot(): React.ReactNode {
   const scale = useRef(new Animated.Value(1)).current;
@@ -70,8 +73,16 @@ function PulsingDot(): React.ReactNode {
 
 export default function HomeScreen(): React.ReactNode {
   const location = useLocation();
-  const { state, callTaxi, cancelOrder, dismissCompleted, loading, error } = useOrder();
+  const { state, callTaxi, callRegionalTaxi, cancelOrder, dismissCompleted, loading, error } = useOrder();
   const mapRef = useRef<MapView>(null);
+  const [regionSelectorVisible, setRegionSelectorVisible] = useState(false);
+  const [currentPrice, setCurrentPrice] = useState<number>(80);
+
+  useEffect(() => {
+    getCurrentPrice()
+      .then(setCurrentPrice)
+      .catch(() => setCurrentPrice(80));
+  }, []);
 
   const initialRegion: Region = {
     latitude: location.latitude,
@@ -82,6 +93,11 @@ export default function HomeScreen(): React.ReactNode {
 
   const handleCallTaxi = (): void => {
     callTaxi(location.latitude, location.longitude);
+  };
+
+  const handleRegionSelect = (regionId: number): void => {
+    setRegionSelectorVisible(false);
+    callRegionalTaxi(location.latitude, location.longitude, regionId);
   };
 
   const driverCoords =
@@ -97,6 +113,7 @@ export default function HomeScreen(): React.ReactNode {
         initialRegion={initialRegion}
         showsUserLocation
         showsMyLocationButton
+        mapPadding={{ top: Platform.OS === 'android' ? (StatusBar.currentHeight ?? 40) + 8 : 0, right: 0, bottom: 0, left: 0 }}
       >
         {driverCoords && (
           <Marker coordinate={driverCoords} title="Водитель">
@@ -119,13 +136,20 @@ export default function HomeScreen(): React.ReactNode {
               Текущее местоположение
             </Text>
             <Text style={[Typography.h2, { color: ClientColors.dark, marginBottom: 16 }]}>
-              {FIXED_PRICE} сом
+              {currentPrice} сом
             </Text>
             <ActionButton
               title="Вызвать такси"
               onPress={handleCallTaxi}
               loading={loading}
               disabled={location.loading}
+            />
+            <ActionButton
+              title="Межгород"
+              onPress={() => setRegionSelectorVisible(true)}
+              variant="outline"
+              disabled={location.loading}
+              style={{ marginTop: 12 }}
             />
           </>
         )}
@@ -187,6 +211,12 @@ export default function HomeScreen(): React.ReactNode {
           </View>
         </View>
       </Modal>
+
+      <RegionSelector
+        visible={regionSelectorVisible}
+        onSelect={handleRegionSelect}
+        onClose={() => setRegionSelectorVisible(false)}
+      />
 
       {/* Cancelled Toast */}
       {state.phase === 'cancelled' && (

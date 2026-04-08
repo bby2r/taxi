@@ -16,6 +16,7 @@ type ClientOrderState =
 export interface UseOrderReturn {
   state: ClientOrderState;
   callTaxi: (latitude: number, longitude: number, address?: string) => Promise<void>;
+  callRegionalTaxi: (latitude: number, longitude: number, regionId: number, address?: string) => Promise<void>;
   cancelOrder: () => Promise<void>;
   dismissCompleted: () => void;
   loading: boolean;
@@ -164,6 +165,24 @@ export function useOrder(): UseOrderReturn {
     }
   }, []);
 
+  const callRegionalTaxi = useCallback(
+    async (latitude: number, longitude: number, regionId: number, address?: string) => {
+      setLoading(true);
+      setError(null);
+      try {
+        const order = await ordersApi.createRegionalOrder(latitude, longitude, regionId, address);
+        orderRef.current = order;
+        setState({ phase: 'searching', order });
+      } catch (e: unknown) {
+        const axiosError = e as { response?: { data?: { message?: string } } };
+        setError(axiosError.response?.data?.message || 'Не удалось создать заказ');
+      } finally {
+        setLoading(false);
+      }
+    },
+    []
+  );
+
   const cancelOrder = useCallback(async () => {
     const order = orderRef.current;
     if (!order) {
@@ -190,5 +209,5 @@ export function useOrder(): UseOrderReturn {
     setState({ phase: 'idle' });
   }, []);
 
-  return { state, callTaxi, cancelOrder, dismissCompleted, loading, error };
+  return { state, callTaxi, callRegionalTaxi, cancelOrder, dismissCompleted, loading, error };
 }
