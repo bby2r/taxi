@@ -66,6 +66,16 @@ class User extends Authenticatable
     }
 
     /**
+     * Change requests submitted by this user.
+     *
+     * @return HasMany<DriverChangeRequest, $this>
+     */
+    public function changeRequests(): HasMany
+    {
+        return $this->hasMany(DriverChangeRequest::class);
+    }
+
+    /**
      * Scope to only driver users.
      *
      * @param  Builder<User>  $query
