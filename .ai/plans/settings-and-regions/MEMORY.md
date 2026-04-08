@@ -10,39 +10,36 @@
 ## Setting model
 - Key-value store: `Setting::getValue('key', $default)` returns `?string`
 - 4 seeded keys: day_price (80), night_price (120), cancellation_fee (50), max_search_radius_km (10)
-- Seeder uses `updateOrCreate` keyed on `'key'` for idempotency
-- Admin: `SettingController` with `index()` + `update()`, validates integer/numeric min:0
-- Routes: GET/PUT `admin/settings` named `admin.settings.index` / `admin.settings.update`
+- TariffService reads from settings with fallback defaults, caches per instance
 
 ## Region model
 - Inter-village destinations with day/night pricing
-- `getCurrentPrice(?Carbon $at)`: hour 7-20 = day_price, else night_price (Asia/Bishkek timezone)
-- `scopeActive()` filters by is_active=true
-- Factory states: `inactive()`, `withPrices(int $day, int $night)`
-- Admin: `RegionController` full CRUD (except show), resource route
-- Validates: name unique (self-exclusion on update), prices integer min:0, is_active boolean
+- `getCurrentPrice(?Carbon $at)`: hour 7-20 = day_price, else night_price (Asia/Bishkek)
+- `scopeActive()` filters is_active=true
+- Factory states: `inactive()`, `withPrices(int, int)`
 
-## Admin panel patterns
-- Controllers in `App\Http\Controllers\Admin\`
-- Views extend `layouts.admin`, use consistent TailwindCSS classes
-- Flash messages: `->with('success', ...)`, green bg-green-50 in views
-- Tables: `rounded-xl border border-gray-200 bg-white shadow-sm` wrapper
-- Forms: `mx-auto max-w-2xl` wrapper, amber-themed buttons
-- Nav sidebar order: Dashboard, Drivers, Clients, Regions, Orders, Tickets, Settings
-- Badge pattern: green `bg-green-100 text-green-700` / gray `bg-gray-100 text-gray-600`
+## API endpoints (Phase 3)
+- GET `/api/v1/client/regions` — active regions with time-dependent prices
+- GET `/api/v1/client/price` — current in-village tariff
+- POST `/api/v1/client/orders/regional` — create regional order (region_id required, must be active)
+- Regional orders: price from Region::getCurrentPrice(), 30s driver timeout (vs 10s in-village)
+- Order model has region_id FK, region() BelongsTo, OrderResource includes conditional region block
+
+## Admin panel (Phase 2)
+- Sidebar: Dashboard, Drivers, Clients, Regions, Orders, Tickets, Settings
+- SettingController: GET/PUT admin/settings
+- RegionController: full CRUD (except show)
+- ClientController: read-only index
 
 ## Testing conventions
-- PHPUnit v12 only (no Pest)
-- Create with `php artisan make:test --phpunit {path} --no-interaction`
-- Use `fake()` helper, model factories with states
-- Admin tests: setUp creates `$admin` via `User::factory()->admin()->create()`
-- Test auth: `actingAs($this->admin)` for admin routes
+- PHPUnit v12 only, `fake()` helper, factories with states
+- Admin tests: setUp creates admin via `User::factory()->admin()->create()`
+- API tests: `Sanctum::actingAs()`, `Event::fake()`, `Queue::fake()`
+- 1 pre-existing failure in MakeAdminCommandTest (unrelated)
 
 ## Code style
 - Run `vendor/bin/pint --dirty --format agent` after PHP changes
-- Use `fake()` not `$this->faker`
 - PHP 8 constructor promotion, explicit return types
 
 ## What's next
-- Phase 3: Backend API (TariffService refactor, max radius, region endpoints, regional orders)
-- Phase 4: Mobile (regions API, RegionSelector popup, HomeScreen updates)
+- Phase 4: Mobile (regions API integration, RegionSelector popup, HomeScreen updates)

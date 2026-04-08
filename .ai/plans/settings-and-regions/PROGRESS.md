@@ -11,12 +11,14 @@
 - [x] 2.3 Settings page
 - [x] 2.4 Regions management
 
-## In Progress
-### Phase 3: Backend API — Settings Integration, Max Radius & Regional Orders
-- [ ] 3.1 TariffService refactor
-- [ ] 3.2 Max radius in GeoService
-- [ ] 3.3 Region + price API endpoints
-- [ ] 3.4 Regional order support
+### Phase 3: Backend API (2026-04-09)
+- [x] 3.1 TariffService refactor
+- [x] 3.2 Max radius in GeoService
+- [x] 3.3 Region + price API endpoints
+- [x] 3.4 Regional order support
 
-## Next
-- Phase 4: Mobile (3 sub-tasks)
+## In Progress
+### Phase 4: Mobile — Region Order Selector
+- [ ] 4.1 Regions API integration
+- [ ] 4.2 RegionSelector popup component
+- [ ] 4.3 HomeScreen + useOrder updates
