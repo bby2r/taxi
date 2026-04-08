@@ -5,6 +5,7 @@ namespace Tests\Unit\Http\Resources;
 use App\Http\Resources\V1\OrderResource;
 use App\Models\DriverProfile;
 use App\Models\Order;
+use App\Models\Region;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\TestCase;
@@ -87,5 +88,28 @@ class OrderResourceTest extends TestCase
         $this->assertSame($driver->phone, $resource['driver']['phone']);
         $this->assertArrayHasKey('car_model', $resource['driver']);
         $this->assertArrayHasKey('car_number', $resource['driver']);
+    }
+
+    public function test_order_resource_includes_region_when_present(): void
+    {
+        $region = Region::factory()->create(['name' => 'Karakol']);
+        $order = Order::factory()->regional($region)->create();
+        $order->load(['client', 'region']);
+
+        $resource = $this->resolveResource($order);
+
+        $this->assertArrayHasKey('region', $resource);
+        $this->assertSame($region->id, $resource['region']['id']);
+        $this->assertSame('Karakol', $resource['region']['name']);
+    }
+
+    public function test_order_resource_excludes_region_when_null(): void
+    {
+        $order = Order::factory()->create();
+        $order->load('client');
+
+        $resource = $this->resolveResource($order);
+
+        $this->assertArrayNotHasKey('region', $resource);
     }
 }

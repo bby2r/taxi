@@ -5,6 +5,7 @@ use App\Http\Controllers\Api\V1\ClientOrderController;
 use App\Http\Controllers\Api\V1\ClientProfileController;
 use App\Http\Controllers\Api\V1\DriverController;
 use App\Http\Controllers\Api\V1\DriverProfileController;
+use App\Http\Controllers\Api\V1\RegionController;
 use Illuminate\Support\Facades\Route;
 
 Route::prefix('v1')->group(function () {
@@ -53,9 +54,12 @@ Route::prefix('v1')->middleware('auth:sanctum')->group(function () {
         Route::get('/orders/active', [ClientOrderController::class, 'active'])->name('api.v1.client.orders.active');
         Route::get('/orders', [ClientOrderController::class, 'index'])->name('api.v1.client.orders.index');
         Route::post('/orders', [ClientOrderController::class, 'store'])->name('api.v1.client.orders.store');
+        Route::post('/orders/regional', [ClientOrderController::class, 'storeRegional'])->name('api.v1.client.orders.store-regional');
         Route::get('/orders/{order}', [ClientOrderController::class, 'show'])->name('api.v1.client.orders.show');
         Route::post('/orders/{order}/cancel', [ClientOrderController::class, 'cancel'])->name('api.v1.client.orders.cancel');
         Route::put('/profile', [ClientProfileController::class, 'update'])->name('api.v1.client.profile.update');
+        Route::get('/regions', [RegionController::class, 'index'])->name('api.v1.client.regions');
+        Route::get('/price', [RegionController::class, 'currentPrice'])->name('api.v1.client.price');
     });
 
     // Driver routes

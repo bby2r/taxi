@@ -11,6 +11,7 @@ use App\Events\OrderInProgress;
 use App\Events\OrderOfferedToDriver;
 use App\Jobs\OfferTimeoutJob;
 use App\Models\Order;
+use App\Models\Region;
 use App\Models\User;
 use Illuminate\Support\Facades\DB;
 
@@ -33,13 +34,16 @@ class OrderService
         ?float $dropoffLat = null,
         ?float $dropoffLon = null,
         ?string $dropoffAddress = null,
+        ?int $regionId = null,
     ): Order {
         $activeOrder = Order::forClient($client->id)->active()->first();
         if ($activeOrder) {
             throw new \RuntimeException('Client already has an active order.');
         }
 
-        $price = $this->tariffService->getCurrentPrice();
+        $price = $regionId
+            ? Region::findOrFail($regionId)->getCurrentPrice()
+            : $this->tariffService->getCurrentPrice();
 
         $order = Order::create([
             'client_id' => $client->id,
@@ -51,6 +55,7 @@ class OrderService
             'dropoff_longitude' => $dropoffLon,
             'dropoff_address' => $dropoffAddress,
             'price' => $price,
+            'region_id' => $regionId,
             'declined_drivers' => [],
         ]);
 
@@ -84,8 +89,10 @@ class OrderService
             'offered_at' => now(),
         ]);
 
+        $timeout = $order->region_id ? 30 : 10;
+
         OfferTimeoutJob::dispatch($order->id, $driver->user_id)
-            ->delay(now()->addSeconds(10));
+            ->delay(now()->addSeconds($timeout));
 
         event(new OrderOfferedToDriver($order, $driver->user_id));
 

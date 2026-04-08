@@ -26,6 +26,10 @@ class OrderResource extends JsonResource
             'price' => $this->price,
             'cancellation_fee' => $this->cancellation_fee,
             'cancelled_by' => $this->cancelled_by,
+            'region' => $this->when($this->region_id, fn () => [
+                'id' => $this->region->id,
+                'name' => $this->region->name,
+            ]),
             'client' => [
                 'id' => $this->client->id,
                 'name' => $this->client->name,

@@ -3,6 +3,7 @@
 namespace Tests\Feature\Services;
 
 use App\Models\DriverProfile;
+use App\Models\Setting;
 use App\Services\GeoService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use PHPUnit\Framework\Attributes\Test;
@@ -27,7 +28,7 @@ class GeoServiceTest extends TestCase
         DriverProfile::factory()->online()->count(2)->create();
         DriverProfile::factory()->create(); // offline
 
-        $result = $this->service->findNearestDrivers(42.8746, 74.5698);
+        $result = $this->service->findNearestDrivers(42.8746, 74.5698, [], 10, 999.0);
 
         $this->assertCount(2, $result);
     }
@@ -63,7 +64,7 @@ class GeoServiceTest extends TestCase
         $profiles = DriverProfile::factory()->online()->count(3)->create();
         $excludeUserId = $profiles->first()->user_id;
 
-        $result = $this->service->findNearestDrivers(42.8746, 74.5698, [$excludeUserId]);
+        $result = $this->service->findNearestDrivers(42.8746, 74.5698, [$excludeUserId], 10, 999.0);
 
         $this->assertCount(2, $result);
         $this->assertFalse($result->contains('user_id', $excludeUserId));
@@ -74,7 +75,7 @@ class GeoServiceTest extends TestCase
     {
         DriverProfile::factory()->online()->count(5)->create();
 
-        $result = $this->service->findNearestDrivers(42.8746, 74.5698, [], 3);
+        $result = $this->service->findNearestDrivers(42.8746, 74.5698, [], 3, 999.0);
 
         $this->assertCount(3, $result);
     }
@@ -91,6 +92,39 @@ class GeoServiceTest extends TestCase
     }
 
     #[Test]
+    public function test_find_nearest_drivers_filters_by_max_radius_parameter(): void
+    {
+        $pickup = [42.8746, 74.5698]; // Bishkek center
+
+        // Close driver (~0.5 km away)
+        DriverProfile::factory()->atLocation(42.8746, 74.5750)->create();
+        // Far driver (~2.8 km away)
+        DriverProfile::factory()->atLocation(42.8747, 74.6042)->create();
+
+        $result = $this->service->findNearestDrivers($pickup[0], $pickup[1], [], 10, 1.0);
+
+        $this->assertCount(1, $result);
+        $this->assertLessThanOrEqual(1.0, $result->first()->distance_km);
+    }
+
+    #[Test]
+    public function test_find_nearest_drivers_uses_setting_for_max_radius(): void
+    {
+        Setting::create(['key' => 'max_search_radius_km', 'value' => '1']);
+
+        $pickup = [42.8746, 74.5698]; // Bishkek center
+
+        // Close driver (~0.5 km away)
+        DriverProfile::factory()->atLocation(42.8746, 74.5750)->create();
+        // Far driver (~2.8 km away)
+        DriverProfile::factory()->atLocation(42.8747, 74.6042)->create();
+
+        $result = $this->service->findNearestDrivers($pickup[0], $pickup[1]);
+
+        $this->assertCount(1, $result);
+    }
+
+    #[Test]
     public function test_find_nearest_drivers_appends_distance_km(): void
     {
         DriverProfile::factory()->atLocation(42.8747, 74.6042)->create();
@@ -100,5 +134,76 @@ class GeoServiceTest extends TestCase
         $this->assertCount(1, $result);
         $this->assertIsFloat($result->first()->distance_km);
         $this->assertGreaterThan(0, $result->first()->distance_km);
+    }
+
+    #[Test]
+    public function test_find_nearest_drivers_excludes_drivers_beyond_default_radius(): void
+    {
+        $pickup = [42.8746, 74.5698]; // Bishkek center
+
+        // Driver at ~15km away (significant latitude offset)
+        DriverProfile::factory()->atLocation(42.8746, 74.7700)->create();
+
+        // No settings seeded — default radius is 10km
+        $result = $this->service->findNearestDrivers($pickup[0], $pickup[1]);
+
+        $this->assertCount(0, $result);
+    }
+
+    #[Test]
+    public function test_find_nearest_drivers_includes_drivers_within_default_radius(): void
+    {
+        $pickup = [42.8746, 74.5698]; // Bishkek center
+
+        // Driver at ~5km away
+        DriverProfile::factory()->atLocation(42.8746, 74.6300)->create();
+
+        // No settings seeded — default radius is 10km
+        $result = $this->service->findNearestDrivers($pickup[0], $pickup[1]);
+
+        $this->assertCount(1, $result);
+    }
+
+    #[Test]
+    public function test_find_nearest_drivers_reads_radius_from_settings(): void
+    {
+        Setting::create(['key' => 'max_search_radius_km', 'value' => '20']);
+
+        $pickup = [42.8746, 74.5698]; // Bishkek center
+
+        // Driver at ~15km away — beyond default 10km but within 20km setting
+        DriverProfile::factory()->atLocation(42.8746, 74.7700)->create();
+
+        $result = $this->service->findNearestDrivers($pickup[0], $pickup[1]);
+
+        $this->assertCount(1, $result);
+    }
+
+    #[Test]
+    public function test_find_nearest_drivers_override_radius_parameter(): void
+    {
+        $pickup = [42.8746, 74.5698]; // Bishkek center
+
+        // Driver at ~15km away
+        DriverProfile::factory()->atLocation(42.8746, 74.7700)->create();
+
+        $result = $this->service->findNearestDrivers($pickup[0], $pickup[1], [], 10, 20.0);
+
+        $this->assertCount(1, $result);
+    }
+
+    #[Test]
+    public function test_find_nearest_drivers_override_radius_ignores_setting_value(): void
+    {
+        Setting::create(['key' => 'max_search_radius_km', 'value' => '5']);
+
+        $pickup = [42.8746, 74.5698]; // Bishkek center
+
+        // Driver at ~15km away — beyond setting of 5km but within override of 20km
+        DriverProfile::factory()->atLocation(42.8746, 74.7700)->create();
+
+        $result = $this->service->findNearestDrivers($pickup[0], $pickup[1], [], 10, 20.0);
+
+        $this->assertCount(1, $result);
     }
 }

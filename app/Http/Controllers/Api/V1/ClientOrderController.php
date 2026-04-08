@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Api\V1;
 
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Api\V1\CreateOrderRequest;
+use App\Http\Requests\Api\V1\CreateRegionalOrderRequest;
 use App\Http\Resources\V1\OrderResource;
 use App\Models\Order;
 use App\Services\OrderService;
@@ -21,7 +22,7 @@ class ClientOrderController extends Controller
     public function index(Request $request): AnonymousResourceCollection
     {
         $orders = Order::forClient($request->user()->id)
-            ->with(['client', 'driver.driverProfile'])
+            ->with(['client', 'driver.driverProfile', 'region'])
             ->latest()
             ->paginate(20);
 
@@ -55,6 +56,30 @@ class ClientOrderController extends Controller
     }
 
     /**
+     * Create a new regional order for the authenticated client.
+     */
+    public function storeRegional(CreateRegionalOrderRequest $request): JsonResponse
+    {
+        try {
+            $order = $this->orderService->createOrder(
+                client: $request->user(),
+                pickupLat: (float) $request->validated('pickup_latitude'),
+                pickupLon: (float) $request->validated('pickup_longitude'),
+                pickupAddress: $request->validated('pickup_address'),
+                regionId: (int) $request->validated('region_id'),
+            );
+
+            $order->load(['client', 'driver.driverProfile', 'region']);
+
+            return (new OrderResource($order))
+                ->response()
+                ->setStatusCode(201);
+        } catch (\RuntimeException $e) {
+            return response()->json(['message' => $e->getMessage()], 422);
+        }
+    }
+
+    /**
      * Show a specific order belonging to the authenticated client.
      */
     public function show(Request $request, Order $order): JsonResponse|OrderResource
@@ -63,7 +88,7 @@ class ClientOrderController extends Controller
             return response()->json(['message' => 'Forbidden.'], 403);
         }
 
-        $order->load(['client', 'driver.driverProfile']);
+        $order->load(['client', 'driver.driverProfile', 'region']);
 
         return new OrderResource($order);
     }
@@ -79,7 +104,7 @@ class ClientOrderController extends Controller
 
         try {
             $order = $this->orderService->cancelOrder($order, 'client');
-            $order->load(['client', 'driver.driverProfile']);
+            $order->load(['client', 'driver.driverProfile', 'region']);
 
             return (new OrderResource($order))->response();
         } catch (\RuntimeException $e) {
@@ -94,7 +119,7 @@ class ClientOrderController extends Controller
     {
         $order = Order::forClient($request->user()->id)
             ->active()
-            ->with(['client', 'driver.driverProfile'])
+            ->with(['client', 'driver.driverProfile', 'region'])
             ->first();
 
         if (! $order) {

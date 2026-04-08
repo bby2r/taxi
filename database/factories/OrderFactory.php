@@ -4,6 +4,7 @@ namespace Database\Factories;
 
 use App\Enums\OrderStatus;
 use App\Models\Order;
+use App\Models\Region;
 use App\Models\User;
 use Illuminate\Database\Eloquent\Factories\Factory;
 
@@ -29,6 +30,7 @@ class OrderFactory extends Factory
             'dropoff_longitude' => null,
             'dropoff_address' => null,
             'price' => 80,
+            'region_id' => null,
             'driver_id' => null,
             'offered_driver_id' => null,
             'offered_at' => null,
@@ -92,6 +94,16 @@ class OrderFactory extends Factory
             'status' => OrderStatus::Cancelled,
             'cancelled_at' => now(),
             'cancelled_by' => 'client',
+        ]);
+    }
+
+    /**
+     * Indicate that the order is a regional order.
+     */
+    public function regional(?Region $region = null): static
+    {
+        return $this->state(fn (array $attributes) => [
+            'region_id' => $region?->id ?? Region::factory(),
         ]);
     }
 

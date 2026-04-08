@@ -3,6 +3,7 @@
 namespace App\Services;
 
 use App\Models\DriverProfile;
+use App\Models\Setting;
 use Illuminate\Support\Collection;
 
 class GeoService
@@ -44,7 +45,10 @@ class GeoService
         float $pickupLon,
         array $excludeIds = [],
         int $limit = 10,
+        ?float $maxRadiusKm = null,
     ): Collection {
+        $maxRadiusKm ??= (float) Setting::getValue('max_search_radius_km', 10);
+
         $drivers = DriverProfile::online()
             ->withCoordinates()
             ->when(count($excludeIds) > 0, fn ($q) => $q->whereNotIn('user_id', $excludeIds))
@@ -59,6 +63,10 @@ class GeoService
             );
 
             return $profile;
-        })->sortBy('distance_km')->take($limit)->values();
+        })
+            ->filter(fn (DriverProfile $profile) => $profile->distance_km <= $maxRadiusKm)
+            ->sortBy('distance_km')
+            ->take($limit)
+            ->values();
     }
 }

@@ -24,6 +24,7 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
     'offered_driver_id',
     'offered_at',
     'declined_drivers',
+    'region_id',
     'cancellation_fee',
     'cancelled_by',
     'accepted_at',
@@ -76,6 +77,14 @@ class Order extends Model
     public function driver(): BelongsTo
     {
         return $this->belongsTo(User::class, 'driver_id');
+    }
+
+    /**
+     * @return BelongsTo<Region, $this>
+     */
+    public function region(): BelongsTo
+    {
+        return $this->belongsTo(Region::class);
     }
 
     /**
