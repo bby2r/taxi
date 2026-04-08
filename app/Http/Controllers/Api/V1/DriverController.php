@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Api\V1;
 use App\Enums\OrderStatus;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Api\V1\UpdateLocationRequest;
+use App\Http\Resources\V1\DriverChangeRequestResource;
 use App\Http\Resources\V1\OrderResource;
 use App\Http\Resources\V1\UserResource;
 use App\Models\Order;
@@ -182,13 +183,17 @@ class DriverController extends Controller
     }
 
     /**
-     * Get the authenticated driver's profile.
+     * Get the authenticated driver's profile with pending change requests.
      */
     public function profile(Request $request): UserResource
     {
-        $request->user()->load('driverProfile');
+        $user = $request->user();
+        $user->load('driverProfile');
+        $pendingChanges = $user->changeRequests()->pending()->get();
 
-        return new UserResource($request->user());
+        return (new UserResource($user))->additional([
+            'pending_changes' => DriverChangeRequestResource::collection($pendingChanges),
+        ]);
     }
 
     /**

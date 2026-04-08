@@ -4,6 +4,7 @@ use App\Http\Controllers\Api\V1\AuthController;
 use App\Http\Controllers\Api\V1\ClientOrderController;
 use App\Http\Controllers\Api\V1\ClientProfileController;
 use App\Http\Controllers\Api\V1\DriverController;
+use App\Http\Controllers\Api\V1\DriverProfileController;
 use Illuminate\Support\Facades\Route;
 
 Route::prefix('v1')->group(function () {
@@ -59,6 +60,8 @@ Route::prefix('v1')->middleware('auth:sanctum')->group(function () {
         Route::post('/go-offline', [DriverController::class, 'goOffline'])->name('api.v1.driver.go-offline');
         Route::post('/location', [DriverController::class, 'updateLocation'])->name('api.v1.driver.location');
         Route::get('/profile', [DriverController::class, 'profile'])->name('api.v1.driver.profile');
+        Route::post('/profile/request-changes', [DriverProfileController::class, 'requestChanges'])->name('api.v1.driver.profile.request-changes');
+        Route::get('/profile/change-requests', [DriverProfileController::class, 'changeRequests'])->name('api.v1.driver.profile.change-requests');
         Route::get('/stats', [DriverController::class, 'stats'])->name('api.v1.driver.stats');
         Route::get('/orders/active', [DriverController::class, 'activeOrder'])->name('api.v1.driver.orders.active');
         Route::get('/orders', [DriverController::class, 'orders'])->name('api.v1.driver.orders.index');
