@@ -49,6 +49,7 @@ Route::prefix('v1')->middleware('auth:sanctum')->group(function () {
         Route::post('/go-offline', [DriverController::class, 'goOffline'])->name('api.v1.driver.go-offline');
         Route::post('/location', [DriverController::class, 'updateLocation'])->name('api.v1.driver.location');
         Route::get('/profile', [DriverController::class, 'profile'])->name('api.v1.driver.profile');
+        Route::get('/stats', [DriverController::class, 'stats'])->name('api.v1.driver.stats');
         Route::get('/orders/active', [DriverController::class, 'activeOrder'])->name('api.v1.driver.orders.active');
         Route::get('/orders', [DriverController::class, 'orders'])->name('api.v1.driver.orders.index');
         Route::post('/orders/{order}/accept', [DriverController::class, 'acceptOrder'])->name('api.v1.driver.orders.accept');

@@ -22,28 +22,36 @@ export function usePusher({ channelName, events, enabled = true }: UsePusherOpti
     let cancelled = false;
 
     (async () => {
-      const token = await getToken();
-      if (cancelled) {
-        return;
-      }
+      try {
+        const token = await getToken();
+        if (cancelled) {
+          return;
+        }
 
-      const pusher = new Pusher(PUSHER_KEY, {
-        cluster: PUSHER_CLUSTER,
-        authEndpoint: `${API_BASE_URL}/broadcasting/auth`,
-        auth: {
-          headers: {
-            Authorization: `Bearer ${token}`,
-            Accept: 'application/json',
+        if (!PUSHER_KEY || PUSHER_KEY === 'your-pusher-key') {
+          return;
+        }
+
+        const pusher = new Pusher(PUSHER_KEY, {
+          cluster: PUSHER_CLUSTER,
+          authEndpoint: `${API_BASE_URL}/broadcasting/auth`,
+          auth: {
+            headers: {
+              Authorization: `Bearer ${token}`,
+              Accept: 'application/json',
+            },
           },
-        },
-      });
+        });
 
-      pusherRef.current = pusher;
-      const channel = pusher.subscribe(channelName);
+        pusherRef.current = pusher;
+        const channel = pusher.subscribe(channelName);
 
-      Object.entries(events).forEach(([eventName, callback]) => {
-        channel.bind(eventName, callback);
-      });
+        Object.entries(events).forEach(([eventName, callback]) => {
+          channel.bind(eventName, callback);
+        });
+      } catch {
+        // Pusher not configured — polling fallback will handle updates
+      }
     })();
 
     return () => {

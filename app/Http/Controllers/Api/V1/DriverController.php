@@ -2,12 +2,14 @@
 
 namespace App\Http\Controllers\Api\V1;
 
+use App\Enums\OrderStatus;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Api\V1\UpdateLocationRequest;
 use App\Http\Resources\V1\OrderResource;
 use App\Http\Resources\V1\UserResource;
 use App\Models\Order;
 use App\Services\OrderService;
+use Carbon\CarbonInterface;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\AnonymousResourceCollection;
@@ -187,5 +189,36 @@ class DriverController extends Controller
         $request->user()->load('driverProfile');
 
         return new UserResource($request->user());
+    }
+
+    /**
+     * Get driver statistics (orders count and earnings).
+     */
+    public function stats(Request $request): JsonResponse
+    {
+        $driverId = $request->user()->id;
+
+        $stats = fn (CarbonInterface $from) => Order::forDriver($driverId)
+            ->where('status', OrderStatus::Completed)
+            ->where('completed_at', '>=', $from)
+            ->selectRaw('count(*) as orders, coalesce(sum(price), 0) as earnings')
+            ->first();
+
+        $today = $stats(today());
+        $week = $stats(now()->startOfWeek());
+        $month = $stats(now()->startOfMonth());
+        $total = Order::forDriver($driverId)
+            ->where('status', OrderStatus::Completed)
+            ->selectRaw('count(*) as orders, coalesce(sum(price), 0) as earnings')
+            ->first();
+
+        return response()->json([
+            'data' => [
+                'today' => ['orders' => (int) $today->orders, 'earnings' => (int) $today->earnings],
+                'week' => ['orders' => (int) $week->orders, 'earnings' => (int) $week->earnings],
+                'month' => ['orders' => (int) $month->orders, 'earnings' => (int) $month->earnings],
+                'total' => ['orders' => (int) $total->orders, 'earnings' => (int) $total->earnings],
+            ],
+        ]);
     }
 }

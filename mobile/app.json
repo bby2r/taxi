@@ -34,6 +34,11 @@
         "backgroundColor": "#FBBF24"
       },
       "package": "kg.villagetaxi.app",
+      "config": {
+        "googleMaps": {
+          "apiKey": "AIzaSyAtbF4MY6NGAfxHyF75anFC6LxLzmjr878"
+        }
+      },
       "permissions": [
         "ACCESS_FINE_LOCATION",
         "ACCESS_COARSE_LOCATION",
