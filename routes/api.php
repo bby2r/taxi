@@ -31,6 +31,14 @@ Route::prefix('v1')->group(function () {
         Route::put('/push-token', [AuthController::class, 'updatePushToken'])
             ->middleware('auth:sanctum')
             ->name('api.v1.auth.push-token');
+
+        Route::post('/change-phone/send-otp', [AuthController::class, 'changePhoneSendOtp'])
+            ->middleware(['auth:sanctum', 'throttle:5,1'])
+            ->name('api.v1.auth.change-phone.send-otp');
+
+        Route::post('/change-phone/verify', [AuthController::class, 'changePhoneVerify'])
+            ->middleware(['auth:sanctum', 'throttle:10,1'])
+            ->name('api.v1.auth.change-phone.verify');
     });
 });
 

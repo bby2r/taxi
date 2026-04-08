@@ -4,6 +4,8 @@ namespace App\Http\Controllers\Api\V1;
 
 use App\Enums\UserRole;
 use App\Http\Controllers\Controller;
+use App\Http\Requests\Auth\ChangePhoneSendOtpRequest;
+use App\Http\Requests\Auth\ChangePhoneVerifyRequest;
 use App\Http\Requests\Auth\DriverLoginRequest;
 use App\Http\Requests\Auth\SendOtpRequest;
 use App\Http\Requests\Auth\UpdatePushTokenRequest;
@@ -149,6 +151,50 @@ class AuthController extends Controller
 
         return response()->json([
             'message' => 'Push token updated.',
+        ]);
+    }
+
+    /**
+     * Send an OTP code to a new phone number for phone change.
+     */
+    public function changePhoneSendOtp(ChangePhoneSendOtpRequest $request): JsonResponse
+    {
+        $this->otpService->sendOtp($request->validated('phone'));
+
+        return response()->json([
+            'message' => 'OTP code sent to new phone number.',
+        ]);
+    }
+
+    /**
+     * Verify OTP and update the user's phone number.
+     */
+    public function changePhoneVerify(ChangePhoneVerifyRequest $request): JsonResponse
+    {
+        $validated = $request->validated();
+
+        $otpCode = $this->otpService->verifyOtp($validated['phone'], $validated['code']);
+
+        if (! $otpCode) {
+            return response()->json([
+                'message' => 'Invalid or expired OTP code.',
+            ], 422);
+        }
+
+        // Race condition guard: ensure phone wasn't taken between validation and now
+        if (User::where('phone', $validated['phone'])->where('id', '!=', $request->user()->id)->exists()) {
+            return response()->json([
+                'message' => 'This phone number was just taken.',
+            ], 409);
+        }
+
+        $request->user()->update([
+            'phone' => $validated['phone'],
+            'phone_verified_at' => now(),
+        ]);
+
+        return response()->json([
+            'message' => 'Phone number updated successfully.',
         ]);
     }
 }
