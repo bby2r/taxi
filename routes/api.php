@@ -2,6 +2,7 @@
 
 use App\Http\Controllers\Api\V1\AuthController;
 use App\Http\Controllers\Api\V1\ClientOrderController;
+use App\Http\Controllers\Api\V1\ClientProfileController;
 use App\Http\Controllers\Api\V1\DriverController;
 use Illuminate\Support\Facades\Route;
 
@@ -41,6 +42,7 @@ Route::prefix('v1')->middleware('auth:sanctum')->group(function () {
         Route::post('/orders', [ClientOrderController::class, 'store'])->name('api.v1.client.orders.store');
         Route::get('/orders/{order}', [ClientOrderController::class, 'show'])->name('api.v1.client.orders.show');
         Route::post('/orders/{order}/cancel', [ClientOrderController::class, 'cancel'])->name('api.v1.client.orders.cancel');
+        Route::put('/profile', [ClientProfileController::class, 'update'])->name('api.v1.client.profile.update');
     });
 
     // Driver routes
