@@ -2,10 +2,13 @@
 
 use App\Enums\UserRole;
 use App\Http\Controllers\Admin\AuthController;
+use App\Http\Controllers\Admin\ClientController;
 use App\Http\Controllers\Admin\DashboardController;
 use App\Http\Controllers\Admin\DriverController;
 use App\Http\Controllers\Admin\DriverTicketController;
 use App\Http\Controllers\Admin\OrderController;
+use App\Http\Controllers\Admin\RegionController;
+use App\Http\Controllers\Admin\SettingController;
 use App\Http\Middleware\EnsureUserRole;
 use Illuminate\Support\Facades\Route;
 
@@ -30,10 +33,17 @@ Route::prefix('admin')->name('admin.')->group(function () {
 
         Route::resource('drivers', DriverController::class)->except(['show']);
 
+        Route::get('clients', [ClientController::class, 'index'])->name('clients.index');
+
+        Route::resource('regions', RegionController::class)->except(['show']);
+
         Route::resource('orders', OrderController::class)->only(['index', 'show']);
 
         Route::resource('tickets', DriverTicketController::class)->only(['index', 'show']);
         Route::post('tickets/{ticket}/approve', [DriverTicketController::class, 'approve'])->name('tickets.approve');
         Route::post('tickets/{ticket}/reject', [DriverTicketController::class, 'reject'])->name('tickets.reject');
+
+        Route::get('settings', [SettingController::class, 'index'])->name('settings.index');
+        Route::put('settings', [SettingController::class, 'update'])->name('settings.update');
     });
 });

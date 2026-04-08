@@ -176,6 +176,21 @@ class DriverManagementTest extends TestCase
         $this->assertDatabaseHas('users', ['id' => $driver->id]);
     }
 
+    public function test_driver_index_shows_online_status_badge(): void
+    {
+        $onlineDriver = User::factory()->driver()->create();
+        DriverProfile::factory()->online()->create(['user_id' => $onlineDriver->id]);
+
+        $offlineDriver = User::factory()->driver()->create();
+        DriverProfile::factory()->create(['user_id' => $offlineDriver->id, 'is_online' => false]);
+
+        $response = $this->actingAs($this->admin)->get(route('admin.drivers.index'));
+
+        $response->assertOk();
+        $response->assertSee('Online');
+        $response->assertSee('Offline');
+    }
+
     public function test_non_admin_cannot_access_driver_routes(): void
     {
         $client = User::factory()->create(['role' => UserRole::Client]);
