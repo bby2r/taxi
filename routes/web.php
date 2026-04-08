@@ -1,5 +1,6 @@
 <?php
 
+use App\Enums\UserRole;
 use App\Http\Controllers\Admin\AuthController;
 use App\Http\Controllers\Admin\DashboardController;
 use App\Http\Controllers\Admin\DriverController;
@@ -9,8 +10,12 @@ use App\Http\Middleware\EnsureUserRole;
 use Illuminate\Support\Facades\Route;
 
 Route::get('/', function () {
-    return view('welcome');
-});
+    if (auth()->check() && auth()->user()->role === UserRole::Admin) {
+        return redirect()->route('admin.dashboard');
+    }
+
+    return view('landing');
+})->name('home');
 
 Route::prefix('admin')->name('admin.')->group(function () {
     Route::middleware('guest')->group(function () {
