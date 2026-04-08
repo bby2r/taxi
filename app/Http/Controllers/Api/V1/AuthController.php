@@ -112,6 +112,21 @@ class AuthController extends Controller
     }
 
     /**
+     * Refresh the current authentication token.
+     */
+    public function refreshToken(Request $request): JsonResponse
+    {
+        $request->user()->currentAccessToken()->delete();
+
+        $token = $request->user()->createToken('mobile', expiresAt: now()->addDays(30));
+
+        return response()->json([
+            'message' => 'Token refreshed successfully.',
+            'token' => $token->plainTextToken,
+        ]);
+    }
+
+    /**
      * Revoke the current authentication token.
      */
     public function logout(Request $request): JsonResponse

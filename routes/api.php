@@ -21,6 +21,10 @@ Route::prefix('v1')->group(function () {
             ->middleware('throttle:10,1')
             ->name('api.v1.auth.driver-login');
 
+        Route::post('/refresh-token', [AuthController::class, 'refreshToken'])
+            ->middleware('auth:sanctum')
+            ->name('api.v1.auth.refresh-token');
+
         Route::post('/logout', [AuthController::class, 'logout'])
             ->middleware('auth:sanctum')
             ->name('api.v1.auth.logout');
