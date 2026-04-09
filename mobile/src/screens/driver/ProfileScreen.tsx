@@ -221,30 +221,39 @@ export default function ProfileScreen(): React.ReactNode {
           </View>
         </View>
 
-        {/* Profile Fields */}
-        <ProfileField
-          label="Имя"
-          value={profile?.name ?? ''}
-          isEditing={editingField === 'name'}
-          editValue={editValue}
-          onEditValue={setEditValue}
-          onEdit={() => handleEdit('name')}
-          onSubmit={handleSubmit}
-          onCancel={handleCancel}
-          submitting={submitting}
-        />
-
+        {/* Unified Form Card */}
         <View style={styles.card}>
-          <Text style={styles.cardLabel}>Телефон</Text>
-          <View style={styles.phoneRow}>
-            <Text style={[styles.cardValue, { flex: 1 }]}>{profile?.phone ?? user?.phone ?? ''}</Text>
-            {!showPhoneFlow && (
-              <TouchableOpacity onPress={() => setShowPhoneFlow(true)} activeOpacity={0.7}>
-                <Text style={styles.changePhoneLink}>Изменить</Text>
-              </TouchableOpacity>
-            )}
-          </View>
-          {showPhoneFlow && (
+          {/* Name */}
+          <ProfileField
+            label="Имя"
+            value={profile?.name ?? ''}
+            isEditing={editingField === 'name'}
+            editValue={editValue}
+            onEditValue={setEditValue}
+            onEdit={() => handleEdit('name')}
+            onSubmit={handleSubmit}
+            onCancel={handleCancel}
+            submitting={submitting}
+          />
+
+          <View style={styles.divider} />
+
+          {/* Phone (read-only input + change flow) */}
+          <Text style={styles.cardLabel}>Номер телефона</Text>
+          <TextInput
+            style={[styles.input, styles.inputReadonly]}
+            value={profile?.phone ?? user?.phone ?? ''}
+            editable={false}
+          />
+          {!showPhoneFlow ? (
+            <TouchableOpacity
+              style={styles.changePhoneTouchable}
+              onPress={() => setShowPhoneFlow(true)}
+              activeOpacity={0.7}
+            >
+              <Text style={styles.changePhoneLink}>Изменить номер телефона</Text>
+            </TouchableOpacity>
+          ) : (
             <View style={styles.phoneFlow}>
               <TextInput
                 style={styles.input}
@@ -296,32 +305,38 @@ export default function ProfileScreen(): React.ReactNode {
               </TouchableOpacity>
             </View>
           )}
+
+          <View style={styles.divider} />
+
+          {/* Car Model */}
+          <ProfileField
+            label="Модель авто"
+            value={profile?.car_model ?? ''}
+            isEditing={editingField === 'car_model'}
+            editValue={editValue}
+            onEditValue={setEditValue}
+            onEdit={() => handleEdit('car_model')}
+            onSubmit={handleSubmit}
+            onCancel={handleCancel}
+            submitting={submitting}
+          />
+
+          <View style={styles.divider} />
+
+          {/* License Plate */}
+          <ProfileField
+            label="Гос. номер"
+            value={profile?.car_number ?? ''}
+            isEditing={editingField === 'car_number'}
+            editValue={editValue}
+            onEditValue={setEditValue}
+            onEdit={() => handleEdit('car_number')}
+            onSubmit={handleSubmit}
+            onCancel={handleCancel}
+            submitting={submitting}
+            autoCapitalize="characters"
+          />
         </View>
-
-        <ProfileField
-          label="Модель авто"
-          value={profile?.car_model ?? ''}
-          isEditing={editingField === 'car_model'}
-          editValue={editValue}
-          onEditValue={setEditValue}
-          onEdit={() => handleEdit('car_model')}
-          onSubmit={handleSubmit}
-          onCancel={handleCancel}
-          submitting={submitting}
-        />
-
-        <ProfileField
-          label="Гос. номер"
-          value={profile?.car_number ?? ''}
-          isEditing={editingField === 'car_number'}
-          editValue={editValue}
-          onEditValue={setEditValue}
-          onEdit={() => handleEdit('car_number')}
-          onSubmit={handleSubmit}
-          onCancel={handleCancel}
-          submitting={submitting}
-          autoCapitalize="characters"
-        />
 
         {/* Change Requests */}
         {changeRequests.length > 0 && (
@@ -392,8 +407,8 @@ function ProfileField({
   autoCapitalize = 'sentences',
 }: ProfileFieldProps): React.ReactNode {
   return (
-    <View style={styles.card}>
-      <View style={styles.cardHeader}>
+    <View>
+      <View style={styles.fieldHeader}>
         <Text style={styles.cardLabel}>{label}</Text>
         {!isEditing && (
           <TouchableOpacity onPress={onEdit} activeOpacity={0.7}>
@@ -430,7 +445,11 @@ function ProfileField({
           </View>
         </View>
       ) : (
-        <Text style={styles.cardValue}>{value}</Text>
+        <TextInput
+          style={[styles.input, styles.inputReadonly]}
+          value={value}
+          editable={false}
+        />
       )}
     </View>
   );
@@ -480,7 +499,7 @@ const styles = StyleSheet.create({
     padding: 16,
     marginBottom: 12,
   },
-  cardHeader: {
+  fieldHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
@@ -490,20 +509,23 @@ const styles = StyleSheet.create({
     color: DriverColors.textMuted,
     textTransform: 'uppercase',
     letterSpacing: 0.5,
-    marginBottom: 8,
-  },
-  cardValue: {
-    ...Typography.body,
-    color: DriverColors.textPrimary,
+    marginBottom: 6,
   },
   editButton: {
     ...Typography.caption,
     color: DriverColors.primary,
     fontWeight: '600',
-    marginBottom: 8,
   },
-  phoneRow: {
-    flexDirection: 'row',
+  divider: {
+    height: 1,
+    backgroundColor: DriverColors.border,
+    marginVertical: 16,
+  },
+  inputReadonly: {
+    color: DriverColors.textSecondary,
+  },
+  changePhoneTouchable: {
+    paddingVertical: 6,
     alignItems: 'center',
   },
   changePhoneLink: {
@@ -513,7 +535,7 @@ const styles = StyleSheet.create({
   },
   phoneFlow: {
     gap: 12,
-    marginTop: 12,
+    marginTop: 8,
   },
   editContainer: {
     gap: 12,

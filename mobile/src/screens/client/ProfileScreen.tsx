@@ -20,14 +20,13 @@ export default function ProfileScreen(): React.ReactNode {
   const { user, logout, refreshUser } = useAuth();
 
   const [name, setName] = useState<string>(user?.name ?? '');
-  const [savingName, setSavingName] = useState<boolean>(false);
+  const [savingName, setSavingName] = useState(false);
 
-  const [showPhoneFlow, setShowPhoneFlow] = useState<boolean>(false);
-  const [newPhone, setNewPhone] = useState<string>('');
-  const [otpSent, setOtpSent] = useState<boolean>(false);
-  const [otpCode, setOtpCode] = useState<string>('');
-  const [sendingOtp, setSendingOtp] = useState<boolean>(false);
-  const [verifyingPhone, setVerifyingPhone] = useState<boolean>(false);
+  const [showPhoneFlow, setShowPhoneFlow] = useState(false);
+  const [newPhone, setNewPhone] = useState('');
+  const [otpSent, setOtpSent] = useState(false);
+  const [otpCode, setOtpCode] = useState('');
+  const [phoneLoading, setPhoneLoading] = useState(false);
 
   const handleSaveName = async (): Promise<void> => {
     if (!name.trim()) {
@@ -51,14 +50,14 @@ export default function ProfileScreen(): React.ReactNode {
       Alert.alert('Ошибка', 'Введите номер телефона');
       return;
     }
-    setSendingOtp(true);
+    setPhoneLoading(true);
     try {
       await sendChangePhoneOtp(newPhone.trim());
       setOtpSent(true);
     } catch {
       Alert.alert('Ошибка', 'Не удалось отправить код');
     } finally {
-      setSendingOtp(false);
+      setPhoneLoading(false);
     }
   };
 
@@ -67,20 +66,24 @@ export default function ProfileScreen(): React.ReactNode {
       Alert.alert('Ошибка', `Введите ${OTP_LENGTH}-значный код`);
       return;
     }
-    setVerifyingPhone(true);
+    setPhoneLoading(true);
     try {
       await verifyChangePhone(newPhone.trim(), otpCode);
       await refreshUser();
       Alert.alert('Успешно', 'Номер телефона изменён');
-      setShowPhoneFlow(false);
-      setNewPhone('');
-      setOtpSent(false);
-      setOtpCode('');
+      resetPhoneFlow();
     } catch {
       Alert.alert('Ошибка', 'Неверный код');
     } finally {
-      setVerifyingPhone(false);
+      setPhoneLoading(false);
     }
+  };
+
+  const resetPhoneFlow = (): void => {
+    setShowPhoneFlow(false);
+    setNewPhone('');
+    setOtpSent(false);
+    setOtpCode('');
   };
 
   const handleLogout = (): void => {
@@ -104,9 +107,10 @@ export default function ProfileScreen(): React.ReactNode {
           </View>
         </View>
 
-        {/* Name Section */}
-        <View style={styles.section}>
-          <Text style={styles.sectionLabel}>Имя</Text>
+        {/* Form Card */}
+        <View style={styles.card}>
+          {/* Name */}
+          <Text style={styles.fieldLabel}>Имя</Text>
           <TextInput
             style={styles.input}
             value={name}
@@ -126,23 +130,27 @@ export default function ProfileScreen(): React.ReactNode {
               <Text style={styles.primaryButtonText}>Сохранить</Text>
             )}
           </TouchableOpacity>
-        </View>
 
-        {/* Phone Section */}
-        <View style={styles.section}>
-          <Text style={styles.sectionLabel}>Телефон</Text>
-          <View style={styles.phoneRow}>
-            <Text style={[Typography.body, { color: ClientColors.textPrimary, flex: 1 }]}>
-              {user?.phone ?? ''}
-            </Text>
-            {!showPhoneFlow && (
-              <TouchableOpacity onPress={() => setShowPhoneFlow(true)} activeOpacity={0.7}>
-                <Text style={styles.changePhoneLink}>Изменить</Text>
-              </TouchableOpacity>
-            )}
-          </View>
+          {/* Divider */}
+          <View style={styles.divider} />
 
-          {showPhoneFlow && (
+          {/* Phone (read-only) */}
+          <Text style={styles.fieldLabel}>Номер телефона</Text>
+          <TextInput
+            style={[styles.input, styles.inputReadonly]}
+            value={user?.phone ?? ''}
+            editable={false}
+          />
+
+          {!showPhoneFlow ? (
+            <TouchableOpacity
+              style={styles.changePhoneButton}
+              onPress={() => setShowPhoneFlow(true)}
+              activeOpacity={0.7}
+            >
+              <Text style={styles.changePhoneButtonText}>Изменить номер телефона</Text>
+            </TouchableOpacity>
+          ) : (
             <View style={styles.phoneFlow}>
               <TextInput
                 style={styles.input}
@@ -156,11 +164,11 @@ export default function ProfileScreen(): React.ReactNode {
 
               {!otpSent ? (
                 <TouchableOpacity
-                  style={[styles.primaryButton, sendingOtp && styles.buttonDisabled]}
+                  style={[styles.primaryButton, phoneLoading && styles.buttonDisabled]}
                   onPress={handleSendOtp}
-                  disabled={sendingOtp}
+                  disabled={phoneLoading}
                 >
-                  {sendingOtp ? (
+                  {phoneLoading ? (
                     <ActivityIndicator color={ClientColors.dark} />
                   ) : (
                     <Text style={styles.primaryButtonText}>Отправить код</Text>
@@ -178,11 +186,11 @@ export default function ProfileScreen(): React.ReactNode {
                     maxLength={OTP_LENGTH}
                   />
                   <TouchableOpacity
-                    style={[styles.primaryButton, verifyingPhone && styles.buttonDisabled]}
+                    style={[styles.primaryButton, phoneLoading && styles.buttonDisabled]}
                     onPress={handleVerifyPhone}
-                    disabled={verifyingPhone}
+                    disabled={phoneLoading}
                   >
-                    {verifyingPhone ? (
+                    {phoneLoading ? (
                       <ActivityIndicator color={ClientColors.dark} />
                     ) : (
                       <Text style={styles.primaryButtonText}>Подтвердить</Text>
@@ -191,16 +199,8 @@ export default function ProfileScreen(): React.ReactNode {
                 </>
               )}
 
-              <TouchableOpacity
-                style={styles.outlineButton}
-                onPress={() => {
-                  setShowPhoneFlow(false);
-                  setNewPhone('');
-                  setOtpSent(false);
-                  setOtpCode('');
-                }}
-              >
-                <Text style={styles.outlineButtonText}>Отмена</Text>
+              <TouchableOpacity style={styles.cancelButton} onPress={resetPhoneFlow}>
+                <Text style={styles.cancelButtonText}>Отмена</Text>
               </TouchableOpacity>
             </View>
           )}
@@ -246,16 +246,16 @@ const styles = StyleSheet.create({
     ...Typography.h1,
     color: ClientColors.white,
   },
-  section: {
+  card: {
     backgroundColor: ClientColors.cardBackground,
     borderRadius: 16,
     padding: 16,
     marginBottom: 16,
   },
-  sectionLabel: {
+  fieldLabel: {
     ...Typography.caption,
     color: ClientColors.textSecondary,
-    marginBottom: 8,
+    marginBottom: 6,
     textTransform: 'uppercase',
     letterSpacing: 0.5,
   },
@@ -270,6 +270,10 @@ const styles = StyleSheet.create({
     borderColor: ClientColors.border,
     marginBottom: 12,
   },
+  inputReadonly: {
+    color: ClientColors.textSecondary,
+    backgroundColor: ClientColors.background,
+  },
   primaryButton: {
     backgroundColor: ClientColors.primary,
     borderRadius: 12,
@@ -283,30 +287,34 @@ const styles = StyleSheet.create({
   buttonDisabled: {
     opacity: 0.6,
   },
-  phoneRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginBottom: 12,
+  divider: {
+    height: 1,
+    backgroundColor: ClientColors.border,
+    marginVertical: 20,
   },
-  changePhoneLink: {
+  changePhoneButton: {
+    paddingVertical: 8,
+    alignItems: 'center',
+  },
+  changePhoneButtonText: {
     ...Typography.caption,
     color: ClientColors.textMuted,
     fontSize: 13,
   },
-  outlineButton: {
+  phoneFlow: {
+    gap: 12,
+  },
+  cancelButton: {
     borderWidth: 1.5,
     borderColor: ClientColors.border,
     borderRadius: 12,
     paddingVertical: 10,
     alignItems: 'center',
   },
-  outlineButtonText: {
+  cancelButtonText: {
     ...Typography.caption,
     color: ClientColors.textSecondary,
     fontSize: 13,
-  },
-  phoneFlow: {
-    gap: 12,
   },
   logoutButton: {
     backgroundColor: ClientColors.danger,
