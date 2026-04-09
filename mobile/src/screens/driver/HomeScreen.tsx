@@ -10,7 +10,9 @@ import {
 import * as Location from 'expo-location';
 import { useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
-import { DriverStackParamList } from '../../navigation/types';
+import type { CompositeNavigationProp } from '@react-navigation/native';
+import type { BottomTabNavigationProp } from '@react-navigation/bottom-tabs';
+import { DriverStackParamList, DriverTabParamList } from '../../navigation/types';
 import { useAuth } from '../../context/AuthContext';
 import { useDriverOrder } from '../../hooks/useDriverOrder';
 import { useDriverLocation } from '../../hooks/useDriverLocation';
@@ -19,7 +21,10 @@ import OrderOfferCard from '../../components/OrderOfferCard';
 import { DriverColors } from '../../theme/colors';
 import { Typography } from '../../theme/typography';
 
-type NavigationProp = NativeStackNavigationProp<DriverStackParamList, 'DriverHome'>;
+type NavigationProp = CompositeNavigationProp<
+  BottomTabNavigationProp<DriverTabParamList, 'DriverHome'>,
+  NativeStackNavigationProp<DriverStackParamList>
+>;
 
 export default function HomeScreen(): React.ReactNode {
   const navigation = useNavigation<NavigationProp>();

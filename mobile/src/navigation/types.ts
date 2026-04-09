@@ -10,8 +10,13 @@ export type ClientTabParamList = {
   Profile: undefined;
 };
 
-export type DriverStackParamList = {
+export type DriverTabParamList = {
   DriverHome: undefined;
+  DriverProfile: undefined;
+};
+
+export type DriverStackParamList = {
+  DriverTabs: undefined;
   OrderActive: { orderId: number };
   Stats: undefined;
 };

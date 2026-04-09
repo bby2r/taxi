@@ -1,6 +1,6 @@
 import React from 'react';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
-import DriverHomeScreen from '../screens/driver/HomeScreen';
+import DriverTabs from './DriverTabs';
 import OrderActiveScreen from '../screens/driver/OrderActiveScreen';
 import StatsScreen from '../screens/driver/StatsScreen';
 import { DriverStackParamList } from './types';
@@ -17,7 +17,7 @@ export default function DriverStack(): React.ReactNode {
         animation: 'slide_from_right',
       }}
     >
-      <Stack.Screen name="DriverHome" component={DriverHomeScreen} />
+      <Stack.Screen name="DriverTabs" component={DriverTabs} />
       <Stack.Screen
         name="OrderActive"
         component={OrderActiveScreen}
