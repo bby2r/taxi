@@ -7,6 +7,7 @@ import {
   KeyboardAvoidingView,
   Platform,
   SafeAreaView,
+  TouchableOpacity,
 } from 'react-native';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { AuthStackParamList } from '../../navigation/types';
@@ -15,6 +16,7 @@ import { Typography } from '../../theme/typography';
 import ActionButton from '../../components/ActionButton';
 import { driverLogin } from '../../api/auth';
 import { useAuth } from '../../context/AuthContext';
+import { formatPhoneDigits, extractDigits } from '../../utils/phone';
 
 type Props = NativeStackScreenProps<AuthStackParamList, 'DriverLogin'>;
 
@@ -29,7 +31,8 @@ export default function DriverLoginScreen({ navigation }: Props): React.ReactNod
     setLoading(true);
     setError(null);
     try {
-      const response = await driverLogin(phone, password);
+      const fullPhone = '+996' + phone;
+      const response = await driverLogin(fullPhone, password);
       await auth.login(response.token, response.user);
     } catch (e: any) {
       if (e.response?.status === 401 || e.response?.status === 422) {
@@ -56,16 +59,22 @@ export default function DriverLoginScreen({ navigation }: Props): React.ReactNod
 
           <View style={styles.inputGroup}>
             <Text style={[Typography.caption, styles.label]}>Номер телефона</Text>
-            <TextInput
-              style={styles.input}
-              value={phone}
-              onChangeText={setPhone}
-              placeholder="+996 555 123 456"
-              placeholderTextColor={DriverColors.textMuted}
-              keyboardType="phone-pad"
-              autoComplete="tel"
-              accessibilityLabel="Номер телефона"
-            />
+            <View style={styles.phoneRow}>
+              <View style={styles.prefixBox}>
+                <Text style={[Typography.body, styles.prefixText]}>+996</Text>
+              </View>
+              <TextInput
+                style={styles.phoneInput}
+                value={formatPhoneDigits(phone)}
+                onChangeText={(text) => setPhone(extractDigits(text, 9))}
+                placeholder="--- --- ---"
+                placeholderTextColor={DriverColors.textMuted}
+                keyboardType="phone-pad"
+                maxLength={11}
+                autoFocus
+                accessibilityLabel="Номер телефона"
+              />
+            </View>
           </View>
 
           <View style={styles.passwordGroup}>
@@ -91,9 +100,18 @@ export default function DriverLoginScreen({ navigation }: Props): React.ReactNod
             title="Войти"
             onPress={handleLogin}
             loading={loading}
-            disabled={!phone || !password}
+            disabled={phone.length < 9 || !password}
             style={styles.button}
           />
+
+          <TouchableOpacity
+            onPress={() => navigation.navigate('PhoneLogin')}
+            style={styles.clientLink}
+          >
+            <Text style={[Typography.caption, { color: DriverColors.textSecondary }]}>
+              Я пассажир
+            </Text>
+          </TouchableOpacity>
         </View>
       </KeyboardAvoidingView>
     </SafeAreaView>
@@ -133,6 +151,35 @@ const styles = StyleSheet.create({
     color: DriverColors.textSecondary,
     marginBottom: 6,
   },
+  phoneRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  prefixBox: {
+    height: 52,
+    paddingHorizontal: 16,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: DriverColors.border,
+    backgroundColor: DriverColors.cardBackground,
+    justifyContent: 'center',
+  },
+  prefixText: {
+    color: DriverColors.textPrimary,
+    fontWeight: '600' as const,
+  },
+  phoneInput: {
+    flex: 1,
+    height: 52,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: DriverColors.border,
+    backgroundColor: DriverColors.cardBackground,
+    paddingHorizontal: 16,
+    fontSize: 16,
+    color: DriverColors.textPrimary,
+  },
   input: {
     height: 52,
     borderRadius: 12,
@@ -150,5 +197,10 @@ const styles = StyleSheet.create({
   },
   button: {
     marginTop: 24,
+  },
+  clientLink: {
+    alignSelf: 'center',
+    paddingVertical: 12,
+    marginTop: 8,
   },
 });

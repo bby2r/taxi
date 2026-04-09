@@ -25,6 +25,7 @@ export interface Order {
   driver: Driver | null;
   created_at: string;
   accepted_at: string | null;
+  cancelled_by: string | null;
 }
 
 export interface User {

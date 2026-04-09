@@ -221,7 +221,11 @@ export default function HomeScreen(): React.ReactNode {
       {/* Cancelled Toast */}
       {state.phase === 'cancelled' && (
         <View style={styles.cancelledToast}>
-          <Text style={[Typography.bodyBold, { color: ClientColors.white }]}>Заказ отменён</Text>
+          <Text style={[Typography.bodyBold, { color: ClientColors.white }]}>
+            {state.reason === 'no_drivers'
+              ? 'Нет свободных водителей'
+              : 'Заказ отменён'}
+          </Text>
         </View>
       )}
     </View>

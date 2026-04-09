@@ -11,7 +11,7 @@ type ClientOrderState =
   | { phase: 'arrived'; order: Order }
   | { phase: 'in_progress'; order: Order }
   | { phase: 'completed'; order: Order }
-  | { phase: 'cancelled' };
+  | { phase: 'cancelled'; reason: 'no_drivers' | 'other' };
 
 export interface UseOrderReturn {
   state: ClientOrderState;
@@ -45,7 +45,7 @@ function buildState(phase: ClientOrderState['phase'], order: Order): ClientOrder
     return { phase: 'idle' };
   }
   if (phase === 'cancelled') {
-    return { phase: 'cancelled' };
+    return { phase: 'cancelled', reason: 'other' };
   }
   return { phase, order } as ClientOrderState;
 }
@@ -102,9 +102,19 @@ export function useOrder(): UseOrderReturn {
     refreshAndSetPhase('completed');
   }, [refreshAndSetPhase]);
 
-  const handleOrderCancelled = useCallback(() => {
+  const handleOrderCancelled = useCallback(async () => {
+    let reason: 'no_drivers' | 'other' = 'other';
+    const orderId = orderRef.current?.id;
+    if (orderId) {
+      try {
+        const fresh = await ordersApi.getOrder(orderId);
+        reason = fresh.cancelled_by === 'system' ? 'no_drivers' : 'other';
+      } catch {
+        // ignore, default 'other'
+      }
+    }
     orderRef.current = null;
-    setState({ phase: 'cancelled' });
+    setState({ phase: 'cancelled', reason });
     setTimeout(() => {
       setState((prev) => (prev.phase === 'cancelled' ? { phase: 'idle' } : prev));
     }, 3000);
@@ -138,7 +148,13 @@ export function useOrder(): UseOrderReturn {
         orderRef.current = fresh;
         const phase = statusToPhase(fresh.status);
         if (phase === 'cancelled') {
-          handleOrderCancelled();
+          const reason = fresh.cancelled_by === 'system' ? 'no_drivers' : 'other';
+          orderRef.current = null;
+          setState({ phase: 'cancelled', reason });
+          setTimeout(() => {
+            setState((prev) => (prev.phase === 'cancelled' ? { phase: 'idle' } : prev));
+          }, 3000);
+          return;
         } else {
           setState(buildState(phase, fresh));
         }
@@ -148,7 +164,7 @@ export function useOrder(): UseOrderReturn {
     }, 10000);
 
     return () => clearInterval(interval);
-  }, [state.phase, handleOrderCancelled]);
+  }, [state.phase]);
 
   const callTaxi = useCallback(async (latitude: number, longitude: number, address?: string) => {
     setLoading(true);
@@ -192,7 +208,7 @@ export function useOrder(): UseOrderReturn {
     try {
       await ordersApi.cancelOrder(order.id);
       orderRef.current = null;
-      setState({ phase: 'cancelled' });
+      setState({ phase: 'cancelled', reason: 'other' });
       setTimeout(() => {
         setState((prev) => (prev.phase === 'cancelled' ? { phase: 'idle' } : prev));
       }, 3000);

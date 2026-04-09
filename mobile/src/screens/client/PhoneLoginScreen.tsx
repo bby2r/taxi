@@ -16,6 +16,7 @@ import { ClientColors } from '../../theme/colors';
 import { Typography } from '../../theme/typography';
 import ActionButton from '../../components/ActionButton';
 import { sendOtp } from '../../api/auth';
+import { formatPhoneDigits, extractDigits } from '../../utils/phone';
 
 type Props = NativeStackScreenProps<AuthStackParamList, 'PhoneLogin'>;
 
@@ -25,8 +26,7 @@ export default function PhoneLoginScreen({ navigation }: Props): React.ReactNode
   const [error, setError] = useState('');
 
   const handlePhoneChange = (text: string) => {
-    const digits = text.replace(/[^0-9]/g, '').slice(0, 9);
-    setPhone(digits);
+    setPhone(extractDigits(text, 9));
     if (error) {
       setError('');
     }
@@ -73,12 +73,12 @@ export default function PhoneLoginScreen({ navigation }: Props): React.ReactNode
             </View>
             <TextInput
               style={styles.phoneInput}
-              value={phone}
+              value={formatPhoneDigits(phone)}
               onChangeText={handlePhoneChange}
               placeholder="--- --- ---"
               placeholderTextColor={ClientColors.textMuted}
               keyboardType="phone-pad"
-              maxLength={9}
+              maxLength={11}
               autoFocus
               accessibilityLabel="Номер телефона"
             />
