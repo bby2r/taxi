@@ -62,3 +62,22 @@ export interface DriverStats {
   month: { orders: number; earnings: number };
   total: { orders: number; earnings: number };
 }
+
+export interface DriverProfile {
+  id: number;
+  name: string;
+  phone: string;
+  car_model: string;
+  car_number: string;
+}
+
+export interface DriverChangeRequest {
+  id: number;
+  field: string;
+  old_value: string;
+  new_value: string;
+  status: 'pending' | 'approved' | 'rejected';
+  admin_comment: string | null;
+  created_at: string;
+  reviewed_at: string | null;
+}
