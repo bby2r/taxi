@@ -16,10 +16,13 @@ import {
   getDriverProfile,
   requestDriverChanges,
   getDriverChangeRequests,
+  sendChangePhoneOtp,
+  verifyChangePhone,
 } from '../../api/profile';
 import { DriverProfile, DriverChangeRequest } from '../../api/types';
 import { DriverColors } from '../../theme/colors';
 import { Typography } from '../../theme/typography';
+import { OTP_LENGTH } from '../../utils/constants';
 
 type EditableField = 'name' | 'car_model' | 'car_number';
 
@@ -53,6 +56,12 @@ export default function ProfileScreen(): React.ReactNode {
   const [editingField, setEditingField] = useState<EditableField | null>(null);
   const [editValue, setEditValue] = useState<string>('');
   const [submitting, setSubmitting] = useState(false);
+
+  const [showPhoneFlow, setShowPhoneFlow] = useState(false);
+  const [newPhone, setNewPhone] = useState('');
+  const [otpSent, setOtpSent] = useState(false);
+  const [otpCode, setOtpCode] = useState('');
+  const [phoneLoading, setPhoneLoading] = useState(false);
 
   const fetchData = useCallback(async (isRefresh: boolean): Promise<void> => {
     try {
@@ -111,6 +120,50 @@ export default function ProfileScreen(): React.ReactNode {
     } finally {
       setSubmitting(false);
     }
+  };
+
+  const handleSendPhoneOtp = async (): Promise<void> => {
+    if (!newPhone.trim()) {
+      Alert.alert('Ошибка', 'Введите номер телефона');
+      return;
+    }
+    setPhoneLoading(true);
+    try {
+      await sendChangePhoneOtp(newPhone.trim());
+      setOtpSent(true);
+    } catch {
+      Alert.alert('Ошибка', 'Не удалось отправить код');
+    } finally {
+      setPhoneLoading(false);
+    }
+  };
+
+  const handleVerifyPhone = async (): Promise<void> => {
+    if (otpCode.length !== OTP_LENGTH) {
+      Alert.alert('Ошибка', `Введите ${OTP_LENGTH}-значный код`);
+      return;
+    }
+    setPhoneLoading(true);
+    try {
+      await verifyChangePhone(newPhone.trim(), otpCode);
+      Alert.alert('Успешно', 'Номер телефона изменён');
+      setShowPhoneFlow(false);
+      setNewPhone('');
+      setOtpSent(false);
+      setOtpCode('');
+      fetchData(true);
+    } catch {
+      Alert.alert('Ошибка', 'Неверный код');
+    } finally {
+      setPhoneLoading(false);
+    }
+  };
+
+  const resetPhoneFlow = (): void => {
+    setShowPhoneFlow(false);
+    setNewPhone('');
+    setOtpSent(false);
+    setOtpCode('');
   };
 
   const handleLogout = (): void => {
@@ -183,7 +236,66 @@ export default function ProfileScreen(): React.ReactNode {
 
         <View style={styles.card}>
           <Text style={styles.cardLabel}>Телефон</Text>
-          <Text style={styles.cardValue}>{profile?.phone ?? user?.phone ?? ''}</Text>
+          <View style={styles.phoneRow}>
+            <Text style={[styles.cardValue, { flex: 1 }]}>{profile?.phone ?? user?.phone ?? ''}</Text>
+            {!showPhoneFlow && (
+              <TouchableOpacity onPress={() => setShowPhoneFlow(true)} activeOpacity={0.7}>
+                <Text style={styles.changePhoneLink}>Изменить</Text>
+              </TouchableOpacity>
+            )}
+          </View>
+          {showPhoneFlow && (
+            <View style={styles.phoneFlow}>
+              <TextInput
+                style={styles.input}
+                value={newPhone}
+                onChangeText={setNewPhone}
+                placeholder="Новый номер телефона"
+                placeholderTextColor={DriverColors.textMuted}
+                keyboardType="phone-pad"
+                editable={!otpSent}
+              />
+              {!otpSent ? (
+                <TouchableOpacity
+                  style={[styles.submitButton, phoneLoading && styles.buttonDisabled]}
+                  onPress={handleSendPhoneOtp}
+                  disabled={phoneLoading}
+                >
+                  {phoneLoading ? (
+                    <ActivityIndicator size="small" color={DriverColors.background} />
+                  ) : (
+                    <Text style={styles.submitButtonText}>Отправить код</Text>
+                  )}
+                </TouchableOpacity>
+              ) : (
+                <>
+                  <TextInput
+                    style={styles.input}
+                    value={otpCode}
+                    onChangeText={setOtpCode}
+                    placeholder={`${OTP_LENGTH}-значный код`}
+                    placeholderTextColor={DriverColors.textMuted}
+                    keyboardType="number-pad"
+                    maxLength={OTP_LENGTH}
+                  />
+                  <TouchableOpacity
+                    style={[styles.submitButton, phoneLoading && styles.buttonDisabled]}
+                    onPress={handleVerifyPhone}
+                    disabled={phoneLoading}
+                  >
+                    {phoneLoading ? (
+                      <ActivityIndicator size="small" color={DriverColors.background} />
+                    ) : (
+                      <Text style={styles.submitButtonText}>Подтвердить</Text>
+                    )}
+                  </TouchableOpacity>
+                </>
+              )}
+              <TouchableOpacity style={styles.cancelButton} onPress={resetPhoneFlow}>
+                <Text style={styles.cancelButtonText}>Отмена</Text>
+              </TouchableOpacity>
+            </View>
+          )}
         </View>
 
         <ProfileField
@@ -389,6 +501,19 @@ const styles = StyleSheet.create({
     color: DriverColors.primary,
     fontWeight: '600',
     marginBottom: 8,
+  },
+  phoneRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  changePhoneLink: {
+    ...Typography.caption,
+    color: DriverColors.textMuted,
+    fontSize: 13,
+  },
+  phoneFlow: {
+    gap: 12,
+    marginTop: 12,
   },
   editContainer: {
     gap: 12,

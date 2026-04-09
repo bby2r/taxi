@@ -131,18 +131,18 @@ export default function ProfileScreen(): React.ReactNode {
         {/* Phone Section */}
         <View style={styles.section}>
           <Text style={styles.sectionLabel}>Телефон</Text>
-          <Text style={[Typography.body, { color: ClientColors.textPrimary, marginBottom: 12 }]}>
-            {user?.phone ?? ''}
-          </Text>
+          <View style={styles.phoneRow}>
+            <Text style={[Typography.body, { color: ClientColors.textPrimary, flex: 1 }]}>
+              {user?.phone ?? ''}
+            </Text>
+            {!showPhoneFlow && (
+              <TouchableOpacity onPress={() => setShowPhoneFlow(true)} activeOpacity={0.7}>
+                <Text style={styles.changePhoneLink}>Изменить</Text>
+              </TouchableOpacity>
+            )}
+          </View>
 
-          {!showPhoneFlow ? (
-            <TouchableOpacity
-              style={styles.outlineButton}
-              onPress={() => setShowPhoneFlow(true)}
-            >
-              <Text style={styles.outlineButtonText}>Изменить номер</Text>
-            </TouchableOpacity>
-          ) : (
+          {showPhoneFlow && (
             <View style={styles.phoneFlow}>
               <TextInput
                 style={styles.input}
@@ -283,16 +283,27 @@ const styles = StyleSheet.create({
   buttonDisabled: {
     opacity: 0.6,
   },
+  phoneRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 12,
+  },
+  changePhoneLink: {
+    ...Typography.caption,
+    color: ClientColors.textMuted,
+    fontSize: 13,
+  },
   outlineButton: {
     borderWidth: 1.5,
-    borderColor: ClientColors.primary,
+    borderColor: ClientColors.border,
     borderRadius: 12,
-    paddingVertical: 14,
+    paddingVertical: 10,
     alignItems: 'center',
   },
   outlineButtonText: {
-    ...Typography.button,
-    color: ClientColors.primaryDark,
+    ...Typography.caption,
+    color: ClientColors.textSecondary,
+    fontSize: 13,
   },
   phoneFlow: {
     gap: 12,
