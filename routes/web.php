@@ -10,6 +10,7 @@ use App\Http\Controllers\Admin\OrderController;
 use App\Http\Controllers\Admin\RegionController;
 use App\Http\Controllers\Admin\SettingController;
 use App\Http\Middleware\EnsureUserRole;
+use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Route;
 
 Route::get('/', function () {
@@ -19,6 +20,10 @@ Route::get('/', function () {
 
     return view('landing');
 })->name('home');
+
+Route::get('login', function (Request $request) {
+    return redirect()->route('admin.login');
+})->name('login');
 
 Route::prefix('admin')->name('admin.')->group(function () {
     Route::middleware('guest')->group(function () {

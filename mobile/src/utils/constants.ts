@@ -1,5 +1,6 @@
 export const API_BASE_URL = __DEV__
-  ? 'http://192.168.0.114:8000'
+  // ? 'http://192.168.0.114:8000'
+  ? 'https://glottal-brigid-oversensibly.ngrok-free.dev'
   : 'https://glottal-brigid-oversensibly.ngrok-free.dev';
 
 export const PUSHER_KEY = 'your-pusher-key';

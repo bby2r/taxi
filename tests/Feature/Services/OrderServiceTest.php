@@ -6,6 +6,7 @@ use App\Enums\OrderStatus;
 use App\Enums\UserRole;
 use App\Events\OrderAccepted;
 use App\Events\OrderCancelled;
+use App\Jobs\SearchDriversJob;
 use App\Models\DriverProfile;
 use App\Models\Order;
 use App\Models\User;
@@ -106,10 +107,28 @@ class OrderServiceTest extends TestCase
         $this->assertSame($driverUser->id, $order->offered_driver_id);
     }
 
-    public function test_create_order_cancels_if_no_drivers(): void
+    public function test_create_order_retries_search_if_no_drivers(): void
     {
+        Queue::fake();
+
         $order = $this->service->createOrder($this->client, $this->pickupLat, $this->pickupLon);
 
+        $this->assertSame(OrderStatus::Searching, $order->status);
+        $this->assertSame(1, $order->fresh()->search_attempts);
+
+        Queue::assertPushed(SearchDriversJob::class, function ($job) use ($order) {
+            return $job->orderId === $order->id;
+        });
+    }
+
+    public function test_create_order_cancels_after_max_search_attempts(): void
+    {
+        $order = $this->service->createOrder($this->client, $this->pickupLat, $this->pickupLon);
+        $order->update(['search_attempts' => 3]);
+
+        $this->service->offerToNextDriver($order);
+
+        $order->refresh();
         $this->assertSame(OrderStatus::Cancelled, $order->status);
         $this->assertSame('system', $order->cancelled_by);
     }
@@ -206,15 +225,21 @@ class OrderServiceTest extends TestCase
         $this->assertSame($farDriver->id, $order->offered_driver_id);
     }
 
-    public function test_decline_order_cancels_if_no_more_drivers(): void
+    public function test_decline_order_retries_search_if_no_more_drivers(): void
     {
+        Queue::fake();
+
         [$order, $driverUser] = $this->createOrderOfferedToDriver();
 
         $this->service->declineOrder($order, $driverUser);
 
         $order->refresh();
-        $this->assertSame(OrderStatus::Cancelled, $order->status);
-        $this->assertSame('system', $order->cancelled_by);
+        $this->assertSame(OrderStatus::Searching, $order->status);
+        $this->assertSame(1, $order->search_attempts);
+
+        Queue::assertPushed(SearchDriversJob::class, function ($job) use ($order) {
+            return $job->orderId === $order->id;
+        });
     }
 
     // ──────────────────────────────────────────────────────────────

@@ -170,13 +170,38 @@ class DriverController extends Controller
      */
     public function activeOrder(Request $request): JsonResponse|OrderResource
     {
-        $order = Order::forDriver($request->user()->id)
+        $userId = $request->user()->id;
+
+        $order = Order::where(function ($q) use ($userId) {
+            $q->where('driver_id', $userId)
+                ->orWhere(function ($q2) use ($userId) {
+                    $q2->where('offered_driver_id', $userId)
+                        ->where('status', OrderStatus::Searching);
+                });
+        })
             ->active()
             ->with(['client', 'driver.driverProfile'])
             ->first();
 
         if (! $order) {
             return response()->json(['message' => 'No active order found.'], 404);
+        }
+
+        return new OrderResource($order);
+    }
+
+    /**
+     * Get the order currently offered to the authenticated driver (for polling).
+     */
+    public function pendingOffer(Request $request): JsonResponse|OrderResource
+    {
+        $order = Order::where('offered_driver_id', $request->user()->id)
+            ->where('status', OrderStatus::Searching)
+            ->with(['client'])
+            ->first();
+
+        if (! $order) {
+            return response()->json(['message' => 'No pending offer.'], 404);
         }
 
         return new OrderResource($order);

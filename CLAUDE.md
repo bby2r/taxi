@@ -74,6 +74,12 @@ This project uses Laravel Boost (`boost.json`, `.mcp.json`) which provides MCP t
 - If a Vite manifest error occurs, run `npm run build` or `npm run dev`
 - Activate the `laravel-best-practices` skill when writing/reviewing Laravel PHP code
 
+## Business Context
+
+Before writing code, check `.ai/context/index.md` and read the relevant domain context file. When business logic decisions are made in conversation, update the appropriate context file with the decision and its rationale.
+
+Signs to record: "because", "we do it this way because", choosing between approaches, explaining business rules, UI rationale.
+
 ===
 
 <laravel-boost-guidelines>

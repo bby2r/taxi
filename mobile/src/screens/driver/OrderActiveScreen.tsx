@@ -6,6 +6,7 @@ import {
   Platform,
   Linking,
   TouchableOpacity,
+  StatusBar,
 } from 'react-native';
 import MapView, { Marker } from 'react-native-maps';
 import { useNavigation } from '@react-navigation/native';
@@ -200,6 +201,7 @@ export default function OrderActiveScreen(): React.ReactNode {
         style={styles.map}
         showsUserLocation
         showsMyLocationButton
+        mapPadding={{ top: Platform.OS === 'android' ? (StatusBar.currentHeight ?? 40) + 8 : 0, right: 0, bottom: 0, left: 0 }}
       >
         <Marker
           coordinate={{

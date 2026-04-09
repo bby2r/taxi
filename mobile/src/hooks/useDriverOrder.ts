@@ -8,6 +8,7 @@ import {
   arriveAtPickup,
   completeOrder,
   getCurrentDriverOrder,
+  getPendingOffer,
 } from '../api/driver';
 import { useAuth } from '../context/AuthContext';
 import { usePusher } from './usePusher';
@@ -127,6 +128,34 @@ export function useDriverOrder(): UseDriverOrderReturn {
     events,
     enabled: isOnline,
   });
+
+  // Poll for pending offers when online and idle (fallback if Pusher is down)
+  useEffect(() => {
+    if (state.phase !== 'online_idle') return;
+
+    let cancelled = false;
+
+    const poll = async () => {
+      try {
+        const offer = await getPendingOffer();
+        if (cancelled) return;
+        if (offer) {
+          setState({ phase: 'offer', order: offer });
+        }
+      } catch {
+        // Ignore polling errors
+      }
+    };
+
+    // Poll immediately, then every 5 seconds
+    poll();
+    const interval = setInterval(poll, 5000);
+
+    return () => {
+      cancelled = true;
+      clearInterval(interval);
+    };
+  }, [state.phase]);
 
   const toggleOnline = useCallback(async (latitude: number, longitude: number): Promise<void> => {
     setError(null);

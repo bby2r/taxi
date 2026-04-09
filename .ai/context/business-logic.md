@@ -1,0 +1,79 @@
+# Business Logic
+
+## Tariff / Pricing
+Flat-rate pricing — intentionally simple for a village where all destinations are roughly equal distance.
+- **Day rate:** 80 KGS (07:00-20:59 Asia/Bishkek)
+- **Night rate:** 120 KGS (21:00-06:59 Asia/Bishkek)
+- **Cancellation fee:** 50 KGS (only when client cancels after driver assigned)
+- Price locked at order creation time via `TariffService::getCurrentPrice()`
+- All prices are hardcoded PHP constants — configurable settings planned
+
+**Inter-district pricing:** Within village = flat rate. Between districts = TBD (not yet defined).
+- No higher penalty when driver has arrived — since payment is cash/transfer, enforcement is via blacklist instead.
+- **Blacklist system:** If a client frequently cancels or doesn't show up → warning first, then block the user.
+
+> Source: `app/Services/TariffService.php`, bplan interview 2026-04-09
+
+## Order Lifecycle (State Machine)
+
+```
+(new) -> Searching -> Accepted -> Arrived -> InProgress -> Completed
+              \          \           \
+               \-> Cancelled (from Searching, Accepted, Arrived — NOT InProgress)
+```
+
+### Transitions & Side Effects
+
+| From | To | Trigger | Side Effects |
+|---|---|---|---|
+| (new) | Searching | `createOrder()` | Price locked; `offerToNextDriver()` called |
+| Searching | Accepted | `acceptOrder()` | DB lock; sets driver; broadcasts `OrderAccepted`; push to client |
+| Searching | Searching | `declineOrder()` / timeout | Driver added to declined list; re-offers to next |
+| Searching | Cancelled | No drivers | Auto-cancel by system |
+| Accepted | Arrived | `driverArrived()` | Broadcasts `OrderDriverArrived`; push to client |
+| Arrived | InProgress | `startRide()` | Broadcasts `OrderInProgress` |
+| InProgress | Completed | `completeOrder()` | Broadcasts `OrderCompleted`; push to both |
+| Any cancellable | Cancelled | `cancelOrder()` | Fee if client cancels post-assignment; broadcasts + push |
+
+### Key Rules
+- Client can only have one active order at a time
+- Only the offered driver can accept/decline
+- All transitions use `DB::transaction()` + `lockForUpdate()` for concurrency safety
+- **Drivers CAN cancel orders** — must select a reason:
+  - "Client doesn't answer the phone"
+  - "Client is not at pickup location"
+  - "Long wait" (5-10 minutes)
+  No penalty for driver cancellation — reasons are logged for admin visibility.
+
+## Driver Matching Algorithm
+Sequential nearest-driver offer (not broadcast):
+1. `GeoService::findNearestDrivers()` — loads all online drivers with coordinates, excludes declined
+2. Haversine distance in PHP (not SQL), sorts by distance, takes closest
+3. Offers to that driver, dispatches `OfferTimeoutJob` (10-second delay)
+4. If no response in 10s, auto-decline and re-offer to next
+5. If no drivers left, auto-cancel order
+
+**Max radius:** Confirmed needed — configurable radius setting to limit driver search area.
+**In-memory calculation** — acceptable for small village driver pool.
+
+> Source: `app/Services/GeoService.php`, `app/Services/OrderService.php`, `app/Jobs/OfferTimeoutJob.php`
+
+## OTP / Phone Verification
+- 4-digit code, 5-minute TTL, sent via Nikita SMS
+- New OTP invalidates all previous codes for that phone
+- In non-production: code is logged (dev/testing convenience)
+- Message in Russian: "Ваш код подтверждения: {code}"
+
+> Source: `app/Services/OtpService.php`
+
+## Notifications
+Dual-channel: Expo push + Pusher broadcasting.
+- **Push (Expo):** fire-and-forget, graceful degradation if no token
+- **Broadcasting (Pusher):** private channels `client.{id}` and `driver.{id}`
+- Events: `order.offered`, `order.accepted`, `order.driver_arrived`, `order.in_progress`, `order.completed`, `order.cancelled`
+
+## Roles & Authorization
+Three roles: Client, Driver, Admin. No formal Laravel Policies — authorization is implicit in service methods and `EnsureUserRole` middleware.
+
+## Payments
+Two payment methods: **cash** or **bank card transfer** (direct transfer to driver's card, not in-app processing). Card payments (Visa/Mastercard in-app) may be added later.

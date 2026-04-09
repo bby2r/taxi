@@ -52,6 +52,18 @@ export async function getCurrentDriverOrder(): Promise<Order | null> {
   }
 }
 
+export async function getPendingOffer(): Promise<Order | null> {
+  try {
+    const { data } = await apiClient.get<{ data: Order }>('/api/v1/driver/orders/pending-offer');
+    return data.data;
+  } catch (error: any) {
+    if (error.response?.status === 404) {
+      return null;
+    }
+    throw error;
+  }
+}
+
 export async function getDriverStats(): Promise<DriverStats> {
   const { data } = await apiClient.get<{ data: DriverStats }>('/api/v1/driver/stats');
   return data.data;

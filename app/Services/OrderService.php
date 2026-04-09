@@ -10,6 +10,7 @@ use App\Events\OrderDriverArrived;
 use App\Events\OrderInProgress;
 use App\Events\OrderOfferedToDriver;
 use App\Jobs\OfferTimeoutJob;
+use App\Jobs\SearchDriversJob;
 use App\Models\Order;
 use App\Models\Region;
 use App\Models\User;
@@ -77,6 +78,17 @@ class OrderService
         );
 
         if ($drivers->isEmpty()) {
+            $maxAttempts = 3;
+
+            if ($order->search_attempts < $maxAttempts) {
+                $order->increment('search_attempts');
+
+                SearchDriversJob::dispatch($order->id)
+                    ->delay(now()->addSeconds(15));
+
+                return;
+            }
+
             $this->cancelOrder($order, 'system');
 
             return;
@@ -89,7 +101,7 @@ class OrderService
             'offered_at' => now(),
         ]);
 
-        $timeout = $order->region_id ? 30 : 10;
+        $timeout = $order->region_id ? 45 : 30;
 
         OfferTimeoutJob::dispatch($order->id, $driver->user_id)
             ->delay(now()->addSeconds($timeout));

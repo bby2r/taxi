@@ -24,6 +24,7 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
     'offered_driver_id',
     'offered_at',
     'declined_drivers',
+    'search_attempts',
     'region_id',
     'cancellation_fee',
     'cancelled_by',
