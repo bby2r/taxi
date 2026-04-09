@@ -10,6 +10,7 @@ interface AuthContextValue {
   isAuthenticated: boolean;
   login: (token: string, user: User) => Promise<void>;
   logout: () => Promise<void>;
+  refreshUser: () => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextValue | undefined>(undefined);
@@ -55,6 +56,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }): React
     setUser(userData);
   }, []);
 
+  const refreshUser = useCallback(async () => {
+    const me = await getMe();
+    await saveUser(me);
+    setUser(me);
+  }, []);
+
   return (
     <AuthContext.Provider
       value={{
@@ -63,6 +70,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }): React
         isAuthenticated: !!user,
         login,
         logout: logoutHandler,
+        refreshUser,
       }}
     >
       {children}

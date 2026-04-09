@@ -7,6 +7,7 @@ export type AuthStackParamList = {
 export type ClientTabParamList = {
   Home: undefined;
   History: undefined;
+  Profile: undefined;
 };
 
 export type DriverStackParamList = {

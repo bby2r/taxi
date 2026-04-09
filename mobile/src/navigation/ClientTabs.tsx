@@ -3,6 +3,7 @@ import { Text } from 'react-native';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import HomeScreen from '../screens/client/HomeScreen';
 import HistoryScreen from '../screens/client/HistoryScreen';
+import ProfileScreen from '../screens/client/ProfileScreen';
 import { ClientTabParamList } from './types';
 import { ClientColors } from '../theme/colors';
 import { Typography } from '../theme/typography';
@@ -43,6 +44,14 @@ export default function ClientTabs(): React.ReactNode {
         options={{
           tabBarLabel: 'История',
           tabBarIcon: () => <TabIcon label="📋" />,
+        }}
+      />
+      <Tab.Screen
+        name="Profile"
+        component={ProfileScreen}
+        options={{
+          tabBarLabel: 'Профиль',
+          tabBarIcon: () => <TabIcon label="👤" />,
         }}
       />
     </Tab.Navigator>
