@@ -20,8 +20,8 @@ export async function logout(): Promise<void> {
 }
 
 export async function getMe(): Promise<User> {
-  const { data } = await apiClient.get<User>('/api/v1/auth/me');
-  return data;
+  const { data } = await apiClient.get<{ user: User }>('/api/v1/auth/me');
+  return data.user;
 }
 
 export async function registerPushToken(token: string): Promise<void> {
