@@ -1,0 +1,103 @@
+name: Build Mobile APK
+
+on:
+  push:
+    branches: [master]
+    paths:
+      - 'mobile/**'
+      - '.github/workflows/mobile-android-apk.yml'
+  pull_request:
+    paths:
+      - 'mobile/**'
+      - '.github/workflows/mobile-android-apk.yml'
+  workflow_dispatch:
+    inputs:
+      profile:
+        description: 'EAS build profile (controls EXPO_PUBLIC_* env)'
+        required: true
+        default: 'preview'
+        type: choice
+        options:
+          - development
+          - preview
+          - production
+
+defaults:
+  run:
+    working-directory: mobile
+
+jobs:
+  build-apk:
+    name: Build Android APK
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+
+    env:
+      EXPO_PUBLIC_API_URL: ${{ vars.EXPO_PUBLIC_API_URL || 'https://staging.villagetaxi.kg/api' }}
+      EXPO_PUBLIC_PUSHER_KEY: ${{ vars.EXPO_PUBLIC_PUSHER_KEY }}
+      EXPO_PUBLIC_PUSHER_CLUSTER: ${{ vars.EXPO_PUBLIC_PUSHER_CLUSTER || 'ap1' }}
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: mobile/package-lock.json
+
+      - name: Set up Java (Temurin 17)
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '17'
+
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v3
+        with:
+          packages: 'platform-tools platforms;android-34 build-tools;34.0.0'
+
+      - name: Cache Gradle
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.gradle/caches
+            ~/.gradle/wrapper
+            mobile/android/.gradle
+          key: ${{ runner.os }}-gradle-${{ hashFiles('mobile/package-lock.json', 'mobile/app.json') }}
+          restore-keys: |
+            ${{ runner.os }}-gradle-
+
+      - name: Install npm dependencies
+        run: npm ci
+
+      - name: Expo prebuild (generate native android project)
+        run: npx expo prebuild --platform android --no-install --clean
+
+      - name: Make gradlew executable
+        run: chmod +x android/gradlew
+
+      - name: Build release APK
+        working-directory: mobile/android
+        run: ./gradlew assembleRelease --no-daemon --stacktrace
+
+      - name: Locate APK
+        id: apk
+        run: |
+          APK_PATH=$(find android/app/build/outputs/apk/release -name "*.apk" | head -n 1)
+          if [ -z "$APK_PATH" ]; then
+            echo "No APK produced" >&2
+            exit 1
+          fi
+          echo "path=$APK_PATH" >> "$GITHUB_OUTPUT"
+          echo "name=village-taxi-${{ github.sha }}.apk" >> "$GITHUB_OUTPUT"
+
+      - name: Upload APK artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ steps.apk.outputs.name }}
+          path: mobile/${{ steps.apk.outputs.path }}
+          if-no-files-found: error
+          retention-days: 14
