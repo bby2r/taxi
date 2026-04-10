@@ -8,15 +8,18 @@ import {
   TouchableOpacity,
   StatusBar,
 } from 'react-native';
-import MapView, { Marker } from 'react-native-maps';
+import MapView, { Marker, Polyline } from 'react-native-maps';
 import { useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { DriverColors } from '../../theme/colors';
 import { Typography } from '../../theme/typography';
 import ActionButton from '../../components/ActionButton';
 import { useDriverOrder } from '../../hooks/useDriverOrder';
+import { useLocation } from '../../hooks/useLocation';
+import { useRoute as useNavigationRoute } from '../../hooks/useRoute';
 import type { DriverStackParamList } from '../../navigation/types';
 import type { Order } from '../../api/types';
+import type { Route } from '../../api/routing';
 
 type NavigationProp = NativeStackNavigationProp<DriverStackParamList, 'OrderActive'>;
 
@@ -31,18 +34,76 @@ function openNavigation(lat: number, lng: number): void {
   }
 }
 
+function formatDistance(meters: number): string {
+  if (meters < 1000) {
+    return `${Math.round(meters)} м`;
+  }
+  return `${(meters / 1000).toFixed(1)} км`;
+}
+
+function formatDuration(seconds: number): string {
+  const minutes = Math.max(1, Math.round(seconds / 60));
+  if (minutes < 60) {
+    return `${minutes} мин`;
+  }
+  const h = Math.floor(minutes / 60);
+  const m = minutes % 60;
+  return m === 0 ? `${h} ч` : `${h} ч ${m} мин`;
+}
+
 function EnRouteCard({
   order,
   onMarkArrived,
   loading,
+  route,
+  routeLoading,
+  routeError,
 }: {
   order: Order;
   onMarkArrived: () => void;
   loading: boolean;
+  route: Route | null;
+  routeLoading: boolean;
+  routeError: string | null;
 }): React.ReactNode {
   return (
     <View style={styles.cardContent}>
-      <Text style={[Typography.caption, { color: DriverColors.textMuted }]}>
+      {route && (
+        <View style={styles.etaRow}>
+          <Text
+            style={[Typography.h2, { color: DriverColors.primary }]}
+            testID="route-eta"
+          >
+            {formatDuration(route.durationSeconds)}
+          </Text>
+          <Text
+            style={[Typography.body, { color: DriverColors.textMuted, marginLeft: 12 }]}
+            testID="route-distance"
+          >
+            {formatDistance(route.distanceMeters)}
+          </Text>
+        </View>
+      )}
+      {!route && routeLoading && (
+        <Text
+          style={[Typography.caption, { color: DriverColors.textMuted }]}
+          testID="route-loading"
+        >
+          Строим маршрут...
+        </Text>
+      )}
+      {!route && !routeLoading && routeError && (
+        <Text
+          style={[Typography.caption, { color: DriverColors.danger }]}
+          testID="route-error"
+        >
+          Маршрут недоступен
+        </Text>
+      )}
+
+      <Text
+        style={[Typography.caption, { color: DriverColors.textMuted, marginTop: 8 }]}
+      >
         Адрес подачи
       </Text>
       <Text
@@ -59,7 +120,7 @@ function EnRouteCard({
         accessibilityLabel="Навигация"
       >
         <Text style={[Typography.bodyBold, { color: DriverColors.primary }]}>
-          Навигация →
+          Открыть в Картах →
         </Text>
       </TouchableOpacity>
 
@@ -155,6 +216,7 @@ export default function OrderActiveScreen(): React.ReactNode {
   const { state, markArrived, markCompleted, dismissCompleted, loading } =
     useDriverOrder();
   const mapRef = useRef<MapView>(null);
+  const driverLocation = useLocation();
 
   // Go back if phase is not relevant to this screen
   useEffect(() => {
@@ -172,18 +234,46 @@ export default function OrderActiveScreen(): React.ReactNode {
       ? state.order
       : null;
 
-  // Fit map to pickup coordinate
+  const driverPoint =
+    !driverLocation.loading && !driverLocation.error
+      ? { latitude: driverLocation.latitude, longitude: driverLocation.longitude }
+      : null;
+
+  const pickupPoint = order
+    ? { latitude: order.pickup_latitude, longitude: order.pickup_longitude }
+    : null;
+
+  // Only fetch a route while driver is en-route to pickup
+  const shouldRouteToPickup = state.phase === 'active';
+  const {
+    route,
+    loading: routeLoading,
+    error: routeError,
+  } = useNavigationRoute(
+    shouldRouteToPickup ? driverPoint : null,
+    shouldRouteToPickup ? pickupPoint : null,
+  );
+
+  // Fit map to route bounds (or pickup + driver, or pickup alone)
   useEffect(() => {
-    if (mapRef.current && order) {
-      mapRef.current.fitToCoordinates(
-        [{ latitude: order.pickup_latitude, longitude: order.pickup_longitude }],
-        {
-          edgePadding: { top: 50, right: 50, bottom: 50, left: 50 },
-          animated: true,
-        },
-      );
+    if (!mapRef.current || !order) {
+      return;
     }
-  }, [order]);
+    const coords =
+      route && route.coordinates.length > 0
+        ? route.coordinates
+        : [
+            { latitude: order.pickup_latitude, longitude: order.pickup_longitude },
+            ...(driverPoint ? [driverPoint] : []),
+          ];
+    if (coords.length === 0) {
+      return;
+    }
+    mapRef.current.fitToCoordinates(coords, {
+      edgePadding: { top: 80, right: 60, bottom: 60, left: 60 },
+      animated: true,
+    });
+  }, [order, route, driverPoint?.latitude, driverPoint?.longitude]);
 
   if (!order) {
     return null;
@@ -209,7 +299,26 @@ export default function OrderActiveScreen(): React.ReactNode {
             longitude: order.pickup_longitude,
           }}
           title={order.pickup_address || 'Клиент'}
+          pinColor={DriverColors.primary}
         />
+        {driverPoint && state.phase === 'active' && (
+          <Marker
+            coordinate={driverPoint}
+            title="Вы"
+            anchor={{ x: 0.5, y: 0.5 }}
+            testID="driver-marker"
+          >
+            <View style={styles.driverDot} />
+          </Marker>
+        )}
+        {route && route.coordinates.length > 1 && (
+          <Polyline
+            coordinates={route.coordinates}
+            strokeColor={DriverColors.primary}
+            strokeWidth={5}
+            testID="route-polyline"
+          />
+        )}
       </MapView>
 
       <View style={styles.bottomCard}>
@@ -218,6 +327,9 @@ export default function OrderActiveScreen(): React.ReactNode {
             order={order}
             onMarkArrived={markArrived}
             loading={loading}
+            route={route}
+            routeLoading={routeLoading}
+            routeError={routeError}
           />
         )}
         {state.phase === 'arrived' && (
@@ -255,6 +367,19 @@ const styles = StyleSheet.create({
   },
   cardContent: {
     flex: 1,
+  },
+  etaRow: {
+    flexDirection: 'row',
+    alignItems: 'baseline',
+    marginBottom: 4,
+  },
+  driverDot: {
+    width: 16,
+    height: 16,
+    borderRadius: 8,
+    backgroundColor: DriverColors.primary,
+    borderWidth: 3,
+    borderColor: '#fff',
   },
   navigationLink: {
     marginTop: 16,

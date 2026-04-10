@@ -14,6 +14,10 @@ function Marker(_props: any) {
   return null;
 }
 
+function Polyline(_props: any) {
+  return null;
+}
+
 const styles = StyleSheet.create({
   map: {
     backgroundColor: '#e0e0e0',
@@ -27,7 +31,7 @@ const styles = StyleSheet.create({
 });
 
 export default MapView;
-export { Marker };
+export { Marker, Polyline };
 export type Region = {
   latitude: number;
   longitude: number;
