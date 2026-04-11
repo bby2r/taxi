@@ -1,0 +1,10 @@
+{
+  "active": true,
+  "started_at": "2026-04-10T20:01:04.114Z",
+  "original_prompt": "/autopilot \n- When client's order is accepted by a driver, clients app quits, i think there is some error\n- When an order comes to a driver to accept/decline there should be address of the client that made the order",
+  "session_id": "d01eb617-9b40-44bf-afdf-e2f06c4f90c7",
+  "project_path": "/Users/baiturbulanbekov/PhpStormProjects/taxi/mobile",
+  "reinforcement_count": 0,
+  "awaiting_confirmation": true,
+  "last_checked_at": "2026-04-10T20:01:04.114Z"
+}

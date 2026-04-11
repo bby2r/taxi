@@ -41,6 +41,12 @@ class OrderResource extends JsonResource
                 'phone' => $this->driver->phone,
                 'car_model' => $this->driver->driverProfile?->car_model,
                 'car_number' => $this->driver->driverProfile?->car_number,
+                'latitude' => $this->driver->driverProfile?->latitude !== null
+                    ? (float) $this->driver->driverProfile->latitude
+                    : null,
+                'longitude' => $this->driver->driverProfile?->longitude !== null
+                    ? (float) $this->driver->driverProfile->longitude
+                    : null,
             ]),
             'accepted_at' => $this->accepted_at?->toISOString(),
             'arrived_at' => $this->arrived_at?->toISOString(),

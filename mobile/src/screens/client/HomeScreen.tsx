@@ -19,6 +19,7 @@ import RegionSelector from '../../components/RegionSelector';
 import { ClientColors } from '../../theme/colors';
 import { Typography } from '../../theme/typography';
 import { getCurrentPrice } from '../../api/regions';
+import { reverseGeocode } from '../../utils/geocode';
 
 function PulsingDot(): React.ReactNode {
   const scale = useRef(new Animated.Value(1)).current;
@@ -91,17 +92,25 @@ export default function HomeScreen(): React.ReactNode {
     longitudeDelta: 0.015,
   };
 
-  const handleCallTaxi = (): void => {
-    callTaxi(location.latitude, location.longitude);
+  const handleCallTaxi = async (): Promise<void> => {
+    const address = await reverseGeocode(location.latitude, location.longitude);
+    await callTaxi(location.latitude, location.longitude, address);
   };
 
-  const handleRegionSelect = (regionId: number): void => {
+  const handleRegionSelect = async (regionId: number): Promise<void> => {
     setRegionSelectorVisible(false);
-    callRegionalTaxi(location.latitude, location.longitude, regionId);
+    const address = await reverseGeocode(location.latitude, location.longitude);
+    await callRegionalTaxi(location.latitude, location.longitude, regionId, address);
   };
 
   const driverCoords =
-    state.phase !== 'idle' && state.phase !== 'cancelled' && state.order?.driver
+    state.phase !== 'idle' &&
+    state.phase !== 'cancelled' &&
+    state.order?.driver &&
+    typeof state.order.driver.latitude === 'number' &&
+    typeof state.order.driver.longitude === 'number' &&
+    Number.isFinite(state.order.driver.latitude) &&
+    Number.isFinite(state.order.driver.longitude)
       ? { latitude: state.order.driver.latitude, longitude: state.order.driver.longitude }
       : null;
 

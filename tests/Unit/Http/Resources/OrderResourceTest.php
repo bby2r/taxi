@@ -75,7 +75,10 @@ class OrderResourceTest extends TestCase
     public function test_order_resource_shows_driver_when_present(): void
     {
         $driver = User::factory()->driver()->create();
-        DriverProfile::factory()->for($driver)->create();
+        DriverProfile::factory()->for($driver)->create([
+            'latitude' => 42.8746,
+            'longitude' => 74.5698,
+        ]);
 
         $order = Order::factory()->accepted($driver)->create();
         $order->load(['client', 'driver.driverProfile']);
@@ -88,6 +91,27 @@ class OrderResourceTest extends TestCase
         $this->assertSame($driver->phone, $resource['driver']['phone']);
         $this->assertArrayHasKey('car_model', $resource['driver']);
         $this->assertArrayHasKey('car_number', $resource['driver']);
+        $this->assertArrayHasKey('latitude', $resource['driver']);
+        $this->assertArrayHasKey('longitude', $resource['driver']);
+        $this->assertEqualsWithDelta(42.8746, $resource['driver']['latitude'], 0.0001);
+        $this->assertEqualsWithDelta(74.5698, $resource['driver']['longitude'], 0.0001);
+    }
+
+    public function test_order_resource_driver_location_is_null_when_missing(): void
+    {
+        $driver = User::factory()->driver()->create();
+        DriverProfile::factory()->for($driver)->create([
+            'latitude' => null,
+            'longitude' => null,
+        ]);
+
+        $order = Order::factory()->accepted($driver)->create();
+        $order->load(['client', 'driver.driverProfile']);
+
+        $resource = $this->resolveResource($order);
+
+        $this->assertNull($resource['driver']['latitude']);
+        $this->assertNull($resource['driver']['longitude']);
     }
 
     public function test_order_resource_includes_region_when_present(): void
