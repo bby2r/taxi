@@ -58,6 +58,7 @@ function EnRouteCard({
   route,
   routeLoading,
   routeError,
+  locationError,
 }: {
   order: Order;
   onMarkArrived: () => void;
@@ -65,6 +66,7 @@ function EnRouteCard({
   route: Route | null;
   routeLoading: boolean;
   routeError: string | null;
+  locationError: string | null;
 }): React.ReactNode {
   return (
     <View style={styles.cardContent}>
@@ -92,12 +94,14 @@ function EnRouteCard({
           Строим маршрут...
         </Text>
       )}
-      {!route && !routeLoading && routeError && (
+      {!route && !routeLoading && (routeError || locationError) && (
         <Text
           style={[Typography.caption, { color: DriverColors.danger }]}
           testID="route-error"
         >
-          Маршрут недоступен
+          {locationError
+            ? 'Включите геолокацию для маршрута'
+            : 'Маршрут недоступен'}
         </Text>
       )}
 
@@ -289,6 +293,12 @@ export default function OrderActiveScreen(): React.ReactNode {
       <MapView
         ref={mapRef}
         style={styles.map}
+        initialRegion={{
+          latitude: order.pickup_latitude,
+          longitude: order.pickup_longitude,
+          latitudeDelta: 0.02,
+          longitudeDelta: 0.02,
+        }}
         showsUserLocation
         showsMyLocationButton
         mapPadding={{ top: Platform.OS === 'android' ? (StatusBar.currentHeight ?? 40) + 8 : 0, right: 0, bottom: 0, left: 0 }}
@@ -330,6 +340,7 @@ export default function OrderActiveScreen(): React.ReactNode {
             route={route}
             routeLoading={routeLoading}
             routeError={routeError}
+            locationError={driverLocation.error}
           />
         )}
         {state.phase === 'arrived' && (
