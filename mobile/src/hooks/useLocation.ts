@@ -22,33 +22,63 @@ export function useLocation(): LocationState {
     let subscription: Location.LocationSubscription | null = null;
 
     (async () => {
-      const { status } = await Location.requestForegroundPermissionsAsync();
-      if (status !== 'granted') {
-        setState((prev) => ({ ...prev, loading: false, error: 'Нет доступа к геолокации' }));
-        return;
-      }
+      try {
+        const { status } = await Location.requestForegroundPermissionsAsync();
+        if (status !== 'granted') {
+          setState((prev) => ({ ...prev, loading: false, error: 'Нет доступа к геолокации' }));
+          return;
+        }
 
-      const current = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced });
-      setState({
-        latitude: current.coords.latitude,
-        longitude: current.coords.longitude,
-        heading: current.coords.heading,
-        loading: false,
-        error: null,
-      });
-
-      subscription = await Location.watchPositionAsync(
-        { accuracy: Location.Accuracy.Balanced, distanceInterval: 10, timeInterval: 5000 },
-        (loc) => {
+        const last = await Location.getLastKnownPositionAsync();
+        if (last) {
           setState({
-            latitude: loc.coords.latitude,
-            longitude: loc.coords.longitude,
-            heading: loc.coords.heading,
+            latitude: last.coords.latitude,
+            longitude: last.coords.longitude,
+            heading: last.coords.heading,
             loading: false,
             error: null,
           });
         }
-      );
+
+        let timeoutHandle: ReturnType<typeof setTimeout> | null = null;
+        const currentPromise = Location.getCurrentPositionAsync({
+          accuracy: Location.Accuracy.Balanced,
+        });
+        const timeoutPromise = new Promise<null>((resolve) => {
+          timeoutHandle = setTimeout(() => resolve(null), 10000);
+        });
+        const current = await Promise.race([currentPromise, timeoutPromise]);
+        if (timeoutHandle) {
+          clearTimeout(timeoutHandle);
+        }
+        if (current) {
+          setState({
+            latitude: current.coords.latitude,
+            longitude: current.coords.longitude,
+            heading: current.coords.heading,
+            loading: false,
+            error: null,
+          });
+        } else {
+          setState((prev) => ({ ...prev, loading: false }));
+        }
+
+        subscription = await Location.watchPositionAsync(
+          { accuracy: Location.Accuracy.Balanced, distanceInterval: 10, timeInterval: 5000 },
+          (loc) => {
+            setState({
+              latitude: loc.coords.latitude,
+              longitude: loc.coords.longitude,
+              heading: loc.coords.heading,
+              loading: false,
+              error: null,
+            });
+          },
+        );
+      } catch (err: unknown) {
+        const message = err instanceof Error ? err.message : 'Ошибка геолокации';
+        setState((prev) => ({ ...prev, loading: false, error: message }));
+      }
     })();
 
     return () => {

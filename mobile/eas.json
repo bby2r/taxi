@@ -14,7 +14,7 @@
         "buildType": "apk"
       },
       "env": {
-        "EXPO_PUBLIC_API_URL": "http://192.168.1.100:8000/api",
+        "EXPO_PUBLIC_API_URL": "https://glottal-brigid-oversensibly.ngrok-free.dev/api",
         "EXPO_PUBLIC_PUSHER_KEY": "your-dev-pusher-key",
         "EXPO_PUBLIC_PUSHER_CLUSTER": "ap1"
       }

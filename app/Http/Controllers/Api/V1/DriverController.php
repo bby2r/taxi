@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Api\V1;
 
 use App\Enums\OrderStatus;
+use App\Events\DriverLocationUpdated;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Api\V1\UpdateLocationRequest;
 use App\Http\Resources\V1\DriverChangeRequestResource;
@@ -71,11 +72,23 @@ class DriverController extends Controller
             return response()->json(['message' => 'Driver profile not found.'], 404);
         }
 
+        $latitude = (float) $request->validated('latitude');
+        $longitude = (float) $request->validated('longitude');
+
         $profile->update([
-            'latitude' => $request->validated('latitude'),
-            'longitude' => $request->validated('longitude'),
+            'latitude' => $latitude,
+            'longitude' => $longitude,
             'location_updated_at' => now(),
         ]);
+
+        $activeOrder = Order::query()
+            ->where('driver_id', $request->user()->id)
+            ->whereIn('status', [OrderStatus::Accepted, OrderStatus::Arrived, OrderStatus::InProgress])
+            ->first();
+
+        if ($activeOrder) {
+            broadcast(new DriverLocationUpdated($activeOrder, $latitude, $longitude))->toOthers();
+        }
 
         $request->user()->load('driverProfile');
 

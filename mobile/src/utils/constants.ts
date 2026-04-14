@@ -3,7 +3,7 @@ export const API_BASE_URL = __DEV__
   ? 'https://glottal-brigid-oversensibly.ngrok-free.dev'
   : 'https://glottal-brigid-oversensibly.ngrok-free.dev';
 
-export const PUSHER_KEY = 'your-pusher-key';
+export const PUSHER_KEY = '0d48c79a3cabdd93025a';
 export const PUSHER_CLUSTER = 'ap1';
 
 export const ORDER_STATUSES = {

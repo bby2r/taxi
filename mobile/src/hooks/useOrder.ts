@@ -102,6 +102,38 @@ export function useOrder(): UseOrderReturn {
     refreshAndSetPhase('completed');
   }, [refreshAndSetPhase]);
 
+  const handleDriverLocation = useCallback((data: unknown) => {
+    const payload = data as { latitude?: number; longitude?: number };
+    if (
+      typeof payload.latitude !== 'number' ||
+      typeof payload.longitude !== 'number'
+    ) {
+      return;
+    }
+    setState((prev) => {
+      if (
+        prev.phase !== 'accepted' &&
+        prev.phase !== 'arrived' &&
+        prev.phase !== 'in_progress'
+      ) {
+        return prev;
+      }
+      if (!prev.order.driver) {
+        return prev;
+      }
+      const nextOrder: Order = {
+        ...prev.order,
+        driver: {
+          ...prev.order.driver,
+          latitude: payload.latitude,
+          longitude: payload.longitude,
+        },
+      };
+      orderRef.current = nextOrder;
+      return { ...prev, order: nextOrder };
+    });
+  }, []);
+
   const handleOrderCancelled = useCallback(async () => {
     let reason: 'no_drivers' | 'other' = 'other';
     const orderId = orderRef.current?.id;
@@ -128,6 +160,7 @@ export function useOrder(): UseOrderReturn {
       'order.in_progress': handleOrderInProgress,
       'order.completed': handleOrderCompleted,
       'order.cancelled': handleOrderCancelled,
+      'driver.location': handleDriverLocation,
     },
     enabled: state.phase !== 'idle' && state.phase !== 'completed' && state.phase !== 'cancelled',
   });

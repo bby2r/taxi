@@ -1,6 +1,7 @@
 jest.mock('expo-location', () => ({
   requestForegroundPermissionsAsync: jest.fn(),
   getCurrentPositionAsync: jest.fn(),
+  getLastKnownPositionAsync: jest.fn().mockResolvedValue(null),
   watchPositionAsync: jest.fn(),
   Accuracy: { Balanced: 3 },
 }));
