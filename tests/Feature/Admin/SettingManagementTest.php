@@ -20,10 +20,18 @@ class SettingManagementTest extends TestCase
 
         $this->admin = User::factory()->admin()->create();
 
-        Setting::factory()->create(['key' => 'day_price', 'value' => '80']);
-        Setting::factory()->create(['key' => 'night_price', 'value' => '120']);
-        Setting::factory()->create(['key' => 'cancellation_fee', 'value' => '50']);
-        Setting::factory()->create(['key' => 'max_search_radius_km', 'value' => '10']);
+        // `stale_active_order_hours` is seeded by migration, so updateOrCreate
+        // keeps setup idempotent for the row the migration already inserted.
+        $seed = [
+            ['key' => 'day_price', 'value' => '80'],
+            ['key' => 'night_price', 'value' => '120'],
+            ['key' => 'cancellation_fee', 'value' => '50'],
+            ['key' => 'max_search_radius_km', 'value' => '10'],
+            ['key' => 'stale_active_order_hours', 'value' => '2'],
+        ];
+        foreach ($seed as $row) {
+            Setting::updateOrCreate(['key' => $row['key']], ['value' => $row['value']]);
+        }
     }
 
     public function test_settings_page_loads_with_current_values(): void
@@ -44,6 +52,7 @@ class SettingManagementTest extends TestCase
             'night_price' => 300,
             'cancellation_fee' => 50,
             'max_search_radius_km' => 15,
+            'stale_active_order_hours' => 3,
         ]);
 
         $response->assertRedirect();
@@ -53,13 +62,20 @@ class SettingManagementTest extends TestCase
         $this->assertEquals('300', Setting::getValue('night_price'));
         $this->assertEquals('50', Setting::getValue('cancellation_fee'));
         $this->assertEquals('15', Setting::getValue('max_search_radius_km'));
+        $this->assertEquals('3', Setting::getValue('stale_active_order_hours'));
     }
 
     public function test_settings_update_validates_required_fields(): void
     {
         $response = $this->actingAs($this->admin)->put(route('admin.settings.update'), []);
 
-        $response->assertSessionHasErrors(['day_price', 'night_price', 'cancellation_fee', 'max_search_radius_km']);
+        $response->assertSessionHasErrors([
+            'day_price',
+            'night_price',
+            'cancellation_fee',
+            'max_search_radius_km',
+            'stale_active_order_hours',
+        ]);
     }
 
     public function test_settings_update_validates_numeric_types(): void
@@ -69,6 +85,7 @@ class SettingManagementTest extends TestCase
             'night_price' => 300,
             'cancellation_fee' => 50,
             'max_search_radius_km' => 15,
+            'stale_active_order_hours' => 2,
         ]);
 
         $response->assertSessionHasErrors(['day_price']);
@@ -81,6 +98,7 @@ class SettingManagementTest extends TestCase
             'night_price' => 300,
             'cancellation_fee' => 50,
             'max_search_radius_km' => 15,
+            'stale_active_order_hours' => 2,
         ]);
 
         $response->assertSessionHasErrors(['day_price']);
@@ -93,6 +111,7 @@ class SettingManagementTest extends TestCase
             'night_price' => 120,
             'cancellation_fee' => 50,
             'max_search_radius_km' => 7.5,
+            'stale_active_order_hours' => 2,
         ]);
 
         $response->assertRedirect();

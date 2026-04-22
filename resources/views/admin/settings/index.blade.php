@@ -92,6 +92,25 @@
                     @enderror
                 </div>
 
+                {{-- Stale Active Order Hours --}}
+                <div class="mb-5">
+                    <label for="stale_active_order_hours" class="mb-1.5 block text-sm font-medium text-gray-700">Stale Active Order Hours</label>
+                    <input
+                        type="number"
+                        id="stale_active_order_hours"
+                        name="stale_active_order_hours"
+                        step="0.5"
+                        value="{{ old('stale_active_order_hours', $settings['stale_active_order_hours']->value ?? '2') }}"
+                        class="w-full rounded-lg border border-gray-300 px-4 py-2.5 text-sm focus:border-amber-400 focus:ring-2 focus:ring-amber-400"
+                    >
+                    @if (isset($settings['stale_active_order_hours']->description))
+                        <p class="mt-1 text-xs text-gray-500">{{ $settings['stale_active_order_hours']->description }}</p>
+                    @endif
+                    @error('stale_active_order_hours')
+                        <p class="mt-1 text-sm text-red-600">{{ $message }}</p>
+                    @enderror
+                </div>
+
                 {{-- Actions --}}
                 <div class="flex items-center gap-4">
                     <button

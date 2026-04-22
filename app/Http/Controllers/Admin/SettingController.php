@@ -24,6 +24,7 @@ class SettingController extends Controller
             'night_price' => 'required|integer|min:0',
             'cancellation_fee' => 'required|integer|min:0',
             'max_search_radius_km' => 'required|numeric|min:0',
+            'stale_active_order_hours' => 'required|numeric|min:0',
         ]);
 
         foreach ($validated as $key => $value) {
