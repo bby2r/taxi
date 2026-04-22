@@ -26,13 +26,21 @@ Three distinct UIs: web admin (English), mobile client (Russian, light theme), m
 ## Mobile Driver Flow
 - **Login:** Phone + password on dark background.
 - **Home:** Large ON/OFF toggle (120px circle). When online + idle: "Waiting for order..."
-- **Order offer:** Slides up with 10-second countdown circle, pickup address, price. Accept (green, 2x width) + Skip (outline).
+- **Order offer:** Slides up with 10-second countdown circle.
+  - Badge shows order type: "В селе" (amber) or "Межрайон · {region}" (green)
+  - Pickup address always shown; for inter-district orders a second "Куда" block shows dropoff_address or region name
+  - Price, then Accept (green, 2x width) + "Отказаться" (outline)
+  - Tapping "Отказаться" opens a bottom sheet with four reasons (Слишком далеко / Не мой район / Клиент не отвечает / Личная причина). A reason is required — no raw skip.
 - **Active order:** Map (60%) + card (40%). States: en route (navigation link + "I'm here"), arrived (green checkmark + "Complete trip"), completed (earnings display).
+  - Inter-district orders show a second green "пункт Б" marker and the EnRoute card adds a "Куда" line.
+  - Once the ride is `in_progress`, the built-in route auto-switches from driver->pickup to driver->dropoff.
 - **Stats:** 2x2 grid — Today/Week/Month/Total earnings and order counts.
 
 **Why dark theme for drivers:** Reduces eye strain at night; visual distinction from client experience.
 **Why accept button 2x wider:** Encourages acceptance.
 **Why 10-second timer:** Creates urgency, prevents orders sitting with unresponsive drivers.
+**Why mandatory decline reason:** 5 non-timeout declines per shift triggers a 2-hour block, so the reason is both accountability and analytics input. Timeouts don't count — the driver may have simply missed the alert.
+**Why inter-district shows the destination up front:** Drivers need to know if the trip crosses into another district before accepting, because time commitment and vehicle readiness differ from a village-internal run.
 
 ## Design System
 - Client: light (#F9FAFB), amber primary (#FBBF24)

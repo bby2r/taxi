@@ -28,23 +28,35 @@ Single table for all roles (client, driver, admin). Phone-first auth — email/p
 1:1 with User (unique `user_id`, cascade delete). Contains car info and real-time location.
 - `car_model`, `car_number` — car_number has no unique constraint (intentional — shared vehicles possible in village context)
 - `is_online`, `latitude`, `longitude`, `location_updated_at` — real-time driver state
+- `shift_declines_count` — non-timeout declines in current shift; reset on go-online
+- `blocked_until` — nullable timestamp; driver cannot receive offers or go-online while in future
 - Composite index on `(is_online, latitude, longitude)` — core dispatch query
 - Coordinates: 7 decimal places (~1cm precision), Bishkek region (lat 42-43, lon 74-75)
-- Scopes: `online()`, `withCoordinates()`
+- Scopes: `online()`, `withCoordinates()`, `notBlocked()`, `withoutActiveOrder()`
+- `computedStatus()` derives: offline | blocked | free | en_route | arrived | in_ride
 
 ## Order
 Core business entity. Tracks the full ride lifecycle.
 - **Status workflow:** Searching -> Accepted -> Arrived -> InProgress -> Completed (or Cancelled)
 - **Pricing:** `price` as unsignedInteger (KGS som, no fractional currency). Locked at creation time.
 - **Pickup:** required (lat/lng + optional address)
-- **Dropoff:** entirely optional — village model where destination is discussed verbally
-- **Driver dispatch:** Sequential offer pattern via `offered_driver_id`, `offered_at`, `declined_drivers` (JSON array)
+- **Dropoff:** optional for in-village orders (destination discussed verbally); used for inter-district orders where the driver needs to see the destination district/address up front
+- **Driver dispatch:** Sequential offer pattern via `offered_driver_id`, `offered_at`, `declined_drivers` (JSON array of IDs for quick exclusion)
 - **Cancellation:** `cancelled_by` (string: client/driver/system), `cancellation_fee` (integer)
 - Scopes: `active()`, `forClient()`, `forDriver()`
 - Methods: `isActive()`, `isCancellable()`, `getDeclinedDriverIds()`
 
 **Why no distance-based pricing:** Village context — all destinations are approximately the same distance.
 **Why dropoff optional:** Pickup-only model. Destination negotiated verbally with driver.
+
+## OrderDecline
+Append-only log of driver decline events. One row per decline.
+- `order_id`, `driver_id` — both cascade-delete
+- `reason` — string matching `App\Enums\DeclineReason` (`too_far`, `wrong_district`, `client_no_answer`, `personal`, `timeout`)
+- `created_at` only (no updated_at — immutable)
+- Indexes on `driver_id` and `order_id` for admin analytics
+
+**Why separate table:** `orders.declined_drivers` stays a simple ID array for fast dispatch exclusion; decline reasons live here to avoid bloating the hot path and to allow per-driver reporting.
 
 ## OtpCode
 Phone verification codes. Not linked to User by FK (supports registration where user doesn't exist yet).

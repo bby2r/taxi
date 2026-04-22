@@ -33,8 +33,18 @@ Key business rules extracted from 40 test files. These are executable specificat
 ## Driver Matching
 - Nearest-first with Haversine distance
 - Declined drivers excluded from subsequent offers
+- Drivers with an Accepted/Arrived/InProgress order excluded from the dispatch pool
+- Drivers with `blocked_until` in the future excluded
 - Empty online pool -> auto-cancel by system
-- 10-second offer timeout -> auto-decline
+- 10-second offer timeout -> auto-decline (reason `timeout`, does not count toward shift block)
+
+## Driver Decline Penalty
+- Driver must pick one of: `too_far`, `wrong_district`, `client_no_answer`, `personal`
+- Each non-timeout decline increments `shift_declines_count`
+- 5 non-timeout declines -> `blocked_until = now + 2h`, driver forced offline
+- `go-online` rejects (HTTP 423) while `blocked_until` is in the future
+- `go-online` resets `shift_declines_count` to 0 (fresh shift)
+- Timeouts and controller validation errors (missing/invalid reason) do not touch the counter
 
 ## Push Notifications
 - Always includes `sound: 'default'`
