@@ -2,6 +2,7 @@
 
 namespace App\Services;
 
+use App\Enums\DeclineReason;
 use App\Enums\OrderStatus;
 use App\Events\OrderAccepted;
 use App\Events\OrderCancelled;
@@ -12,7 +13,9 @@ use App\Events\OrderOfferedToDriver;
 use App\Jobs\OfferTimeoutJob;
 use App\Jobs\SearchDriversJob;
 use App\Models\Order;
+use App\Models\OrderDecline;
 use App\Models\Region;
+use App\Models\Setting;
 use App\Models\User;
 use Illuminate\Support\Facades\DB;
 
@@ -166,9 +169,11 @@ class OrderService
     /**
      * Decline an order and offer it to the next nearest driver.
      */
-    public function declineOrder(Order $order, User $driver): void
+    public function declineOrder(Order $order, User $driver, ?string $reason = null): void
     {
-        DB::transaction(function () use ($order, $driver) {
+        $reason ??= DeclineReason::Personal->value;
+
+        DB::transaction(function () use ($order, $driver, $reason) {
             $order = Order::lockForUpdate()->findOrFail($order->id);
 
             if ($order->status !== OrderStatus::Searching) {
@@ -187,9 +192,45 @@ class OrderService
                 'offered_driver_id' => null,
                 'offered_at' => null,
             ]);
+
+            OrderDecline::create([
+                'order_id' => $order->id,
+                'driver_id' => $driver->id,
+                'reason' => $reason,
+            ]);
+
+            $this->applyDeclinePenalty($driver, $reason);
         });
 
         $this->offerToNextDriver($order->refresh());
+    }
+
+    /**
+     * Increment the driver's shift decline counter and block them
+     * once they hit the configured threshold. Timeouts do not count.
+     */
+    private function applyDeclinePenalty(User $driver, string $reason): void
+    {
+        if ($reason === DeclineReason::Timeout->value) {
+            return;
+        }
+
+        $profile = $driver->driverProfile()->lockForUpdate()->first();
+        if (! $profile) {
+            return;
+        }
+
+        $threshold = (int) Setting::getValue('decline_block_threshold', 5);
+        $blockHours = (int) Setting::getValue('decline_block_hours', 2);
+        $newCount = $profile->shift_declines_count + 1;
+
+        $update = ['shift_declines_count' => $newCount];
+        if ($newCount >= $threshold) {
+            $update['blocked_until'] = now()->addHours($blockHours);
+            $update['is_online'] = false;
+        }
+
+        $profile->update($update);
     }
 
     /**
@@ -366,7 +407,7 @@ class OrderService
 
         $driver = User::find($driverUserId);
         if ($driver) {
-            $this->declineOrder($order, $driver);
+            $this->declineOrder($order, $driver, DeclineReason::Timeout->value);
         }
     }
 }

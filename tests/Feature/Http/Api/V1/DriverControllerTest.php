@@ -128,9 +128,31 @@ class DriverControllerTest extends TestCase
     {
         $order = $this->createOrderOfferedToDriver();
 
-        $response = $this->postJson("/api/v1/driver/orders/{$order->id}/decline");
+        $response = $this->postJson("/api/v1/driver/orders/{$order->id}/decline", [
+            'reason' => 'too_far',
+        ]);
 
         $response->assertOk();
+    }
+
+    public function test_decline_order_requires_reason(): void
+    {
+        $order = $this->createOrderOfferedToDriver();
+
+        $response = $this->postJson("/api/v1/driver/orders/{$order->id}/decline");
+
+        $response->assertStatus(422);
+    }
+
+    public function test_decline_order_rejects_invalid_reason(): void
+    {
+        $order = $this->createOrderOfferedToDriver();
+
+        $response = $this->postJson("/api/v1/driver/orders/{$order->id}/decline", [
+            'reason' => 'bogus',
+        ]);
+
+        $response->assertStatus(422);
     }
 
     public function test_decline_order_triggers_next_offer(): void
@@ -149,7 +171,9 @@ class DriverControllerTest extends TestCase
         $this->assertSame($this->driver->id, $order->offered_driver_id);
 
         // Decline
-        $this->postJson("/api/v1/driver/orders/{$order->id}/decline");
+        $this->postJson("/api/v1/driver/orders/{$order->id}/decline", [
+            'reason' => 'too_far',
+        ]);
 
         $order->refresh();
         // Should now be offered to the far driver

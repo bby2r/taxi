@@ -23,6 +23,9 @@ class UserResource extends JsonResource
                 'car_model' => $this->driverProfile->car_model,
                 'car_number' => $this->driverProfile->car_number,
                 'is_online' => $this->driverProfile->is_online,
+                'status' => $this->driverProfile->computedStatus(),
+                'blocked_until' => $this->driverProfile->blocked_until?->toISOString(),
+                'shift_declines_count' => (int) ($this->driverProfile->shift_declines_count ?? 0),
             ]),
         ];
     }

@@ -51,6 +51,8 @@ class GeoService
 
         $drivers = DriverProfile::online()
             ->withCoordinates()
+            ->notBlocked()
+            ->withoutActiveOrder()
             ->when(count($excludeIds) > 0, fn ($q) => $q->whereNotIn('user_id', $excludeIds))
             ->get();
 

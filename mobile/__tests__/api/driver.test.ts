@@ -111,10 +111,12 @@ describe('acceptOrder', () => {
 });
 
 describe('declineOrder', () => {
-  it('calls correct endpoint', async () => {
+  it('calls correct endpoint with reason', async () => {
     mockedClient.post.mockResolvedValue({ data: null });
-    await declineOrder(5);
-    expect(mockedClient.post).toHaveBeenCalledWith('/api/v1/driver/orders/5/decline');
+    await declineOrder(5, 'too_far');
+    expect(mockedClient.post).toHaveBeenCalledWith('/api/v1/driver/orders/5/decline', {
+      reason: 'too_far',
+    });
   });
 });
 

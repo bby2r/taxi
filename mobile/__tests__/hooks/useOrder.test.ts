@@ -38,9 +38,15 @@ function makeOrder(overrides: Partial<Order> = {}): Order {
     pickup_address: null,
     pickup_latitude: 42.87,
     pickup_longitude: 74.59,
+    dropoff_address: null,
+    dropoff_latitude: null,
+    dropoff_longitude: null,
+    is_inter_district: false,
+    region: null,
     driver: null,
     created_at: '2026-04-07T10:00:00Z',
     accepted_at: null,
+    cancelled_by: null,
     ...overrides,
   };
 }

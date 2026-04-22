@@ -4,18 +4,26 @@ import {
   Text,
   TouchableOpacity,
   Animated,
+  Modal,
   StyleSheet,
 } from 'react-native';
-import { Order } from '../api/types';
+import { Order, DeclineReason } from '../api/types';
 import { DriverColors } from '../theme/colors';
 import { Typography } from '../theme/typography';
 
 interface OrderOfferCardProps {
   order: Order;
   onAccept: () => void;
-  onDecline: () => void;
+  onDecline: (reason: DeclineReason) => void;
   countdownSeconds?: number;
 }
+
+const REASON_OPTIONS: { value: DeclineReason; label: string }[] = [
+  { value: 'too_far', label: 'Слишком далеко' },
+  { value: 'wrong_district', label: 'Не мой район' },
+  { value: 'client_no_answer', label: 'Клиент не отвечает' },
+  { value: 'personal', label: 'Личная причина' },
+];
 
 export default function OrderOfferCard({
   order,
@@ -24,6 +32,7 @@ export default function OrderOfferCard({
   countdownSeconds = 10,
 }: OrderOfferCardProps): React.ReactNode {
   const [remaining, setRemaining] = useState(countdownSeconds);
+  const [reasonSheetOpen, setReasonSheetOpen] = useState(false);
   const opacityAnim = useRef(new Animated.Value(1)).current;
   const declineCalledRef = useRef(false);
 
@@ -34,7 +43,9 @@ export default function OrderOfferCard({
           clearInterval(interval);
           if (!declineCalledRef.current) {
             declineCalledRef.current = true;
-            onDecline();
+            // Auto-timeout uses a personal reason on the client;
+            // server-side timeouts are handled separately and excluded from penalty.
+            onDecline('personal');
           }
           return 0;
         }
@@ -49,18 +60,53 @@ export default function OrderOfferCard({
     opacityAnim.setValue(remaining / countdownSeconds);
   }, [remaining, countdownSeconds, opacityAnim]);
 
+  const handlePickReason = (reason: DeclineReason): void => {
+    if (declineCalledRef.current) {
+      return;
+    }
+    declineCalledRef.current = true;
+    setReasonSheetOpen(false);
+    onDecline(reason);
+  };
+
   return (
     <View style={styles.card}>
       <Animated.View style={[styles.countdownCircle, { opacity: opacityAnim }]}>
         <Text style={[Typography.h2, { color: DriverColors.primary }]}>{remaining}</Text>
       </Animated.View>
 
+      <View style={styles.badgeRow}>
+        <View
+          style={[
+            styles.badge,
+            order.is_inter_district ? styles.badgeRegional : styles.badgeVillage,
+          ]}
+        >
+          <Text style={[Typography.caption, styles.badgeText]}>
+            {order.is_inter_district
+              ? `Межрайон${order.region ? ` · ${order.region.name}` : ''}`
+              : 'В селе'}
+          </Text>
+        </View>
+      </View>
+
       <Text style={[Typography.caption, { color: DriverColors.textMuted, marginBottom: 4 }]}>
         Адрес подачи
       </Text>
-      <Text style={[Typography.body, { color: DriverColors.textPrimary, marginBottom: 16 }]}>
+      <Text style={[Typography.body, { color: DriverColors.textPrimary, marginBottom: 12 }]}>
         {order.pickup_address || 'Геолокация клиента'}
       </Text>
+
+      {order.is_inter_district && (
+        <>
+          <Text style={[Typography.caption, { color: DriverColors.textMuted, marginBottom: 4 }]}>
+            Куда
+          </Text>
+          <Text style={[Typography.body, { color: DriverColors.textPrimary, marginBottom: 12 }]}>
+            {order.dropoff_address || order.region?.name || '—'}
+          </Text>
+        </>
+      )}
 
       <Text style={[Typography.h1, { color: DriverColors.primary, marginBottom: 20 }]}>
         {order.price} сом
@@ -76,12 +122,52 @@ export default function OrderOfferCard({
         </TouchableOpacity>
         <TouchableOpacity
           style={[styles.button, styles.declineButton]}
-          onPress={onDecline}
+          onPress={() => setReasonSheetOpen(true)}
           activeOpacity={0.8}
         >
-          <Text style={[Typography.button, { color: DriverColors.textSecondary }]}>Пропустить</Text>
+          <Text style={[Typography.button, { color: DriverColors.textSecondary }]}>
+            Отказаться
+          </Text>
         </TouchableOpacity>
       </View>
+
+      <Modal
+        visible={reasonSheetOpen}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setReasonSheetOpen(false)}
+      >
+        <TouchableOpacity
+          style={styles.sheetBackdrop}
+          activeOpacity={1}
+          onPress={() => setReasonSheetOpen(false)}
+        >
+          <TouchableOpacity activeOpacity={1} style={styles.sheet}>
+            <Text style={[Typography.h3, styles.sheetTitle]}>Причина отказа</Text>
+            {REASON_OPTIONS.map((opt) => (
+              <TouchableOpacity
+                key={opt.value}
+                style={styles.sheetItem}
+                onPress={() => handlePickReason(opt.value)}
+                activeOpacity={0.7}
+              >
+                <Text style={[Typography.body, { color: DriverColors.textPrimary }]}>
+                  {opt.label}
+                </Text>
+              </TouchableOpacity>
+            ))}
+            <TouchableOpacity
+              style={styles.sheetCancel}
+              onPress={() => setReasonSheetOpen(false)}
+              activeOpacity={0.7}
+            >
+              <Text style={[Typography.button, { color: DriverColors.textMuted }]}>
+                Отмена
+              </Text>
+            </TouchableOpacity>
+          </TouchableOpacity>
+        </TouchableOpacity>
+      </Modal>
     </View>
   );
 }
@@ -105,6 +191,25 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
   },
+  badgeRow: {
+    flexDirection: 'row',
+    marginBottom: 12,
+  },
+  badge: {
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 8,
+  },
+  badgeVillage: {
+    backgroundColor: `${DriverColors.primary}22`,
+  },
+  badgeRegional: {
+    backgroundColor: `${DriverColors.success}22`,
+  },
+  badgeText: {
+    color: DriverColors.textPrimary,
+    fontWeight: '600',
+  },
   buttonRow: {
     flexDirection: 'row',
     gap: 10,
@@ -123,5 +228,32 @@ const styles = StyleSheet.create({
     flex: 1,
     borderWidth: 1,
     borderColor: DriverColors.border,
+  },
+  sheetBackdrop: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.45)',
+    justifyContent: 'flex-end',
+  },
+  sheet: {
+    backgroundColor: DriverColors.background,
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
+    paddingHorizontal: 20,
+    paddingTop: 20,
+    paddingBottom: 34,
+  },
+  sheetTitle: {
+    color: DriverColors.textPrimary,
+    marginBottom: 12,
+  },
+  sheetItem: {
+    paddingVertical: 14,
+    borderBottomWidth: 1,
+    borderBottomColor: DriverColors.border,
+  },
+  sheetCancel: {
+    marginTop: 16,
+    alignItems: 'center',
+    paddingVertical: 12,
   },
 });

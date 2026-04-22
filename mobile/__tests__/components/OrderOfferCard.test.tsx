@@ -11,9 +11,15 @@ function makeOrder(overrides: Partial<Order> = {}): Order {
     pickup_address: 'ул. Ленина 42',
     pickup_latitude: 42.87,
     pickup_longitude: 74.59,
+    dropoff_address: null,
+    dropoff_latitude: null,
+    dropoff_longitude: null,
+    is_inter_district: false,
+    region: null,
     driver: null,
     created_at: '2026-04-07T10:00:00Z',
     accepted_at: null,
+    cancelled_by: null,
     ...overrides,
   };
 }
@@ -92,7 +98,7 @@ describe('OrderOfferCard', () => {
     expect(onAccept).toHaveBeenCalledTimes(1);
   });
 
-  it('calls onDecline when decline button pressed', () => {
+  it('opens reason sheet and calls onDecline with selected reason', () => {
     const onDecline = jest.fn();
     const { getByText } = render(
       <OrderOfferCard
@@ -101,7 +107,9 @@ describe('OrderOfferCard', () => {
         onDecline={onDecline}
       />
     );
-    fireEvent.press(getByText('Пропустить'));
+    fireEvent.press(getByText('Отказаться'));
+    fireEvent.press(getByText('Слишком далеко'));
     expect(onDecline).toHaveBeenCalledTimes(1);
+    expect(onDecline).toHaveBeenCalledWith('too_far');
   });
 });

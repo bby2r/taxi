@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
-import { Order } from '../api/types';
+import { Order, DeclineReason } from '../api/types';
 import {
   goOnline,
   goOffline,
@@ -58,7 +58,7 @@ interface UseDriverOrderReturn {
   isOnline: boolean;
   toggleOnline: (latitude: number, longitude: number) => Promise<void>;
   acceptOffer: () => Promise<void>;
-  declineOffer: () => Promise<void>;
+  declineOffer: (reason: DeclineReason) => Promise<void>;
   markArrived: () => Promise<void>;
   markCompleted: () => Promise<void>;
   dismissCompleted: () => void;
@@ -192,13 +192,13 @@ export function useDriverOrder(): UseDriverOrderReturn {
     }
   }, []);
 
-  const declineOffer = useCallback(async (): Promise<void> => {
+  const declineOffer = useCallback(async (reason: DeclineReason): Promise<void> => {
     const current = stateRef.current;
     if (current.phase !== 'offer') return;
     setError(null);
     setLoading(true);
     try {
-      await declineOrder(current.order.id);
+      await declineOrder(current.order.id, reason);
       setState({ phase: 'online_idle', order: null });
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : 'Ошибка при отклонении заказа';

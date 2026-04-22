@@ -44,9 +44,15 @@ function makeOrder(overrides: Partial<Order> = {}): Order {
     pickup_address: 'ул. Ленина 42',
     pickup_latitude: 42.87,
     pickup_longitude: 74.59,
+    dropoff_address: null,
+    dropoff_latitude: null,
+    dropoff_longitude: null,
+    is_inter_district: false,
+    region: null,
     driver: null,
     created_at: '2026-04-07T10:00:00Z',
     accepted_at: null,
+    cancelled_by: null,
     ...overrides,
   };
 }
@@ -184,10 +190,10 @@ describe('useDriverOrder', () => {
     expect(result.current.state.phase).toBe('offer');
 
     await act(async () => {
-      await result.current.declineOffer();
+      await result.current.declineOffer('too_far');
     });
 
-    expect(mockedDeclineOrder).toHaveBeenCalledWith(10);
+    expect(mockedDeclineOrder).toHaveBeenCalledWith(10, 'too_far');
     expect(result.current.state.phase).toBe('online_idle');
   });
 

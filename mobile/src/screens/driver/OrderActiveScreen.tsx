@@ -117,6 +117,22 @@ function EnRouteCard({
         {order.pickup_address || 'Геолокация клиента'}
       </Text>
 
+      {order.is_inter_district && (
+        <>
+          <Text
+            style={[Typography.caption, { color: DriverColors.textMuted, marginTop: 12 }]}
+          >
+            Куда
+          </Text>
+          <Text
+            style={[Typography.bodyBold, { color: DriverColors.textPrimary, marginTop: 4 }]}
+            numberOfLines={2}
+          >
+            {order.dropoff_address || order.region?.name || '—'}
+          </Text>
+        </>
+      )}
+
       <TouchableOpacity
         onPress={() => openNavigation(order.pickup_latitude, order.pickup_longitude)}
         style={styles.navigationLink}
@@ -247,16 +263,30 @@ export default function OrderActiveScreen(): React.ReactNode {
     ? { latitude: order.pickup_latitude, longitude: order.pickup_longitude }
     : null;
 
-  // Only fetch a route while driver is en-route to pickup
+  const dropoffPoint =
+    order && order.dropoff_latitude !== null && order.dropoff_longitude !== null
+      ? { latitude: order.dropoff_latitude, longitude: order.dropoff_longitude }
+      : null;
+
+  // Route to pickup while en-route; route to dropoff once ride is in progress.
   const shouldRouteToPickup = state.phase === 'active';
+  const shouldRouteToDropoff =
+    order?.status === 'in_progress' && dropoffPoint !== null;
+  const routeOrigin = shouldRouteToPickup
+    ? driverPoint
+    : shouldRouteToDropoff
+      ? driverPoint
+      : null;
+  const routeDestination = shouldRouteToPickup
+    ? pickupPoint
+    : shouldRouteToDropoff
+      ? dropoffPoint
+      : null;
   const {
     route,
     loading: routeLoading,
     error: routeError,
-  } = useNavigationRoute(
-    shouldRouteToPickup ? driverPoint : null,
-    shouldRouteToPickup ? pickupPoint : null,
-  );
+  } = useNavigationRoute(routeOrigin, routeDestination);
 
   // Fit map to route bounds (or pickup + driver, or pickup alone)
   useEffect(() => {
@@ -311,6 +341,14 @@ export default function OrderActiveScreen(): React.ReactNode {
           title={order.pickup_address || 'Клиент'}
           pinColor={DriverColors.primary}
         />
+        {dropoffPoint && (
+          <Marker
+            coordinate={dropoffPoint}
+            title={order.dropoff_address || order.region?.name || 'Пункт Б'}
+            pinColor={DriverColors.success}
+            testID="dropoff-marker"
+          />
+        )}
         {driverPoint && state.phase === 'active' && (
           <Marker
             coordinate={driverPoint}

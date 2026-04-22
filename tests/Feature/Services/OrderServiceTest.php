@@ -415,6 +415,84 @@ class OrderServiceTest extends TestCase
     }
 
     // ──────────────────────────────────────────────────────────────
+    // Decline penalty / blocking
+    // ──────────────────────────────────────────────────────────────
+
+    public function test_decline_increments_shift_counter(): void
+    {
+        [$order, $driverUser] = $this->createOrderOfferedToDriver();
+
+        $this->service->declineOrder($order, $driverUser, 'too_far');
+
+        $this->assertSame(1, $driverUser->driverProfile->fresh()->shift_declines_count);
+    }
+
+    public function test_timeout_decline_does_not_count_toward_block(): void
+    {
+        [$order, $driverUser] = $this->createOrderOfferedToDriver();
+
+        $this->service->declineOrder($order, $driverUser, 'timeout');
+
+        $this->assertSame(0, $driverUser->driverProfile->fresh()->shift_declines_count);
+    }
+
+    public function test_fifth_decline_blocks_driver_for_two_hours(): void
+    {
+        [$driverUser] = $this->createNearbyDriver();
+        $driverUser->driverProfile->update(['shift_declines_count' => 4]);
+
+        $order = $this->service->createOrder($this->client, $this->pickupLat, $this->pickupLon);
+        $this->service->declineOrder($order, $driverUser, 'too_far');
+
+        $profile = $driverUser->driverProfile->fresh();
+        $this->assertNotNull($profile->blocked_until);
+        $this->assertTrue($profile->blocked_until->greaterThan(now()->addMinutes(115)));
+        $this->assertTrue($profile->blocked_until->lessThan(now()->addMinutes(125)));
+        $this->assertFalse($profile->is_online);
+    }
+
+    public function test_blocked_driver_is_excluded_from_offers(): void
+    {
+        [$blockedDriver] = $this->createNearbyDriver();
+        $blockedDriver->driverProfile->update(['blocked_until' => now()->addHour()]);
+
+        $fallbackDriver = User::factory()->driver()->create();
+        DriverProfile::factory()
+            ->for($fallbackDriver)
+            ->online()
+            ->atLocation($this->pickupLat + 0.01, $this->pickupLon + 0.01)
+            ->create();
+
+        $order = $this->service->createOrder($this->client, $this->pickupLat, $this->pickupLon);
+
+        $this->assertSame($fallbackDriver->id, $order->offered_driver_id);
+    }
+
+    public function test_driver_with_active_order_is_excluded_from_offers(): void
+    {
+        [$busyDriver] = $this->createNearbyDriver();
+
+        // Give the nearer driver an in-progress order
+        Order::factory()->create([
+            'client_id' => $this->client->id,
+            'driver_id' => $busyDriver->id,
+            'status' => OrderStatus::InProgress,
+        ]);
+
+        $freeDriver = User::factory()->driver()->create();
+        DriverProfile::factory()
+            ->for($freeDriver)
+            ->online()
+            ->atLocation($this->pickupLat + 0.01, $this->pickupLon + 0.01)
+            ->create();
+
+        $otherClient = User::factory()->create(['role' => UserRole::Client]);
+        $order = $this->service->createOrder($otherClient, $this->pickupLat, $this->pickupLon);
+
+        $this->assertSame($freeDriver->id, $order->offered_driver_id);
+    }
+
+    // ──────────────────────────────────────────────────────────────
     // Helpers
     // ──────────────────────────────────────────────────────────────
 

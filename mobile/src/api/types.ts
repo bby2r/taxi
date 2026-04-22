@@ -15,6 +15,12 @@ export interface Driver {
   longitude: number;
 }
 
+export type DeclineReason =
+  | 'too_far'
+  | 'wrong_district'
+  | 'client_no_answer'
+  | 'personal';
+
 export interface Order {
   id: number;
   status: OrderStatus;
@@ -22,6 +28,11 @@ export interface Order {
   pickup_address: string | null;
   pickup_latitude: number;
   pickup_longitude: number;
+  dropoff_address: string | null;
+  dropoff_latitude: number | null;
+  dropoff_longitude: number | null;
+  is_inter_district: boolean;
+  region: { id: number; name: string } | null;
   driver: Driver | null;
   created_at: string;
   accepted_at: string | null;

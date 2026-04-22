@@ -1,5 +1,5 @@
 import apiClient from './client';
-import { Order, DriverStats } from './types';
+import { Order, DriverStats, DeclineReason } from './types';
 
 export async function goOnline(latitude: number, longitude: number): Promise<void> {
   await apiClient.post('/api/v1/driver/go-online', { latitude, longitude });
@@ -26,8 +26,8 @@ export async function acceptOrder(orderId: number): Promise<Order> {
   return data.data;
 }
 
-export async function declineOrder(orderId: number): Promise<void> {
-  await apiClient.post(`/api/v1/driver/orders/${orderId}/decline`);
+export async function declineOrder(orderId: number, reason: DeclineReason): Promise<void> {
+  await apiClient.post(`/api/v1/driver/orders/${orderId}/decline`, { reason });
 }
 
 export async function arriveAtPickup(orderId: number): Promise<Order> {

@@ -61,9 +61,15 @@ const mockOrder: Order = {
   pickup_address: 'ул. Ленина 5',
   pickup_latitude: 42.87,
   pickup_longitude: 74.59,
+  dropoff_address: null,
+  dropoff_latitude: null,
+  dropoff_longitude: null,
+  is_inter_district: false,
+  region: null,
   driver: null,
   created_at: '2026-04-07T10:00:00Z',
   accepted_at: '2026-04-07T10:01:00Z',
+  cancelled_by: null,
 };
 
 const baseHookReturn: ReturnType<typeof useDriverOrder> = {

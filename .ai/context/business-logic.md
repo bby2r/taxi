@@ -47,16 +47,33 @@ Flat-rate pricing — intentionally simple for a village where all destinations 
 
 ## Driver Matching Algorithm
 Sequential nearest-driver offer (not broadcast):
-1. `GeoService::findNearestDrivers()` — loads all online drivers with coordinates, excludes declined
+1. `GeoService::findNearestDrivers()` — loads all online drivers with coordinates, excludes declined, blocked, and drivers with an active order (Accepted/Arrived/InProgress)
 2. Haversine distance in PHP (not SQL), sorts by distance, takes closest
 3. Offers to that driver, dispatches `OfferTimeoutJob` (10-second delay)
 4. If no response in 10s, auto-decline and re-offer to next
 5. If no drivers left, auto-cancel order
 
-**Max radius:** Confirmed needed — configurable radius setting to limit driver search area.
+**Max radius:** Configurable `max_search_radius_km` setting (default 10 km).
 **In-memory calculation** — acceptable for small village driver pool.
 
 > Source: `app/Services/GeoService.php`, `app/Services/OrderService.php`, `app/Jobs/OfferTimeoutJob.php`
+
+## Driver Decline Rules
+Drivers must select a reason when declining an offer; timeouts are tracked separately and do not count toward the block threshold.
+
+- Reasons (enum `App\Enums\DeclineReason`): `too_far`, `wrong_district`, `client_no_answer`, `personal`. Server-side timeouts use `timeout` and are excluded from the penalty counter.
+- Each decline is logged in `order_declines` (`order_id`, `driver_id`, `reason`, `created_at`).
+- `driver_profiles.shift_declines_count` is incremented on every non-timeout decline and reset to 0 on `goOnline` (new shift).
+- When the counter reaches `decline_block_threshold` (default 5), `blocked_until` is set to now + `decline_block_hours` (default 2) and the driver is forced offline.
+- `goOnline` is rejected with HTTP 423 while `blocked_until` is still in the future.
+- `DriverProfile::scopeNotBlocked` + `scopeWithoutActiveOrder` enforce exclusion during dispatch.
+
+> Source: `app/Services/OrderService.php::declineOrder`, `app/Models/DriverProfile.php`, migrations in `database/migrations/`
+
+## Driver Operational Status
+`DriverProfile::computedStatus()` derives a single status string used by UI/admin:
+`offline | blocked | free | en_route | arrived | in_ride`.
+Computed from `is_online`, `blocked_until`, and the driver's active order status.
 
 ## OTP / Phone Verification
 - 4-digit code, 5-minute TTL, sent via Nikita SMS

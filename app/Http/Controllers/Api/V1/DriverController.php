@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers\Api\V1;
 
+use App\Enums\DeclineReason;
 use App\Enums\OrderStatus;
 use App\Events\DriverLocationUpdated;
 use App\Http\Controllers\Controller;
@@ -31,11 +32,19 @@ class DriverController extends Controller
             return response()->json(['message' => 'Driver profile not found.'], 404);
         }
 
+        if ($profile->isBlocked()) {
+            return response()->json([
+                'message' => 'Driver is temporarily blocked from accepting orders.',
+                'blocked_until' => $profile->blocked_until?->toISOString(),
+            ], 423);
+        }
+
         $profile->update([
             'is_online' => true,
             'latitude' => $request->validated('latitude'),
             'longitude' => $request->validated('longitude'),
             'location_updated_at' => now(),
+            'shift_declines_count' => 0,
         ]);
 
         $request->user()->load('driverProfile');
@@ -115,7 +124,11 @@ class DriverController extends Controller
      */
     public function declineOrder(Request $request, Order $order): JsonResponse
     {
-        $this->orderService->declineOrder($order, $request->user());
+        $validated = $request->validate([
+            'reason' => ['required', 'string', 'in:'.implode(',', DeclineReason::selectable())],
+        ]);
+
+        $this->orderService->declineOrder($order, $request->user(), $validated['reason']);
 
         return response()->json(['message' => 'Order declined.']);
     }

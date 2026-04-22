@@ -28,9 +28,15 @@ function makeOrder(overrides: Partial<Order> = {}): Order {
     pickup_address: 'ул. Киевская 123',
     pickup_latitude: 42.87,
     pickup_longitude: 74.59,
+    dropoff_address: null,
+    dropoff_latitude: null,
+    dropoff_longitude: null,
+    is_inter_district: false,
+    region: null,
     driver: null,
     created_at: '2026-03-15T14:30:00Z',
     accepted_at: null,
+    cancelled_by: null,
     ...overrides,
   };
 }
