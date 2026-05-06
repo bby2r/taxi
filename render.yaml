@@ -1,0 +1,83 @@
+databases:
+  - name: taxi-db
+    plan: free
+    databaseName: taxi
+    user: taxi
+
+services:
+  - type: web
+    name: taxi-api
+    runtime: docker
+    plan: free
+    dockerfilePath: ./Dockerfile
+    healthCheckPath: /up
+    autoDeploy: true
+    envVars:
+      - key: APP_NAME
+        value: VillageTaxi
+      - key: APP_ENV
+        value: production
+      - key: APP_DEBUG
+        value: "false"
+      - key: APP_KEY
+        generateValue: true
+      - key: APP_URL
+        sync: false
+      - key: LOG_CHANNEL
+        value: stderr
+      - key: LOG_STACK
+        value: single
+      - key: LOG_LEVEL
+        value: info
+      - key: DB_CONNECTION
+        value: pgsql
+      - key: DB_HOST
+        fromDatabase:
+          name: taxi-db
+          property: host
+      - key: DB_PORT
+        fromDatabase:
+          name: taxi-db
+          property: port
+      - key: DB_DATABASE
+        fromDatabase:
+          name: taxi-db
+          property: database
+      - key: DB_USERNAME
+        fromDatabase:
+          name: taxi-db
+          property: user
+      - key: DB_PASSWORD
+        fromDatabase:
+          name: taxi-db
+          property: password
+      - key: SESSION_DRIVER
+        value: database
+      - key: CACHE_STORE
+        value: database
+      - key: QUEUE_CONNECTION
+        value: database
+      - key: BROADCAST_CONNECTION
+        value: pusher
+      - key: PUSHER_APP_ID
+        sync: false
+      - key: PUSHER_APP_KEY
+        sync: false
+      - key: PUSHER_APP_SECRET
+        sync: false
+      - key: PUSHER_APP_CLUSTER
+        value: ap1
+      - key: NIKITA_LOGIN
+        sync: false
+      - key: NIKITA_PASSWORD
+        sync: false
+      - key: NIKITA_SENDER
+        sync: false
+      - key: NIKITA_ENABLED
+        value: "false"
+      - key: ADMIN_NAME
+        sync: false
+      - key: ADMIN_PHONE
+        sync: false
+      - key: ADMIN_PASSWORD
+        sync: false
