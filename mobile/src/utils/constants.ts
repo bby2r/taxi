@@ -1,7 +1,7 @@
 export const API_BASE_URL = __DEV__
   // ? 'http://192.168.0.114:8000'
-  ? 'https://glottal-brigid-oversensibly.ngrok-free.dev'
-  : 'https://glottal-brigid-oversensibly.ngrok-free.dev';
+  ? 'https://taxi-l1jn.onrender.com'
+  : 'https://taxi-l1jn.onrender.com';
 
 export const PUSHER_KEY = '0d48c79a3cabdd93025a';
 export const PUSHER_CLUSTER = 'ap1';
