@@ -113,11 +113,19 @@ class OrderService
 
         $driverUser = User::find($driver->user_id);
         if ($driverUser) {
-            $this->pushService->sendToUser(
+            $body = $order->pickup_address
+                ? "Подача: {$order->pickup_address} · {$order->price} сом"
+                : "Новый заказ · {$order->price} сом";
+
+            $this->pushService->sendOfferToDriver(
                 $driverUser,
-                'New ride request',
-                "A client is looking for a ride from {$order->pickup_address}",
-                ['order_id' => $order->id, 'type' => 'new_order'],
+                'Новый заказ',
+                $body,
+                [
+                    'order_id' => $order->id,
+                    'type' => 'new_order',
+                    'expires_in' => $timeout,
+                ],
             );
         }
     }

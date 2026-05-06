@@ -1,5 +1,6 @@
-import { useEffect } from 'react';
+import { useEffect, useRef } from 'react';
 import { Platform } from 'react-native';
+import { useNavigation } from '@react-navigation/native';
 import { registerPushToken } from '../api/auth';
 import { useAuth } from '../context/AuthContext';
 
@@ -18,14 +19,46 @@ if (Platform.OS !== 'web') {
   });
 }
 
+const DRIVER_OFFER_CHANNEL = 'driver_offers';
+
+async function configureAndroidChannel(): Promise<void> {
+  if (!Notifications || Platform.OS !== 'android') {
+    return;
+  }
+  await Notifications.setNotificationChannelAsync(DRIVER_OFFER_CHANNEL, {
+    name: 'Новые заказы',
+    description: 'Уведомления о новых заказах для водителей',
+    importance: Notifications.AndroidImportance.MAX,
+    // To use a branded sound: drop a .wav into mobile/assets/sounds/,
+    // re-enable the `sounds` array in app.json's expo-notifications plugin,
+    // and replace 'default' below with the file name (e.g. 'order_arrived').
+    sound: 'default',
+    vibrationPattern: [0, 400, 250, 400, 250, 400],
+    lightColor: '#FBBF24',
+    bypassDnd: true,
+    lockscreenVisibility: Notifications.AndroidNotificationVisibility.PUBLIC,
+    enableLights: true,
+    enableVibrate: true,
+    showBadge: false,
+  });
+}
+
 export function useNotifications(): void {
-  const { isAuthenticated } = useAuth();
+  const { isAuthenticated, user } = useAuth();
+  const navigation = useNavigation<any>();
+  const navRef = useRef(navigation);
+  navRef.current = navigation;
 
   useEffect(() => {
     if (!isAuthenticated || Platform.OS === 'web' || !Notifications) return;
 
+    let foregroundSub: ReturnType<typeof Notifications.addNotificationReceivedListener> | null = null;
+    let responseSub: ReturnType<typeof Notifications.addNotificationResponseReceivedListener> | null = null;
+
     (async () => {
       try {
+        await configureAndroidChannel();
+
         const { status } = await Notifications!.requestPermissionsAsync();
         if (status !== 'granted') return;
 
@@ -37,5 +70,34 @@ export function useNotifications(): void {
         // Push notifications not available — ignore
       }
     })();
-  }, [isAuthenticated]);
+
+    // When the user taps a notification (typically from a locked / backgrounded
+    // device), if it's a new-order push for a driver, route them to the home
+    // screen so useDriverOrder can pick the offer up via Pusher / polling and
+    // show the OrderOfferCard with its 10-second countdown.
+    if (Notifications) {
+      responseSub = Notifications.addNotificationResponseReceivedListener((response) => {
+        const data = response.notification.request.content.data as { type?: string } | undefined;
+        if (data?.type === 'new_order' && user?.role === 'driver') {
+          try {
+            navRef.current.navigate('DriverTabs', { screen: 'DriverHome' });
+          } catch {
+            // Navigation tree may not be ready yet — useDriverOrder will catch it
+          }
+        }
+      });
+
+      // Foreground listener — Expo's notification handler already shows the
+      // banner/sound, but we keep the subscription for diagnostics and so the
+      // OS doesn't deliver it as silent.
+      foregroundSub = Notifications.addNotificationReceivedListener(() => {
+        // No-op: handler config above takes care of presentation.
+      });
+    }
+
+    return () => {
+      foregroundSub?.remove();
+      responseSub?.remove();
+    };
+  }, [isAuthenticated, user?.role]);
 }

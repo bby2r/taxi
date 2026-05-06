@@ -14,14 +14,33 @@ class ExpoPushService
      * Send a push notification to a single user.
      *
      * @param  array<string, mixed>  $data
+     * @param  array<string, mixed>  $options  Override sound / priority / channelId / ttl etc.
      */
-    public function sendToUser(User $user, string $title, string $body, array $data = []): bool
+    public function sendToUser(User $user, string $title, string $body, array $data = [], array $options = []): bool
     {
         if (! $user->expo_push_token) {
             return false;
         }
 
-        return $this->send($user->expo_push_token, $title, $body, $data);
+        return $this->send($user->expo_push_token, $title, $body, $data, $options);
+    }
+
+    /**
+     * Send a high-priority offer notification to a driver. Uses the
+     * `driver_offers` Android channel and a custom sound so the device wakes
+     * even when the app is backgrounded or the screen is locked.
+     *
+     * @param  array<string, mixed>  $data
+     */
+    public function sendOfferToDriver(User $driver, string $title, string $body, array $data = []): bool
+    {
+        return $this->sendToUser($driver, $title, $body, $data, [
+            'sound' => 'order_arrived',
+            'priority' => 'high',
+            'channelId' => 'driver_offers',
+            'ttl' => 30,
+            '_displayInForeground' => true,
+        ]);
     }
 
     /**
@@ -92,17 +111,20 @@ class ExpoPushService
      * Send a single push notification via the Expo Push API.
      *
      * @param  array<string, mixed>  $data
+     * @param  array<string, mixed>  $options  Override sound / priority / channelId / ttl etc.
      */
-    private function send(string $token, string $title, string $body, array $data = []): bool
+    private function send(string $token, string $title, string $body, array $data = [], array $options = []): bool
     {
         try {
-            $response = Http::acceptJson()->post(self::EXPO_PUSH_URL, [[
+            $payload = array_merge([
                 'to' => $token,
                 'title' => $title,
                 'body' => $body,
                 'data' => $data,
                 'sound' => 'default',
-            ]]);
+            ], $options);
+
+            $response = Http::acceptJson()->post(self::EXPO_PUSH_URL, [$payload]);
 
             if ($response->failed()) {
                 Log::error('Expo push notification request failed.', [

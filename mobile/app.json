@@ -64,7 +64,12 @@
           "isAndroidForegroundServiceEnabled": true
         }
       ],
-      "expo-notifications",
+      [
+        "expo-notifications",
+        {
+          "color": "#FBBF24"
+        }
+      ],
       "expo-secure-store"
     ],
     "owner": "bby2r"
