@@ -2,7 +2,9 @@
 
 namespace Tests\Feature\Services;
 
+use App\Enums\OrderStatus;
 use App\Models\DriverProfile;
+use App\Models\Order;
 use App\Models\Setting;
 use App\Services\GeoService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -205,5 +207,120 @@ class GeoServiceTest extends TestCase
         $result = $this->service->findNearestDrivers($pickup[0], $pickup[1], [], 10, 20.0);
 
         $this->assertCount(1, $result);
+    }
+
+    // ──────────────────────────────────────────────────────────────
+    // Pre-assign next order (driver in InProgress, near dropoff)
+    // ──────────────────────────────────────────────────────────────
+
+    #[Test]
+    public function test_find_nearest_drivers_excludes_driver_with_active_order_when_far_from_dropoff(): void
+    {
+        // Pre-assign threshold of 1.5 km, driver is 5 km from their dropoff
+        Setting::updateOrCreate(['key' => 'pre_assign_distance_km'], ['value' => '1.5']);
+
+        $pickup = [42.8746, 74.5698];
+
+        $profile = DriverProfile::factory()->atLocation(42.8746, 74.5750)->create();
+        Order::factory()->create([
+            'driver_id' => $profile->user_id,
+            'status' => OrderStatus::InProgress,
+            'dropoff_latitude' => 42.9200, // ~5 km north
+            'dropoff_longitude' => 74.5750,
+            'in_progress_at' => now(),
+        ]);
+
+        $result = $this->service->findNearestDrivers($pickup[0], $pickup[1], [], 10, 999.0);
+
+        $this->assertCount(0, $result);
+    }
+
+    #[Test]
+    public function test_find_nearest_drivers_includes_in_progress_driver_within_pre_assign_distance(): void
+    {
+        Setting::updateOrCreate(['key' => 'pre_assign_distance_km'], ['value' => '1.5']);
+
+        $pickup = [42.8746, 74.5698];
+
+        // Driver currently at (42.8746, 74.5750), dropoff is ~150m away
+        $profile = DriverProfile::factory()->atLocation(42.8746, 74.5750)->create();
+        Order::factory()->create([
+            'driver_id' => $profile->user_id,
+            'status' => OrderStatus::InProgress,
+            'dropoff_latitude' => 42.8747,
+            'dropoff_longitude' => 74.5760, // ~80m away
+            'in_progress_at' => now(),
+        ]);
+
+        $result = $this->service->findNearestDrivers($pickup[0], $pickup[1], [], 10, 999.0);
+
+        $this->assertCount(1, $result);
+        $this->assertSame($profile->user_id, $result->first()->user_id);
+    }
+
+    #[Test]
+    public function test_find_nearest_drivers_excludes_driver_in_accepted_status_even_if_close_to_dropoff(): void
+    {
+        // Pre-assign only applies to InProgress (driver is en-route to dropoff).
+        // A driver in Accepted hasn't even picked up yet — must not get a second order.
+        Setting::updateOrCreate(['key' => 'pre_assign_distance_km'], ['value' => '1.5']);
+
+        $pickup = [42.8746, 74.5698];
+
+        $profile = DriverProfile::factory()->atLocation(42.8746, 74.5750)->create();
+        Order::factory()->create([
+            'driver_id' => $profile->user_id,
+            'status' => OrderStatus::Accepted,
+            'dropoff_latitude' => 42.8747,
+            'dropoff_longitude' => 74.5760,
+            'accepted_at' => now(),
+        ]);
+
+        $result = $this->service->findNearestDrivers($pickup[0], $pickup[1], [], 10, 999.0);
+
+        $this->assertCount(0, $result);
+    }
+
+    #[Test]
+    public function test_pre_assign_disabled_excludes_in_progress_driver_even_if_close(): void
+    {
+        Setting::updateOrCreate(['key' => 'pre_assign_distance_km'], ['value' => '0']);
+
+        $pickup = [42.8746, 74.5698];
+
+        $profile = DriverProfile::factory()->atLocation(42.8746, 74.5750)->create();
+        Order::factory()->create([
+            'driver_id' => $profile->user_id,
+            'status' => OrderStatus::InProgress,
+            'dropoff_latitude' => 42.8747,
+            'dropoff_longitude' => 74.5760,
+            'in_progress_at' => now(),
+        ]);
+
+        $result = $this->service->findNearestDrivers($pickup[0], $pickup[1], [], 10, 999.0);
+
+        $this->assertCount(0, $result);
+    }
+
+    #[Test]
+    public function test_pre_assign_skipped_when_active_order_has_no_dropoff(): void
+    {
+        // Inter-village orders may have no dropoff; pre-assign cannot evaluate ETA → exclude
+        Setting::updateOrCreate(['key' => 'pre_assign_distance_km'], ['value' => '1.5']);
+
+        $pickup = [42.8746, 74.5698];
+
+        $profile = DriverProfile::factory()->atLocation(42.8746, 74.5750)->create();
+        Order::factory()->create([
+            'driver_id' => $profile->user_id,
+            'status' => OrderStatus::InProgress,
+            'dropoff_latitude' => null,
+            'dropoff_longitude' => null,
+            'in_progress_at' => now(),
+        ]);
+
+        $result = $this->service->findNearestDrivers($pickup[0], $pickup[1], [], 10, 999.0);
+
+        $this->assertCount(0, $result);
     }
 }

@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Api\V1;
 
 use App\Enums\DeclineReason;
+use App\Enums\DriverCancellationReason;
 use App\Enums\OrderStatus;
 use App\Events\DriverLocationUpdated;
 use App\Http\Controllers\Controller;
@@ -170,6 +171,25 @@ class DriverController extends Controller
     {
         try {
             $order = $this->orderService->completeOrder($order, $request->user());
+            $order->load(['client', 'driver.driverProfile']);
+
+            return (new OrderResource($order))->response();
+        } catch (\RuntimeException $e) {
+            return response()->json(['message' => $e->getMessage()], 422);
+        }
+    }
+
+    /**
+     * Cancel the active order from the driver side (client no-show etc.).
+     */
+    public function cancelOrder(Request $request, Order $order): JsonResponse
+    {
+        $validated = $request->validate([
+            'reason' => ['required', 'string', 'in:'.implode(',', DriverCancellationReason::selectable())],
+        ]);
+
+        try {
+            $order = $this->orderService->cancelByDriver($order, $request->user(), $validated['reason']);
             $order->load(['client', 'driver.driverProfile']);
 
             return (new OrderResource($order))->response();

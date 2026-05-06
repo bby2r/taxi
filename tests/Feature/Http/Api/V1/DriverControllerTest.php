@@ -254,6 +254,84 @@ class DriverControllerTest extends TestCase
     }
 
     // ──────────────────────────────────────────────────────────────
+    // driver cancel (client no-show etc.)
+    // ──────────────────────────────────────────────────────────────
+
+    public function test_driver_can_cancel_arrived_order_with_reason(): void
+    {
+        $order = $this->createOrderOfferedToDriver();
+        $this->postJson("/api/v1/driver/orders/{$order->id}/accept");
+        $this->postJson("/api/v1/driver/orders/{$order->id}/arrived");
+
+        $response = $this->postJson("/api/v1/driver/orders/{$order->id}/cancel", [
+            'reason' => 'client_no_show',
+        ]);
+
+        $response->assertOk();
+        $response->assertJsonPath('data.status', 'cancelled');
+
+        $order->refresh();
+        $this->assertSame(OrderStatus::Cancelled, $order->status);
+        $this->assertSame('driver', $order->cancelled_by);
+        $this->assertSame('client_no_show', $order->cancellation_reason);
+        $this->assertNull($order->cancellation_fee);
+    }
+
+    public function test_driver_cancel_requires_reason(): void
+    {
+        $order = $this->createOrderOfferedToDriver();
+        $this->postJson("/api/v1/driver/orders/{$order->id}/accept");
+        $this->postJson("/api/v1/driver/orders/{$order->id}/arrived");
+
+        $response = $this->postJson("/api/v1/driver/orders/{$order->id}/cancel", []);
+
+        $response->assertStatus(422);
+        $response->assertJsonValidationErrors('reason');
+    }
+
+    public function test_driver_cancel_rejects_invalid_reason(): void
+    {
+        $order = $this->createOrderOfferedToDriver();
+        $this->postJson("/api/v1/driver/orders/{$order->id}/accept");
+
+        $response = $this->postJson("/api/v1/driver/orders/{$order->id}/cancel", [
+            'reason' => 'too_far',
+        ]);
+
+        $response->assertStatus(422);
+        $response->assertJsonValidationErrors('reason');
+    }
+
+    public function test_driver_cannot_cancel_in_progress_order(): void
+    {
+        $order = $this->createOrderOfferedToDriver();
+        $this->postJson("/api/v1/driver/orders/{$order->id}/accept");
+        $this->postJson("/api/v1/driver/orders/{$order->id}/arrived");
+        $this->postJson("/api/v1/driver/orders/{$order->id}/start");
+
+        $response = $this->postJson("/api/v1/driver/orders/{$order->id}/cancel", [
+            'reason' => 'long_wait',
+        ]);
+
+        $response->assertStatus(422);
+
+        $order->refresh();
+        $this->assertSame(OrderStatus::InProgress, $order->status);
+    }
+
+    public function test_driver_cannot_cancel_other_drivers_order(): void
+    {
+        $otherDriver = User::factory()->driver()->create();
+        $order = Order::factory()->arrived($otherDriver)->create();
+
+        $response = $this->postJson("/api/v1/driver/orders/{$order->id}/cancel", [
+            'reason' => 'client_no_show',
+        ]);
+
+        $response->assertStatus(422);
+    }
+
+    // ──────────────────────────────────────────────────────────────
     // orders list
     // ──────────────────────────────────────────────────────────────
 

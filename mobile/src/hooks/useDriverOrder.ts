@@ -1,19 +1,28 @@
 import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
-import { Order, DeclineReason } from '../api/types';
+import { Order, DeclineReason, DriverCancellationReason } from '../api/types';
 import {
   goOnline,
   goOffline,
   acceptOrder,
   declineOrder,
   arriveAtPickup,
+  startRide,
   completeOrder,
+  cancelOrderByDriver,
   getCurrentDriverOrder,
   getPendingOffer,
 } from '../api/driver';
 import { useAuth } from '../context/AuthContext';
 import { usePusher } from './usePusher';
 
-export type DriverPhase = 'offline' | 'online_idle' | 'offer' | 'active' | 'arrived' | 'completed';
+export type DriverPhase =
+  | 'offline'
+  | 'online_idle'
+  | 'offer'
+  | 'active'
+  | 'arrived'
+  | 'in_progress'
+  | 'completed';
 
 interface OfflineState {
   phase: 'offline';
@@ -40,6 +49,11 @@ interface ArrivedState {
   order: Order;
 }
 
+interface InProgressState {
+  phase: 'in_progress';
+  order: Order;
+}
+
 interface CompletedState {
   phase: 'completed';
   order: Order;
@@ -51,6 +65,7 @@ export type DriverOrderState =
   | OfferState
   | ActiveState
   | ArrivedState
+  | InProgressState
   | CompletedState;
 
 interface UseDriverOrderReturn {
@@ -60,7 +75,9 @@ interface UseDriverOrderReturn {
   acceptOffer: () => Promise<void>;
   declineOffer: (reason: DeclineReason) => Promise<void>;
   markArrived: () => Promise<void>;
+  markStarted: () => Promise<void>;
   markCompleted: () => Promise<void>;
+  cancelByDriver: (reason: DriverCancellationReason) => Promise<void>;
   dismissCompleted: () => void;
   loading: boolean;
   error: string | null;
@@ -86,8 +103,10 @@ export function useDriverOrder(): UseDriverOrderReturn {
         if (activeOrder) {
           if (activeOrder.status === 'accepted') {
             setState({ phase: 'active', order: activeOrder });
-          } else if (activeOrder.status === 'arrived' || activeOrder.status === 'in_progress') {
+          } else if (activeOrder.status === 'arrived') {
             setState({ phase: 'arrived', order: activeOrder });
+          } else if (activeOrder.status === 'in_progress') {
+            setState({ phase: 'in_progress', order: activeOrder });
           } else if (activeOrder.status === 'completed') {
             setState({ phase: 'completed', order: activeOrder });
           }
@@ -224,9 +243,25 @@ export function useDriverOrder(): UseDriverOrderReturn {
     }
   }, []);
 
-  const markCompleted = useCallback(async (): Promise<void> => {
+  const markStarted = useCallback(async (): Promise<void> => {
     const current = stateRef.current;
     if (current.phase !== 'arrived') return;
+    setError(null);
+    setLoading(true);
+    try {
+      const order = await startRide(current.order.id);
+      setState({ phase: 'in_progress', order });
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : 'Ошибка';
+      setError(message);
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  const markCompleted = useCallback(async (): Promise<void> => {
+    const current = stateRef.current;
+    if (current.phase !== 'in_progress') return;
     setError(null);
     setLoading(true);
     try {
@@ -234,6 +269,22 @@ export function useDriverOrder(): UseDriverOrderReturn {
       setState({ phase: 'completed', order });
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : 'Ошибка';
+      setError(message);
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  const cancelByDriver = useCallback(async (reason: DriverCancellationReason): Promise<void> => {
+    const current = stateRef.current;
+    if (current.phase !== 'active' && current.phase !== 'arrived') return;
+    setError(null);
+    setLoading(true);
+    try {
+      await cancelOrderByDriver(current.order.id, reason);
+      setState({ phase: 'online_idle', order: null });
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : 'Ошибка отмены';
       setError(message);
     } finally {
       setLoading(false);
@@ -251,7 +302,9 @@ export function useDriverOrder(): UseDriverOrderReturn {
     acceptOffer,
     declineOffer,
     markArrived,
+    markStarted,
     markCompleted,
+    cancelByDriver,
     dismissCompleted,
     loading,
     error,

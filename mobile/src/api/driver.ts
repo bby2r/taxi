@@ -1,5 +1,5 @@
 import apiClient from './client';
-import { Order, DriverStats, DeclineReason } from './types';
+import { Order, DriverStats, DeclineReason, DriverCancellationReason } from './types';
 
 export async function goOnline(latitude: number, longitude: number): Promise<void> {
   await apiClient.post('/api/v1/driver/go-online', { latitude, longitude });
@@ -35,8 +35,24 @@ export async function arriveAtPickup(orderId: number): Promise<Order> {
   return data.data;
 }
 
+export async function startRide(orderId: number): Promise<Order> {
+  const { data } = await apiClient.post<{ data: Order }>(`/api/v1/driver/orders/${orderId}/start`);
+  return data.data;
+}
+
 export async function completeOrder(orderId: number): Promise<Order> {
   const { data } = await apiClient.post<{ data: Order }>(`/api/v1/driver/orders/${orderId}/complete`);
+  return data.data;
+}
+
+export async function cancelOrderByDriver(
+  orderId: number,
+  reason: DriverCancellationReason
+): Promise<Order> {
+  const { data } = await apiClient.post<{ data: Order }>(
+    `/api/v1/driver/orders/${orderId}/cancel`,
+    { reason }
+  );
   return data.data;
 }
 

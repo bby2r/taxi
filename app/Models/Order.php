@@ -28,6 +28,7 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
     'region_id',
     'cancellation_fee',
     'cancelled_by',
+    'cancellation_reason',
     'accepted_at',
     'arrived_at',
     'in_progress_at',

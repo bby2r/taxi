@@ -42,7 +42,7 @@ Core business entity. Tracks the full ride lifecycle.
 - **Pickup:** required (lat/lng + optional address)
 - **Dropoff:** optional for in-village orders (destination discussed verbally); used for inter-district orders where the driver needs to see the destination district/address up front
 - **Driver dispatch:** Sequential offer pattern via `offered_driver_id`, `offered_at`, `declined_drivers` (JSON array of IDs for quick exclusion)
-- **Cancellation:** `cancelled_by` (string: client/driver/system), `cancellation_fee` (integer)
+- **Cancellation:** `cancelled_by` (string: client/driver/system), `cancellation_reason` (string, nullable — driver-cancel uses `DriverCancellationReason` values), `cancellation_fee` (integer)
 - Scopes: `active()`, `forClient()`, `forDriver()`
 - Methods: `isActive()`, `isCancellable()`, `getDeclinedDriverIds()`
 

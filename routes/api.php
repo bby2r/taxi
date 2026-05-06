@@ -79,5 +79,6 @@ Route::prefix('v1')->middleware('auth:sanctum')->group(function () {
         Route::post('/orders/{order}/arrived', [DriverController::class, 'arrived'])->name('api.v1.driver.orders.arrived');
         Route::post('/orders/{order}/start', [DriverController::class, 'startRide'])->name('api.v1.driver.orders.start');
         Route::post('/orders/{order}/complete', [DriverController::class, 'completeOrder'])->name('api.v1.driver.orders.complete');
+        Route::post('/orders/{order}/cancel', [DriverController::class, 'cancelOrder'])->name('api.v1.driver.orders.cancel');
     });
 });

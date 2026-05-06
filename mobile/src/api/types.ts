@@ -21,6 +21,17 @@ export type DeclineReason =
   | 'client_no_answer'
   | 'personal';
 
+export type DriverCancellationReason =
+  | 'client_no_show'
+  | 'client_no_answer'
+  | 'long_wait';
+
+export interface OrderClient {
+  id: number;
+  name: string;
+  phone: string;
+}
+
 export interface Order {
   id: number;
   status: OrderStatus;
@@ -33,6 +44,7 @@ export interface Order {
   dropoff_longitude: number | null;
   is_inter_district: boolean;
   region: { id: number; name: string } | null;
+  client: OrderClient;
   driver: Driver | null;
   created_at: string;
   accepted_at: string | null;

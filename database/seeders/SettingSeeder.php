@@ -18,6 +18,7 @@ class SettingSeeder extends Seeder
             ['key' => 'cancellation_fee', 'value' => '50', 'description' => 'Cancellation fee in som'],
             ['key' => 'max_search_radius_km', 'value' => '10', 'description' => 'Maximum driver search radius in kilometers'],
             ['key' => 'stale_active_order_hours', 'value' => '2', 'description' => 'Auto-cancel orders stuck in Accepted/Arrived longer than this many hours (0 disables).'],
+            ['key' => 'pre_assign_distance_km', 'value' => '1.5', 'description' => 'Pre-assign new orders to drivers in InProgress when their distance to current dropoff is below this many km (0 disables).'],
         ];
 
         foreach ($settings as $setting) {

@@ -73,6 +73,7 @@ class SettingModelTest extends TestCase
         $this->assertDatabaseHas('settings', ['key' => 'cancellation_fee', 'value' => '50']);
         $this->assertDatabaseHas('settings', ['key' => 'max_search_radius_km', 'value' => '10']);
         $this->assertDatabaseHas('settings', ['key' => 'stale_active_order_hours', 'value' => '2']);
+        $this->assertDatabaseHas('settings', ['key' => 'pre_assign_distance_km', 'value' => '1.5']);
     }
 
     public function test_setting_seeder_is_idempotent(): void
@@ -80,6 +81,6 @@ class SettingModelTest extends TestCase
         $this->seed(SettingSeeder::class);
         $this->seed(SettingSeeder::class);
 
-        $this->assertSame(5, Setting::count());
+        $this->assertSame(6, Setting::count());
     }
 }

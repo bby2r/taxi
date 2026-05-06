@@ -22,6 +22,7 @@ Key business rules extracted from 40 test files. These are executable specificat
 - Only the offered driver can accept (RuntimeException otherwise)
 - Status transitions are strictly sequential (can't skip states)
 - All transitions use DB locks for concurrency
+- Driver-initiated cancel (`POST /driver/orders/{order}/cancel`) is allowed only in Accepted/Arrived; reason must be one of `client_no_show`/`client_no_answer`/`long_wait`. No fee, no shift penalty. `cancelled_by='driver'`, `cancellation_reason` saved.
 
 ## Pricing (tested with boundary values)
 - Day: 80 KGS (07:00-20:59 Asia/Bishkek)
@@ -33,7 +34,8 @@ Key business rules extracted from 40 test files. These are executable specificat
 ## Driver Matching
 - Nearest-first with Haversine distance
 - Declined drivers excluded from subsequent offers
-- Drivers with an Accepted/Arrived/InProgress order excluded from the dispatch pool
+- Drivers with an Accepted/Arrived order excluded from the dispatch pool
+- Drivers in InProgress are excluded **unless** their distance to the current order's dropoff is within `pre_assign_distance_km` (default 1.5 km, 0 disables) AND the active order has dropoff coords — pre-assign window for nearly-finished rides
 - Drivers with `blocked_until` in the future excluded
 - Empty online pool -> auto-cancel by system
 - 10-second offer timeout -> auto-decline (reason `timeout`, does not count toward shift block)

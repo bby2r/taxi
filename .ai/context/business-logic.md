@@ -39,21 +39,21 @@ Flat-rate pricing — intentionally simple for a village where all destinations 
 - Client can only have one active order at a time
 - Only the offered driver can accept/decline
 - All transitions use `DB::transaction()` + `lockForUpdate()` for concurrency safety
-- **Drivers CAN cancel orders** — must select a reason:
-  - "Client doesn't answer the phone"
-  - "Client is not at pickup location"
-  - "Long wait" (5-10 minutes)
-  No penalty for driver cancellation — reasons are logged for admin visibility.
+- **Drivers CAN cancel orders** in `Accepted` or `Arrived` status. They cannot cancel `InProgress` (the actual ride). Endpoint: `POST /api/v1/driver/orders/{order}/cancel` with required `reason` from `DriverCancellationReason` enum (`client_no_show`, `client_no_answer`, `long_wait`). No fee, no shift-decline penalty — reason saved to `orders.cancellation_reason` for admin visibility.
 
 ## Driver Matching Algorithm
 Sequential nearest-driver offer (not broadcast):
-1. `GeoService::findNearestDrivers()` — loads all online drivers with coordinates, excludes declined, blocked, and drivers with an active order (Accepted/Arrived/InProgress)
+1. `GeoService::findNearestDrivers()` — loads all online drivers with coordinates, excludes declined and blocked. Eligibility filter:
+   - No active order → eligible
+   - Active order in `InProgress` AND haversine distance from current driver location to dropoff is ≤ `pre_assign_distance_km` → eligible (pre-assign window). The order must have dropoff coords; in-village pickups without dropoff fall through.
+   - Active order in `Accepted` or `Arrived` → not eligible (driver hasn't picked up yet)
 2. Haversine distance in PHP (not SQL), sorts by distance, takes closest
 3. Offers to that driver, dispatches `OfferTimeoutJob` (10-second delay)
 4. If no response in 10s, auto-decline and re-offer to next
 5. If no drivers left, auto-cancel order
 
 **Max radius:** Configurable `max_search_radius_km` setting (default 10 km).
+**Pre-assign distance:** Configurable `pre_assign_distance_km` setting (default 1.5 km, 0 disables). Lets a driver who is finishing their current ride pick up the next request before completing.
 **In-memory calculation** — acceptable for small village driver pool.
 
 > Source: `app/Services/GeoService.php`, `app/Services/OrderService.php`, `app/Jobs/OfferTimeoutJob.php`

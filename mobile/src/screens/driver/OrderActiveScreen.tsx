@@ -1,4 +1,4 @@
-import React, { useEffect, useRef } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import {
   View,
   Text,
@@ -7,6 +7,7 @@ import {
   Linking,
   TouchableOpacity,
   StatusBar,
+  Modal,
 } from 'react-native';
 import MapView, { Marker, Polyline } from 'react-native-maps';
 import { useNavigation } from '@react-navigation/native';
@@ -18,10 +19,16 @@ import { useDriverOrder } from '../../hooks/useDriverOrder';
 import { useLocation } from '../../hooks/useLocation';
 import { useRoute as useNavigationRoute } from '../../hooks/useRoute';
 import type { DriverStackParamList } from '../../navigation/types';
-import type { Order } from '../../api/types';
+import type { Order, DriverCancellationReason } from '../../api/types';
 import type { Route } from '../../api/routing';
 
 type NavigationProp = NativeStackNavigationProp<DriverStackParamList, 'OrderActive'>;
+
+const CANCEL_REASONS: { value: DriverCancellationReason; label: string }[] = [
+  { value: 'client_no_show', label: 'Клиент не пришёл' },
+  { value: 'client_no_answer', label: 'Не отвечает на звонок' },
+  { value: 'long_wait', label: 'Долгое ожидание' },
+];
 
 function openNavigation(lat: number, lng: number): void {
   const url = Platform.select({
@@ -32,6 +39,10 @@ function openNavigation(lat: number, lng: number): void {
   if (url) {
     Linking.openURL(url);
   }
+}
+
+function callPhone(phone: string): void {
+  Linking.openURL(`tel:${phone}`);
 }
 
 function formatDistance(meters: number): string {
@@ -49,6 +60,72 @@ function formatDuration(seconds: number): string {
   const h = Math.floor(minutes / 60);
   const m = minutes % 60;
   return m === 0 ? `${h} ч` : `${h} ч ${m} мин`;
+}
+
+function ClientContact({ order }: { order: Order }): React.ReactNode {
+  return (
+    <TouchableOpacity
+      style={styles.contactRow}
+      onPress={() => callPhone(order.client.phone)}
+      activeOpacity={0.7}
+      accessibilityLabel="Позвонить клиенту"
+      testID="call-client"
+    >
+      <View style={styles.contactInfo}>
+        <Text style={[Typography.bodyBold, { color: DriverColors.textPrimary }]}>
+          {order.client.name}
+        </Text>
+        <Text style={[Typography.caption, { color: DriverColors.textMuted }]}>
+          {order.client.phone}
+        </Text>
+      </View>
+      <View style={styles.callButton}>
+        <Text style={styles.callIcon}>📞</Text>
+      </View>
+    </TouchableOpacity>
+  );
+}
+
+function CancelSheet({
+  visible,
+  onClose,
+  onPick,
+}: {
+  visible: boolean;
+  onClose: () => void;
+  onPick: (reason: DriverCancellationReason) => void;
+}): React.ReactNode {
+  return (
+    <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
+      <TouchableOpacity style={styles.sheetBackdrop} activeOpacity={1} onPress={onClose}>
+        <TouchableOpacity activeOpacity={1} style={styles.sheet}>
+          <Text style={[Typography.h3, styles.sheetTitle]}>Причина отмены</Text>
+          {CANCEL_REASONS.map((opt) => (
+            <TouchableOpacity
+              key={opt.value}
+              style={styles.sheetItem}
+              onPress={() => onPick(opt.value)}
+              activeOpacity={0.7}
+              testID={`cancel-reason-${opt.value}`}
+            >
+              <Text style={[Typography.body, { color: DriverColors.textPrimary }]}>
+                {opt.label}
+              </Text>
+            </TouchableOpacity>
+          ))}
+          <TouchableOpacity
+            style={styles.sheetCancel}
+            onPress={onClose}
+            activeOpacity={0.7}
+          >
+            <Text style={[Typography.button, { color: DriverColors.textMuted }]}>
+              Отмена
+            </Text>
+          </TouchableOpacity>
+        </TouchableOpacity>
+      </TouchableOpacity>
+    </Modal>
+  );
 }
 
 function EnRouteCard({
@@ -133,6 +210,8 @@ function EnRouteCard({
         </>
       )}
 
+      <ClientContact order={order} />
+
       <TouchableOpacity
         onPress={() => openNavigation(order.pickup_latitude, order.pickup_longitude)}
         style={styles.navigationLink}
@@ -158,11 +237,13 @@ function EnRouteCard({
 
 function ArrivedCard({
   order,
-  onMarkCompleted,
+  onMarkStarted,
+  onCancelRequest,
   loading,
 }: {
   order: Order;
-  onMarkCompleted: () => void;
+  onMarkStarted: () => void;
+  onCancelRequest: () => void;
   loading: boolean;
 }): React.ReactNode {
   return (
@@ -185,6 +266,84 @@ function ArrivedCard({
       >
         {order.pickup_address || 'Геолокация клиента'}
       </Text>
+
+      <ClientContact order={order} />
+
+      <View style={styles.spacer} />
+
+      <ActionButton
+        title="Начать поездку"
+        onPress={onMarkStarted}
+        loading={loading}
+        style={styles.actionButton}
+      />
+      <TouchableOpacity
+        onPress={onCancelRequest}
+        style={styles.cancelLink}
+        accessibilityRole="button"
+        testID="driver-cancel-button"
+      >
+        <Text style={[Typography.bodyBold, { color: DriverColors.danger }]}>
+          Клиент не пришёл — отменить
+        </Text>
+      </TouchableOpacity>
+    </View>
+  );
+}
+
+function InProgressCard({
+  order,
+  onMarkCompleted,
+  loading,
+  route,
+  routeLoading,
+  routeError,
+}: {
+  order: Order;
+  onMarkCompleted: () => void;
+  loading: boolean;
+  route: Route | null;
+  routeLoading: boolean;
+  routeError: string | null;
+}): React.ReactNode {
+  return (
+    <View style={styles.cardContent}>
+      <Text style={[Typography.h3, { color: DriverColors.primary }]}>В поездке</Text>
+
+      {route && (
+        <View style={[styles.etaRow, { marginTop: 8 }]}>
+          <Text style={[Typography.h2, { color: DriverColors.primary }]}>
+            {formatDuration(route.durationSeconds)}
+          </Text>
+          <Text style={[Typography.body, { color: DriverColors.textMuted, marginLeft: 12 }]}>
+            {formatDistance(route.distanceMeters)}
+          </Text>
+        </View>
+      )}
+      {!route && routeLoading && (
+        <Text style={[Typography.caption, { color: DriverColors.textMuted, marginTop: 8 }]}>
+          Строим маршрут...
+        </Text>
+      )}
+      {!route && !routeLoading && routeError && (
+        <Text style={[Typography.caption, { color: DriverColors.danger, marginTop: 8 }]}>
+          Маршрут недоступен
+        </Text>
+      )}
+
+      {order.is_inter_district && (
+        <>
+          <Text style={[Typography.caption, { color: DriverColors.textMuted, marginTop: 12 }]}>
+            Куда
+          </Text>
+          <Text
+            style={[Typography.bodyBold, { color: DriverColors.textPrimary, marginTop: 4 }]}
+            numberOfLines={2}
+          >
+            {order.dropoff_address || order.region?.name || '—'}
+          </Text>
+        </>
+      )}
 
       <View style={styles.spacer} />
 
@@ -233,16 +392,25 @@ function CompletedCard({
 
 export default function OrderActiveScreen(): React.ReactNode {
   const navigation = useNavigation<NavigationProp>();
-  const { state, markArrived, markCompleted, dismissCompleted, loading } =
-    useDriverOrder();
+  const {
+    state,
+    markArrived,
+    markStarted,
+    markCompleted,
+    cancelByDriver,
+    dismissCompleted,
+    loading,
+  } = useDriverOrder();
   const mapRef = useRef<MapView>(null);
   const driverLocation = useLocation();
+  const [cancelSheetOpen, setCancelSheetOpen] = useState(false);
 
   // Go back if phase is not relevant to this screen
   useEffect(() => {
     if (
       state.phase !== 'active' &&
       state.phase !== 'arrived' &&
+      state.phase !== 'in_progress' &&
       state.phase !== 'completed'
     ) {
       navigation.goBack();
@@ -250,7 +418,10 @@ export default function OrderActiveScreen(): React.ReactNode {
   }, [state.phase, navigation]);
 
   const order =
-    state.phase === 'active' || state.phase === 'arrived' || state.phase === 'completed'
+    state.phase === 'active' ||
+    state.phase === 'arrived' ||
+    state.phase === 'in_progress' ||
+    state.phase === 'completed'
       ? state.order
       : null;
 
@@ -270,8 +441,7 @@ export default function OrderActiveScreen(): React.ReactNode {
 
   // Route to pickup while en-route; route to dropoff once ride is in progress.
   const shouldRouteToPickup = state.phase === 'active';
-  const shouldRouteToDropoff =
-    order?.status === 'in_progress' && dropoffPoint !== null;
+  const shouldRouteToDropoff = state.phase === 'in_progress' && dropoffPoint !== null;
   const routeOrigin = shouldRouteToPickup
     ? driverPoint
     : shouldRouteToDropoff
@@ -318,6 +488,11 @@ export default function OrderActiveScreen(): React.ReactNode {
     navigation.goBack();
   };
 
+  const handlePickCancelReason = (reason: DriverCancellationReason): void => {
+    setCancelSheetOpen(false);
+    cancelByDriver(reason);
+  };
+
   return (
     <View style={styles.container}>
       <MapView
@@ -349,7 +524,7 @@ export default function OrderActiveScreen(): React.ReactNode {
             testID="dropoff-marker"
           />
         )}
-        {driverPoint && state.phase === 'active' && (
+        {driverPoint && (state.phase === 'active' || state.phase === 'in_progress') && (
           <Marker
             coordinate={driverPoint}
             title="Вы"
@@ -384,14 +559,31 @@ export default function OrderActiveScreen(): React.ReactNode {
         {state.phase === 'arrived' && (
           <ArrivedCard
             order={order}
+            onMarkStarted={markStarted}
+            onCancelRequest={() => setCancelSheetOpen(true)}
+            loading={loading}
+          />
+        )}
+        {state.phase === 'in_progress' && (
+          <InProgressCard
+            order={order}
             onMarkCompleted={markCompleted}
             loading={loading}
+            route={route}
+            routeLoading={routeLoading}
+            routeError={routeError}
           />
         )}
         {state.phase === 'completed' && (
           <CompletedCard order={order} onDismiss={handleDismiss} />
         )}
       </View>
+
+      <CancelSheet
+        visible={cancelSheetOpen}
+        onClose={() => setCancelSheetOpen(false)}
+        onPick={handlePickCancelReason}
+      />
     </View>
   );
 }
@@ -431,7 +623,12 @@ const styles = StyleSheet.create({
     borderColor: '#fff',
   },
   navigationLink: {
-    marginTop: 16,
+    marginTop: 12,
+    paddingVertical: 8,
+  },
+  cancelLink: {
+    marginTop: 12,
+    alignItems: 'center',
     paddingVertical: 8,
   },
   spacer: {
@@ -439,5 +636,55 @@ const styles = StyleSheet.create({
   },
   actionButton: {
     marginTop: 16,
+  },
+  contactRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginTop: 12,
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+    borderRadius: 12,
+    backgroundColor: DriverColors.cardBackground,
+  },
+  contactInfo: {
+    flex: 1,
+  },
+  callButton: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: DriverColors.success,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  callIcon: {
+    fontSize: 18,
+  },
+  sheetBackdrop: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.45)',
+    justifyContent: 'flex-end',
+  },
+  sheet: {
+    backgroundColor: DriverColors.background,
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
+    paddingHorizontal: 20,
+    paddingTop: 20,
+    paddingBottom: 34,
+  },
+  sheetTitle: {
+    color: DriverColors.textPrimary,
+    marginBottom: 12,
+  },
+  sheetItem: {
+    paddingVertical: 14,
+    borderBottomWidth: 1,
+    borderBottomColor: DriverColors.border,
+  },
+  sheetCancel: {
+    marginTop: 16,
+    alignItems: 'center',
+    paddingVertical: 12,
   },
 });

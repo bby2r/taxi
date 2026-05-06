@@ -45,6 +45,7 @@ Versioned REST API at `/api/v1` for mobile clients + session-based admin web pan
 | `orders/{order}/arrived` | POST | — |
 | `orders/{order}/start` | POST | — |
 | `orders/{order}/complete` | POST | — |
+| `orders/{order}/cancel` | POST | Driver-initiated cancel. Requires `reason` from `DriverCancellationReason` (`client_no_show` / `client_no_answer` / `long_wait`). Only valid in Accepted or Arrived. No fee, no shift penalty. |
 
 ## Admin Web Panel (`/admin`)
 

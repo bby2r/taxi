@@ -338,9 +338,9 @@ class OrderService
     /**
      * Cancel the order. Applies cancellation fee if client cancels after driver accepted.
      */
-    public function cancelOrder(Order $order, string $cancelledBy): Order
+    public function cancelOrder(Order $order, string $cancelledBy, ?string $reason = null): Order
     {
-        $order = DB::transaction(function () use ($order, $cancelledBy) {
+        $order = DB::transaction(function () use ($order, $cancelledBy, $reason) {
             $order = Order::lockForUpdate()->findOrFail($order->id);
 
             if (! $order->isCancellable()) {
@@ -356,6 +356,7 @@ class OrderService
                 'status' => OrderStatus::Cancelled,
                 'cancelled_at' => now(),
                 'cancelled_by' => $cancelledBy,
+                'cancellation_reason' => $reason,
                 'cancellation_fee' => $cancellationFee,
                 'offered_driver_id' => null,
                 'offered_at' => null,
@@ -388,6 +389,27 @@ class OrderService
         }
 
         return $order;
+    }
+
+    /**
+     * Cancel an active order from the driver side (client did not show up,
+     * not answering, etc.). No cancellation fee. Only valid while the order
+     * is in Accepted or Arrived status — InProgress is the actual ride and
+     * cannot be cancelled this way.
+     */
+    public function cancelByDriver(Order $order, User $driver, string $reason): Order
+    {
+        $order = Order::findOrFail($order->id);
+
+        if ($order->driver_id !== $driver->id) {
+            throw new \RuntimeException('Not assigned to this driver.');
+        }
+
+        if (! in_array($order->status, [OrderStatus::Accepted, OrderStatus::Arrived], true)) {
+            throw new \RuntimeException('Order cannot be cancelled in its current state.');
+        }
+
+        return $this->cancelOrder($order, 'driver', $reason);
     }
 
     /**
