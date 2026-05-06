@@ -1,8 +1,8 @@
-import { useEffect, useRef } from 'react';
+import { useEffect } from 'react';
 import { Platform } from 'react-native';
-import { useNavigation } from '@react-navigation/native';
 import { registerPushToken } from '../api/auth';
 import { useAuth } from '../context/AuthContext';
+import { navigationRef } from '../navigation/navigationRef';
 
 let Notifications: typeof import('expo-notifications') | null = null;
 
@@ -45,9 +45,6 @@ async function configureAndroidChannel(): Promise<void> {
 
 export function useNotifications(): void {
   const { isAuthenticated, user } = useAuth();
-  const navigation = useNavigation<any>();
-  const navRef = useRef(navigation);
-  navRef.current = navigation;
 
   useEffect(() => {
     if (!isAuthenticated || Platform.OS === 'web' || !Notifications) return;
@@ -71,27 +68,26 @@ export function useNotifications(): void {
       }
     })();
 
-    // When the user taps a notification (typically from a locked / backgrounded
-    // device), if it's a new-order push for a driver, route them to the home
-    // screen so useDriverOrder can pick the offer up via Pusher / polling and
-    // show the OrderOfferCard with its 10-second countdown.
     if (Notifications) {
+      // When the user taps a notification (typically from a locked /
+      // backgrounded device), if it's a new-order push for a driver, route
+      // them to the home screen so useDriverOrder can pick the offer up via
+      // Pusher / polling and show the OrderOfferCard with its 10-second
+      // countdown. Use the imperative navigationRef instead of useNavigation
+      // here because this hook runs above the NavigationContainer.
       responseSub = Notifications.addNotificationResponseReceivedListener((response) => {
         const data = response.notification.request.content.data as { type?: string } | undefined;
-        if (data?.type === 'new_order' && user?.role === 'driver') {
+        if (data?.type === 'new_order' && user?.role === 'driver' && navigationRef.isReady()) {
           try {
-            navRef.current.navigate('DriverTabs', { screen: 'DriverHome' });
+            navigationRef.navigate('DriverApp' as never);
           } catch {
-            // Navigation tree may not be ready yet — useDriverOrder will catch it
+            // If not ready yet, useDriverOrder picks up via polling on next focus
           }
         }
       });
 
-      // Foreground listener — Expo's notification handler already shows the
-      // banner/sound, but we keep the subscription for diagnostics and so the
-      // OS doesn't deliver it as silent.
       foregroundSub = Notifications.addNotificationReceivedListener(() => {
-        // No-op: handler config above takes care of presentation.
+        // No-op: handler config above already presents the banner + sound.
       });
     }
 

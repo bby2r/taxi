@@ -9,6 +9,7 @@ import ClientTabs from './ClientTabs';
 import DriverStack from './DriverStack';
 import { RootStackParamList } from './types';
 import { ClientColors } from '../theme/colors';
+import { navigationRef } from './navigationRef';
 
 const Stack = createNativeStackNavigator<RootStackParamList>();
 
@@ -26,7 +27,7 @@ export default function RootNavigator(): React.ReactNode {
   }
 
   return (
-    <NavigationContainer>
+    <NavigationContainer ref={navigationRef}>
       <Stack.Navigator screenOptions={{ headerShown: false }}>
         {!isAuthenticated ? (
           <Stack.Screen name="Auth" component={AuthStack} />
