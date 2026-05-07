@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
+import { Alert } from 'react-native';
 import { Order, DeclineReason, DriverCancellationReason } from '../api/types';
 import {
   goOnline,
@@ -90,6 +91,26 @@ export function useDriverOrder(): UseDriverOrderReturn {
   const [error, setError] = useState<string | null>(null);
   const stateRef = useRef(state);
   stateRef.current = state;
+  // Track which order we've already alerted about, so the Pusher event and
+  // the polling fallback don't both pop an alert for the same cancellation.
+  const alertedCancelOrderRef = useRef<number | null>(null);
+  // Set by cancelByDriver / declineOffer — suppresses the cancellation alert
+  // when the driver themselves caused the state change.
+  const suppressNextCancelAlertRef = useRef(false);
+
+  function showCancelledAlert(orderId: number, byClient: boolean): void {
+    if (alertedCancelOrderRef.current === orderId) return;
+    if (suppressNextCancelAlertRef.current) {
+      suppressNextCancelAlertRef.current = false;
+      alertedCancelOrderRef.current = orderId;
+      return;
+    }
+    alertedCancelOrderRef.current = orderId;
+    Alert.alert(
+      'Заказ отменён',
+      byClient ? 'Клиент отменил заказ' : 'Заказ отменён',
+    );
+  }
 
   const isOnline = state.phase !== 'offline';
 
@@ -127,11 +148,28 @@ export function useDriverOrder(): UseDriverOrderReturn {
     setState({ phase: 'offer', order });
   }, []);
 
-  const handleOrderCancelled = useCallback(() => {
+  const handleOrderCancelled = useCallback((data: unknown) => {
     const current = stateRef.current;
+    const wasActive =
+      current.phase === 'offer' ||
+      current.phase === 'active' ||
+      current.phase === 'arrived' ||
+      current.phase === 'in_progress';
+
     if (current.phase !== 'offline') {
       setState({ phase: 'online_idle', order: null });
     }
+
+    if (!wasActive) {
+      return;
+    }
+
+    const payload = data as { order_id?: number; cancelled_by?: string } | undefined;
+    const orderId = payload?.order_id ?? current.order?.id;
+    if (orderId === undefined) {
+      return;
+    }
+    showCancelledAlert(orderId, payload?.cancelled_by === 'client');
   }, []);
 
   const events = useMemo(
@@ -198,11 +236,16 @@ export function useDriverOrder(): UseDriverOrderReturn {
         if (cancelled) return;
         if (!fresh) {
           // Active-order endpoint returned 404 — order is no longer active
+          const previousOrderId = stateRef.current.order?.id;
           setState({ phase: 'online_idle', order: null });
+          if (previousOrderId !== undefined) {
+            showCancelledAlert(previousOrderId, true);
+          }
           return;
         }
         if (fresh.status === 'cancelled') {
           setState({ phase: 'online_idle', order: null });
+          showCancelledAlert(fresh.id, true);
         }
       } catch {
         // Ignore network errors — next tick retries
@@ -321,10 +364,12 @@ export function useDriverOrder(): UseDriverOrderReturn {
     if (current.phase !== 'active' && current.phase !== 'arrived') return;
     setError(null);
     setLoading(true);
+    suppressNextCancelAlertRef.current = true;
     try {
       await cancelOrderByDriver(current.order.id, reason);
       setState({ phase: 'online_idle', order: null });
     } catch (err: unknown) {
+      suppressNextCancelAlertRef.current = false;
       const message = err instanceof Error ? err.message : 'Ошибка отмены';
       setError(message);
     } finally {

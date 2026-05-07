@@ -7,7 +7,10 @@ interface UseRouteState {
   error: string | null;
 }
 
-const REFETCH_THRESHOLD_METERS = 100;
+// Re-fetch the full route only after a meaningful drift. Between refetches
+// the consumer trims the polyline locally against the live driver position,
+// so a wide threshold keeps the polyline stable and reduces OSRM chatter.
+const REFETCH_THRESHOLD_METERS = 300;
 
 function haversineMeters(a: RoutePoint, b: RoutePoint): number {
   const R = 6371000;
