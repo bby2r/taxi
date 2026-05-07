@@ -1,5 +1,5 @@
 import { useEffect } from 'react';
-import { Platform } from 'react-native';
+import { Alert, Platform } from 'react-native';
 import { registerPushToken } from '../api/auth';
 import { useAuth } from '../context/AuthContext';
 import { navigationRef } from '../navigation/navigationRef';
@@ -57,14 +57,29 @@ export function useNotifications(): void {
         await configureAndroidChannel();
 
         const { status } = await Notifications!.requestPermissionsAsync();
-        if (status !== 'granted') return;
+        if (status !== 'granted') {
+          // Without notification permission Android delivers absolutely
+          // nothing in the background — the driver would silently miss
+          // every order whenever the app isn't in front. Surface this once
+          // per session so they can fix it in system settings.
+          Alert.alert(
+            'Уведомления отключены',
+            'Чтобы получать заказы когда приложение свернуто, разрешите уведомления в настройках телефона.',
+          );
+          return;
+        }
 
         const tokenData = await Notifications!.getExpoPushTokenAsync({
           projectId: 'ca4f91d1-a8f4-488b-9c14-0eb60aa286b8',
         });
+        // Visible in `npx react-native log-android` / EAS device logs while
+        // diagnosing missing-push reports.
+        // eslint-disable-next-line no-console
+        console.log('[push] Expo token:', tokenData.data);
         await registerPushToken(tokenData.data);
-      } catch {
-        // Push notifications not available — ignore
+      } catch (err) {
+        // eslint-disable-next-line no-console
+        console.warn('[push] registration failed:', err);
       }
     })();
 

@@ -7,8 +7,53 @@ import React, {
   useRef,
   useMemo,
 } from 'react';
-import { Alert } from 'react-native';
+import { Alert, AppState, Platform, Vibration } from 'react-native';
 import { Order, DeclineReason, DriverCancellationReason } from '../api/types';
+
+let LocalNotifications: typeof import('expo-notifications') | null = null;
+if (Platform.OS !== 'web') {
+  try {
+    LocalNotifications = require('expo-notifications');
+  } catch {
+    LocalNotifications = null;
+  }
+}
+
+const VIBRATION_PATTERN = [0, 400, 250, 400, 250, 400];
+
+function alertDriverAboutOffer(order: Order): void {
+  Vibration.vibrate(VIBRATION_PATTERN);
+
+  // When the app is in the foreground, the OS does not deliver the server-side
+  // push (Expo / FCM) — the JS already received the Pusher event, so no system
+  // notification fires and the driver hears nothing. Schedule a local one on
+  // the `driver_offers` channel: Android then plays the channel sound and
+  // shows the heads-up even if the screen is currently in another app's view.
+  if (
+    LocalNotifications &&
+    Platform.OS !== 'web' &&
+    AppState.currentState === 'active'
+  ) {
+    const body = order.pickup_address
+      ? `Подача: ${order.pickup_address} · ${order.price} сом`
+      : `Новый заказ · ${order.price} сом`;
+    LocalNotifications.scheduleNotificationAsync({
+      content: {
+        title: 'Новый заказ',
+        body,
+        data: { order_id: order.id, type: 'new_order' },
+        sound: 'default',
+        // Android-specific channel routing — picks up vibration / lights / sound
+        // configured in useNotifications.ts. Cast to any because the type
+        // surface differs slightly between expo-notifications versions.
+        ...({ android: { channelId: 'driver_offers' } } as Record<string, unknown>),
+      } as Parameters<typeof LocalNotifications.scheduleNotificationAsync>[0]['content'],
+      trigger: null,
+    }).catch(() => {
+      // Falls back silently — vibration above already alerted the driver.
+    });
+  }
+}
 import {
   goOnline,
   goOffline,
@@ -159,6 +204,7 @@ function useDriverOrderState(): UseDriverOrderReturn {
     const orderData = data as { order: Order } | Order;
     const order = 'order' in orderData ? orderData.order : orderData;
     setState({ phase: 'offer', order });
+    alertDriverAboutOffer(order);
   }, []);
 
   const handleOrderCancelled = useCallback((data: unknown) => {
@@ -211,6 +257,7 @@ function useDriverOrderState(): UseDriverOrderReturn {
         if (cancelled) return;
         if (offer) {
           setState({ phase: 'offer', order: offer });
+          alertDriverAboutOffer(offer);
         }
       } catch {
         // Ignore polling errors
