@@ -176,6 +176,47 @@ export function useDriverOrder(): UseDriverOrderReturn {
     };
   }, [state.phase]);
 
+  // Fallback polling for active phases — Pusher is the primary path for the
+  // `order.cancelled` event, but if it ever drops (Pusher creds missing,
+  // socket disconnects, network blip) the driver could be stuck on a
+  // cancelled order forever. Re-fetch every 7s; if the server says there's
+  // no active order, assume it was cancelled and reset to online_idle.
+  useEffect(() => {
+    if (
+      state.phase !== 'active' &&
+      state.phase !== 'arrived' &&
+      state.phase !== 'in_progress'
+    ) {
+      return;
+    }
+
+    let cancelled = false;
+
+    const poll = async (): Promise<void> => {
+      try {
+        const fresh = await getCurrentDriverOrder();
+        if (cancelled) return;
+        if (!fresh) {
+          // Active-order endpoint returned 404 — order is no longer active
+          setState({ phase: 'online_idle', order: null });
+          return;
+        }
+        if (fresh.status === 'cancelled') {
+          setState({ phase: 'online_idle', order: null });
+        }
+      } catch {
+        // Ignore network errors — next tick retries
+      }
+    };
+
+    const interval = setInterval(poll, 7000);
+
+    return () => {
+      cancelled = true;
+      clearInterval(interval);
+    };
+  }, [state.phase]);
+
   const toggleOnline = useCallback(async (latitude: number, longitude: number): Promise<void> => {
     setError(null);
     setLoading(true);

@@ -537,8 +537,10 @@ export default function OrderActiveScreen(): React.ReactNode {
         {route && route.coordinates.length > 1 && (
           <Polyline
             coordinates={route.coordinates}
-            strokeColor={DriverColors.primary}
-            strokeWidth={5}
+            strokeColor={DriverColors.success}
+            strokeWidth={6}
+            lineCap="round"
+            lineJoin="round"
             testID="route-polyline"
           />
         )}
