@@ -15,6 +15,7 @@ import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { DriverColors } from '../../theme/colors';
 import { Typography } from '../../theme/typography';
 import ActionButton from '../../components/ActionButton';
+import ConfirmModal from '../../components/ConfirmModal';
 import { useDriverOrder } from '../../hooks/useDriverOrder';
 import { useLocation } from '../../hooks/useLocation';
 import { useRoute as useNavigationRoute } from '../../hooks/useRoute';
@@ -226,7 +227,7 @@ function EnRouteCard({
       <View style={styles.spacer} />
 
       <ActionButton
-        title="Я на месте"
+        title="Прибыл к клиенту"
         onPress={onMarkArrived}
         loading={loading}
         style={styles.actionButton}
@@ -404,6 +405,33 @@ export default function OrderActiveScreen(): React.ReactNode {
   const mapRef = useRef<MapView>(null);
   const driverLocation = useLocation();
   const [cancelSheetOpen, setCancelSheetOpen] = useState(false);
+  const [pendingAction, setPendingAction] = useState<null | {
+    message: string;
+    confirmLabel: string;
+    run: () => void | Promise<void>;
+  }>(null);
+
+  const requestArrived = (): void => {
+    setPendingAction({
+      message: 'Подтвердите, что вы прибыли к клиенту',
+      confirmLabel: 'Прибыл',
+      run: markArrived,
+    });
+  };
+  const requestStart = (): void => {
+    setPendingAction({
+      message: 'Подтвердите начало поездки',
+      confirmLabel: 'Начать',
+      run: markStarted,
+    });
+  };
+  const requestComplete = (): void => {
+    setPendingAction({
+      message: 'Подтвердите завершение поездки',
+      confirmLabel: 'Завершить',
+      run: markCompleted,
+    });
+  };
 
   // Go back if phase is not relevant to this screen
   useEffect(() => {
@@ -569,7 +597,7 @@ export default function OrderActiveScreen(): React.ReactNode {
         {state.phase === 'active' && (
           <EnRouteCard
             order={order}
-            onMarkArrived={markArrived}
+            onMarkArrived={requestArrived}
             loading={loading}
             route={route}
             routeLoading={routeLoading}
@@ -580,7 +608,7 @@ export default function OrderActiveScreen(): React.ReactNode {
         {state.phase === 'arrived' && (
           <ArrivedCard
             order={order}
-            onMarkStarted={markStarted}
+            onMarkStarted={requestStart}
             onCancelRequest={() => setCancelSheetOpen(true)}
             loading={loading}
           />
@@ -588,7 +616,7 @@ export default function OrderActiveScreen(): React.ReactNode {
         {state.phase === 'in_progress' && (
           <InProgressCard
             order={order}
-            onMarkCompleted={markCompleted}
+            onMarkCompleted={requestComplete}
             loading={loading}
             route={route}
             routeLoading={routeLoading}
@@ -604,6 +632,21 @@ export default function OrderActiveScreen(): React.ReactNode {
         visible={cancelSheetOpen}
         onClose={() => setCancelSheetOpen(false)}
         onPick={handlePickCancelReason}
+      />
+
+      <ConfirmModal
+        visible={pendingAction !== null}
+        message={pendingAction?.message ?? ''}
+        confirmLabel={pendingAction?.confirmLabel ?? 'Подтвердить'}
+        onConfirm={() => {
+          const action = pendingAction?.run;
+          setPendingAction(null);
+          if (action) {
+            void action();
+          }
+        }}
+        onCancel={() => setPendingAction(null)}
+        loading={loading}
       />
     </View>
   );

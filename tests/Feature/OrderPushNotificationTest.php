@@ -52,7 +52,7 @@ class OrderPushNotificationTest extends TestCase
         Http::assertSent(function ($request) {
             $payload = $request->data()[0];
 
-            return str_contains($payload['body'], 'on the way')
+            return str_contains($payload['body'], 'едет')
                 && $payload['data']['type'] === 'order_accepted';
         });
     }
@@ -76,7 +76,7 @@ class OrderPushNotificationTest extends TestCase
         Http::assertSent(function ($request) {
             $payload = $request->data()[0];
 
-            return str_contains($payload['body'], 'arrived')
+            return str_contains($payload['body'], 'прибыл')
                 && $payload['data']['type'] === 'driver_arrived';
         });
     }

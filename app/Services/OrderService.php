@@ -163,10 +163,15 @@ class OrderService
         $driverProfile = $driver->driverProfile;
 
         if ($client) {
+            $car = $driverProfile?->car_model;
+            $body = $car
+                ? "{$driver->name} едет к вам на {$car}"
+                : "{$driver->name} едет к вам";
+
             $this->pushService->sendToUser(
                 $client,
-                'Driver found!',
-                "{$driver->name} is on the way in a {$driverProfile?->car_model}",
+                'Водитель найден',
+                $body,
                 ['order_id' => $order->id, 'type' => 'order_accepted'],
             );
         }
@@ -268,8 +273,8 @@ class OrderService
         if ($client) {
             $this->pushService->sendToUser(
                 $client,
-                'Driver arrived',
-                "{$driver->name} has arrived at your pickup point",
+                'Водитель ожидает вас',
+                "{$driver->name} прибыл в точку подачи",
                 ['order_id' => $order->id, 'type' => 'driver_arrived'],
             );
         }
@@ -327,16 +332,16 @@ class OrderService
         if ($client) {
             $this->pushService->sendToUser(
                 $client,
-                'Ride completed',
-                "Your ride is complete. Total: {$order->price} KGS",
+                'Поездка завершена',
+                "К оплате: {$order->price} сом",
                 ['order_id' => $order->id, 'type' => 'order_completed'],
             );
         }
 
         $this->pushService->sendToUser(
             $driver,
-            'Ride completed',
-            "Ride completed. Earned: {$order->price} KGS",
+            'Поездка завершена',
+            "Заработано: {$order->price} сом",
             ['order_id' => $order->id, 'type' => 'order_completed'],
         );
 
@@ -381,8 +386,8 @@ class OrderService
         if ($client) {
             $this->pushService->sendToUser(
                 $client,
-                'Ride cancelled',
-                'Your ride has been cancelled',
+                'Заказ отменён',
+                'Ваш заказ был отменён',
                 ['order_id' => $order->id, 'type' => 'order_cancelled'],
             );
         }
@@ -390,8 +395,8 @@ class OrderService
         if ($driver) {
             $this->pushService->sendToUser(
                 $driver,
-                'Ride cancelled',
-                'The ride has been cancelled',
+                'Заказ отменён',
+                'Заказ был отменён',
                 ['order_id' => $order->id, 'type' => 'order_cancelled'],
             );
         }
