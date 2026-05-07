@@ -2,9 +2,13 @@ import axios, { AxiosError, InternalAxiosRequestConfig } from 'axios';
 import { API_BASE_URL } from '../utils/constants';
 import { getToken } from '../utils/storage';
 
+// 90s covers a Render free-tier cold start (typically 30–60 s after the
+// service has been idle for 15 minutes). On warm hits real responses come
+// back in 1–3 s, so this only matters for the very first request after a
+// long pause.
 const apiClient = axios.create({
   baseURL: API_BASE_URL,
-  timeout: 60000,
+  timeout: 90000,
   headers: {
     'Content-Type': 'application/json',
     Accept: 'application/json',
