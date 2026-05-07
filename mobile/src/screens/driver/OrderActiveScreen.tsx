@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import {
   View,
   Text,
@@ -21,7 +21,6 @@ import { useRoute as useNavigationRoute } from '../../hooks/useRoute';
 import type { DriverStackParamList } from '../../navigation/types';
 import type { Order, DriverCancellationReason } from '../../api/types';
 import type { Route } from '../../api/routing';
-import { trimRouteFromPosition } from '../../utils/routeTrim';
 
 type NavigationProp = NativeStackNavigationProp<DriverStackParamList, 'OrderActive'>;
 
@@ -455,23 +454,10 @@ export default function OrderActiveScreen(): React.ReactNode {
       : null;
   const {
     route,
+    trimmedCoordinates,
     loading: routeLoading,
     error: routeError,
   } = useNavigationRoute(routeOrigin, routeDestination);
-
-  // Trim the polyline so it shrinks as the driver progresses (Yandex-style).
-  // Snap the driver's live position onto the closest segment of the original
-  // polyline and slice everything before that snap point. Re-fetches happen
-  // less often than ticks, so this is what creates the smooth shrinking feel.
-  const trimmedRouteCoords = useMemo(() => {
-    if (!route || route.coordinates.length < 2) {
-      return route?.coordinates ?? [];
-    }
-    if (!driverPoint) {
-      return route.coordinates;
-    }
-    return trimRouteFromPosition(route.coordinates, driverPoint).trimmed;
-  }, [route, driverPoint?.latitude, driverPoint?.longitude]);
 
   // Fit map to route bounds (or pickup + driver, or pickup alone)
   useEffect(() => {
@@ -549,9 +535,9 @@ export default function OrderActiveScreen(): React.ReactNode {
             <View style={styles.driverDot} />
           </Marker>
         )}
-        {trimmedRouteCoords.length > 1 && (
+        {trimmedCoordinates.length > 1 && (
           <Polyline
-            coordinates={trimmedRouteCoords}
+            coordinates={trimmedCoordinates}
             strokeColor={DriverColors.success}
             strokeWidth={6}
             lineCap="round"
