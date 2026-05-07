@@ -430,13 +430,32 @@ export default function OrderActiveScreen(): React.ReactNode {
       ? { latitude: driverLocation.latitude, longitude: driverLocation.longitude }
       : null;
 
-  const pickupPoint = order
-    ? { latitude: order.pickup_latitude, longitude: order.pickup_longitude }
-    : null;
+  // Defensive: react-native-maps silently ignores Marker / Polyline coords
+  // that come in as strings. The API now serializes lat/lng as floats, but
+  // older deploys may still hand us strings — coerce here so the screen
+  // works regardless of backend version.
+  const pickupLat = order ? Number(order.pickup_latitude) : NaN;
+  const pickupLng = order ? Number(order.pickup_longitude) : NaN;
+  const dropoffLat =
+    order?.dropoff_latitude !== null && order?.dropoff_latitude !== undefined
+      ? Number(order.dropoff_latitude)
+      : null;
+  const dropoffLng =
+    order?.dropoff_longitude !== null && order?.dropoff_longitude !== undefined
+      ? Number(order.dropoff_longitude)
+      : null;
+
+  const pickupPoint =
+    order && Number.isFinite(pickupLat) && Number.isFinite(pickupLng)
+      ? { latitude: pickupLat, longitude: pickupLng }
+      : null;
 
   const dropoffPoint =
-    order && order.dropoff_latitude !== null && order.dropoff_longitude !== null
-      ? { latitude: order.dropoff_latitude, longitude: order.dropoff_longitude }
+    dropoffLat !== null &&
+    dropoffLng !== null &&
+    Number.isFinite(dropoffLat) &&
+    Number.isFinite(dropoffLng)
+      ? { latitude: dropoffLat, longitude: dropoffLng }
       : null;
 
   // Route to pickup while en-route; route to dropoff once ride is in progress.
@@ -468,7 +487,7 @@ export default function OrderActiveScreen(): React.ReactNode {
       route && route.coordinates.length > 0
         ? route.coordinates
         : [
-            { latitude: order.pickup_latitude, longitude: order.pickup_longitude },
+            ...(pickupPoint ? [pickupPoint] : []),
             ...(driverPoint ? [driverPoint] : []),
           ];
     if (coords.length === 0) {
@@ -500,8 +519,8 @@ export default function OrderActiveScreen(): React.ReactNode {
         ref={mapRef}
         style={styles.map}
         initialRegion={{
-          latitude: order.pickup_latitude,
-          longitude: order.pickup_longitude,
+          latitude: pickupPoint?.latitude ?? 42.87,
+          longitude: pickupPoint?.longitude ?? 74.59,
           latitudeDelta: 0.02,
           longitudeDelta: 0.02,
         }}
@@ -509,14 +528,13 @@ export default function OrderActiveScreen(): React.ReactNode {
         showsMyLocationButton
         mapPadding={{ top: Platform.OS === 'android' ? (StatusBar.currentHeight ?? 40) + 8 : 0, right: 0, bottom: 0, left: 0 }}
       >
-        <Marker
-          coordinate={{
-            latitude: order.pickup_latitude,
-            longitude: order.pickup_longitude,
-          }}
-          title={order.pickup_address || 'Клиент'}
-          pinColor={DriverColors.primary}
-        />
+        {pickupPoint && (
+          <Marker
+            coordinate={pickupPoint}
+            title={order.pickup_address || 'Клиент'}
+            pinColor={DriverColors.primary}
+          />
+        )}
         {dropoffPoint && (
           <Marker
             coordinate={dropoffPoint}
