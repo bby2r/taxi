@@ -1,4 +1,12 @@
-import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
+import React, {
+  createContext,
+  useContext,
+  useState,
+  useEffect,
+  useCallback,
+  useRef,
+  useMemo,
+} from 'react';
 import { Alert } from 'react-native';
 import { Order, DeclineReason, DriverCancellationReason } from '../api/types';
 import {
@@ -84,7 +92,12 @@ interface UseDriverOrderReturn {
   error: string | null;
 }
 
-export function useDriverOrder(): UseDriverOrderReturn {
+// Internal state machine. Wrapped in a Context below so HomeScreen and
+// OrderActiveScreen share a single instance — without this, the second
+// component spins up its own state initialized to `offline` and the
+// OrderActiveScreen's goBack-on-non-active effect bounces the driver
+// straight back to the home tab the moment the active order screen mounts.
+function useDriverOrderState(): UseDriverOrderReturn {
   const { user } = useAuth();
   const [state, setState] = useState<DriverOrderState>({ phase: 'offline', order: null });
   const [loading, setLoading] = useState(false);
@@ -395,4 +408,29 @@ export function useDriverOrder(): UseDriverOrderReturn {
     loading,
     error,
   };
+}
+
+const DriverOrderContext = createContext<UseDriverOrderReturn | null>(null);
+
+export function DriverOrderProvider({
+  children,
+}: {
+  children: React.ReactNode;
+}): React.ReactElement {
+  const value = useDriverOrderState();
+  return (
+    <DriverOrderContext.Provider value={value}>
+      {children}
+    </DriverOrderContext.Provider>
+  );
+}
+
+export function useDriverOrder(): UseDriverOrderReturn {
+  const ctx = useContext(DriverOrderContext);
+  if (!ctx) {
+    throw new Error(
+      'useDriverOrder must be used within <DriverOrderProvider>',
+    );
+  }
+  return ctx;
 }
