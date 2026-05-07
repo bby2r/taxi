@@ -24,6 +24,45 @@ class OrderResourceTest extends TestCase
         return (new OrderResource($order))->response()->getData(true)['data'];
     }
 
+    public function test_pickup_and_dropoff_coords_are_serialized_as_floats(): void
+    {
+        // react-native-maps silently ignores Marker / Polyline coords passed as
+        // strings, so the API must surface numeric lat/lng even though the
+        // model casts them as `decimal:7`.
+        $client = User::factory()->create();
+        $order = Order::factory()->create([
+            'client_id' => $client->id,
+            'pickup_latitude' => 42.8746,
+            'pickup_longitude' => 74.5698,
+            'dropoff_latitude' => 42.9000,
+            'dropoff_longitude' => 74.6000,
+        ]);
+        $order->load('client');
+
+        $resource = $this->resolveResource($order);
+
+        $this->assertIsFloat($resource['pickup_latitude']);
+        $this->assertIsFloat($resource['pickup_longitude']);
+        $this->assertIsFloat($resource['dropoff_latitude']);
+        $this->assertIsFloat($resource['dropoff_longitude']);
+    }
+
+    public function test_dropoff_coords_remain_null_when_unset(): void
+    {
+        $client = User::factory()->create();
+        $order = Order::factory()->create([
+            'client_id' => $client->id,
+            'dropoff_latitude' => null,
+            'dropoff_longitude' => null,
+        ]);
+        $order->load('client');
+
+        $resource = $this->resolveResource($order);
+
+        $this->assertNull($resource['dropoff_latitude']);
+        $this->assertNull($resource['dropoff_longitude']);
+    }
+
     public function test_order_resource_contains_expected_keys(): void
     {
         $client = User::factory()->create();

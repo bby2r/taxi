@@ -17,11 +17,15 @@ class OrderResource extends JsonResource
         return [
             'id' => $this->id,
             'status' => $this->status->value,
-            'pickup_latitude' => $this->pickup_latitude,
-            'pickup_longitude' => $this->pickup_longitude,
+            'pickup_latitude' => (float) $this->pickup_latitude,
+            'pickup_longitude' => (float) $this->pickup_longitude,
             'pickup_address' => $this->pickup_address,
-            'dropoff_latitude' => $this->dropoff_latitude,
-            'dropoff_longitude' => $this->dropoff_longitude,
+            'dropoff_latitude' => $this->dropoff_latitude !== null
+                ? (float) $this->dropoff_latitude
+                : null,
+            'dropoff_longitude' => $this->dropoff_longitude !== null
+                ? (float) $this->dropoff_longitude
+                : null,
             'dropoff_address' => $this->dropoff_address,
             'price' => $this->price,
             'cancellation_fee' => $this->cancellation_fee,
