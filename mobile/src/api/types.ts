@@ -86,6 +86,29 @@ export interface DriverStats {
   total: { orders: number; earnings: number };
 }
 
+export interface DriverPeriodEarnings {
+  orders: number;
+  earnings: number;
+  commission: number;
+}
+
+export interface DriverSettlement {
+  id: number;
+  amount: number;
+  paid_at: string;
+  notes: string | null;
+}
+
+export interface DriverBalance {
+  today: DriverPeriodEarnings;
+  week: DriverPeriodEarnings;
+  month: DriverPeriodEarnings;
+  total: DriverPeriodEarnings;
+  balance: number;
+  last_settlement_at: string | null;
+  recent_settlements: DriverSettlement[];
+}
+
 export interface DriverProfile {
   id: number;
   name: string;

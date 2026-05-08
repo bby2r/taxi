@@ -71,6 +71,7 @@ Route::prefix('v1')->middleware('auth:sanctum')->group(function () {
         Route::post('/profile/request-changes', [DriverProfileController::class, 'requestChanges'])->name('api.v1.driver.profile.request-changes');
         Route::get('/profile/change-requests', [DriverProfileController::class, 'changeRequests'])->name('api.v1.driver.profile.change-requests');
         Route::get('/stats', [DriverController::class, 'stats'])->name('api.v1.driver.stats');
+        Route::get('/balance', [DriverController::class, 'balance'])->name('api.v1.driver.balance');
         Route::get('/orders/active', [DriverController::class, 'activeOrder'])->name('api.v1.driver.orders.active');
         Route::get('/orders/pending-offer', [DriverController::class, 'pendingOffer'])->name('api.v1.driver.orders.pending-offer');
         Route::get('/orders', [DriverController::class, 'orders'])->name('api.v1.driver.orders.index');

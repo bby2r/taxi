@@ -2,6 +2,7 @@
 
 use App\Enums\UserRole;
 use App\Http\Controllers\Admin\AuthController;
+use App\Http\Controllers\Admin\BillingController;
 use App\Http\Controllers\Admin\ClientController;
 use App\Http\Controllers\Admin\DashboardController;
 use App\Http\Controllers\Admin\DriverController;
@@ -47,6 +48,10 @@ Route::prefix('admin')->name('admin.')->group(function () {
         Route::resource('tickets', DriverTicketController::class)->only(['index', 'show']);
         Route::post('tickets/{ticket}/approve', [DriverTicketController::class, 'approve'])->name('tickets.approve');
         Route::post('tickets/{ticket}/reject', [DriverTicketController::class, 'reject'])->name('tickets.reject');
+
+        Route::get('billing', [BillingController::class, 'index'])->name('billing.index');
+        Route::get('billing/{driver}', [BillingController::class, 'show'])->name('billing.show');
+        Route::post('billing/{driver}/settlements', [BillingController::class, 'storeSettlement'])->name('billing.settlements.store');
 
         Route::get('settings', [SettingController::class, 'index'])->name('settings.index');
         Route::put('settings', [SettingController::class, 'update'])->name('settings.update');

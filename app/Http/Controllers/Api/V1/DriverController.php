@@ -12,6 +12,7 @@ use App\Http\Resources\V1\DriverChangeRequestResource;
 use App\Http\Resources\V1\OrderResource;
 use App\Http\Resources\V1\UserResource;
 use App\Models\Order;
+use App\Services\DriverBalanceService;
 use App\Services\OrderService;
 use Carbon\CarbonInterface;
 use Illuminate\Http\JsonResponse;
@@ -20,7 +21,10 @@ use Illuminate\Http\Resources\Json\AnonymousResourceCollection;
 
 class DriverController extends Controller
 {
-    public function __construct(private readonly OrderService $orderService) {}
+    public function __construct(
+        private readonly OrderService $orderService,
+        private readonly DriverBalanceService $balanceService,
+    ) {}
 
     /**
      * Set the driver as online and update their location.
@@ -265,6 +269,18 @@ class DriverController extends Controller
         return (new UserResource($user))->additional([
             'pending_changes' => DriverChangeRequestResource::collection($pendingChanges),
         ]);
+    }
+
+    /**
+     * Earnings + commission summary for the driver mobile app
+     * (today / week / month / total + current balance owed + recent
+     * settlements).
+     */
+    public function balance(Request $request): JsonResponse
+    {
+        $summary = $this->balanceService->summary($request->user());
+
+        return response()->json(['data' => $summary]);
     }
 
     /**

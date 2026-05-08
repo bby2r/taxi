@@ -185,7 +185,10 @@ export default function HomeScreen(): React.ReactNode {
           state.order.driver && (
             <>
               <DriverCard driver={state.order.driver} status={state.phase} />
-              {state.phase === 'accepted' && (
+              {/* Cancel button is hidden once the ride is in_progress —
+                  driver has already started the trip and can't be cancelled
+                  by the client per backend rules (Order::isCancellable). */}
+              {(state.phase === 'accepted' || state.phase === 'arrived') && (
                 <ActionButton
                   title="Отменить"
                   onPress={cancelOrder}

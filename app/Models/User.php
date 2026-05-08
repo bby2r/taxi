@@ -76,6 +76,16 @@ class User extends Authenticatable
     }
 
     /**
+     * Settlements (commission payments) recorded against this driver.
+     *
+     * @return HasMany<DriverSettlement, $this>
+     */
+    public function settlements(): HasMany
+    {
+        return $this->hasMany(DriverSettlement::class, 'driver_id');
+    }
+
+    /**
      * Scope to only driver users.
      *
      * @param  Builder<User>  $query

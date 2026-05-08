@@ -10,18 +10,78 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { DriverColors } from '../../theme/colors';
 import { Typography } from '../../theme/typography';
-import { DriverStats } from '../../api/types';
-import { getDriverStats } from '../../api/driver';
+import { DriverBalance, DriverPeriodEarnings, DriverSettlement } from '../../api/types';
+import { getDriverBalance } from '../../api/driver';
 import ActionButton from '../../components/ActionButton';
-import StatCard from '../../components/StatCard';
+
+function formatMoney(amount: number): string {
+  return amount.toLocaleString('ru-RU') + ' сом';
+}
+
+function formatDate(iso: string): string {
+  const d = new Date(iso);
+  return d.toLocaleDateString('ru-RU', {
+    day: '2-digit',
+    month: 'short',
+    year: 'numeric',
+  });
+}
+
+interface PeriodCardProps {
+  title: string;
+  data: DriverPeriodEarnings;
+}
+
+function PeriodCard({ title, data }: PeriodCardProps): React.ReactNode {
+  return (
+    <View style={styles.periodCard}>
+      <Text style={[Typography.caption, styles.periodTitle]}>{title}</Text>
+      <Text style={[Typography.h2, styles.periodEarnings]}>
+        {formatMoney(data.earnings)}
+      </Text>
+      <View style={styles.periodMeta}>
+        <Text style={[Typography.caption, { color: DriverColors.textMuted }]}>
+          {data.orders} поездок
+        </Text>
+        <Text style={[Typography.caption, { color: DriverColors.primary }]}>
+          комиссия: {formatMoney(data.commission)}
+        </Text>
+      </View>
+    </View>
+  );
+}
+
+interface SettlementRowProps {
+  settlement: DriverSettlement;
+}
+
+function SettlementRow({ settlement }: SettlementRowProps): React.ReactNode {
+  return (
+    <View style={styles.settlementRow}>
+      <View style={{ flex: 1 }}>
+        <Text style={[Typography.bodyBold, { color: DriverColors.textPrimary }]}>
+          {formatMoney(settlement.amount)}
+        </Text>
+        {settlement.notes ? (
+          <Text style={[Typography.caption, { color: DriverColors.textMuted, marginTop: 2 }]}>
+            {settlement.notes}
+          </Text>
+        ) : null}
+      </View>
+      <Text style={[Typography.caption, { color: DriverColors.textMuted }]}>
+        {formatDate(settlement.paid_at)}
+      </Text>
+    </View>
+  );
+}
 
 export default function StatsScreen(): React.ReactNode {
-  const [stats, setStats] = useState<DriverStats | null>(null);
+  const [data, setData] = useState<DriverBalance | null>(null);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const fetchStats = useCallback(async (isRefresh: boolean): Promise<void> => {
+  const fetch = useCallback(async (isRefresh: boolean): Promise<void> => {
     try {
       if (isRefresh) {
         setRefreshing(true);
@@ -29,10 +89,10 @@ export default function StatsScreen(): React.ReactNode {
         setLoading(true);
       }
       setError(null);
-      const data = await getDriverStats();
-      setStats(data);
+      const fresh = await getDriverBalance();
+      setData(fresh);
     } catch {
-      setError('Не удалось загрузить статистику');
+      setError('Не удалось загрузить данные');
     } finally {
       setLoading(false);
       setRefreshing(false);
@@ -40,8 +100,8 @@ export default function StatsScreen(): React.ReactNode {
   }, []);
 
   useEffect(() => {
-    fetchStats(false);
-  }, [fetchStats]);
+    fetch(false);
+  }, [fetch]);
 
   if (loading) {
     return (
@@ -51,37 +111,75 @@ export default function StatsScreen(): React.ReactNode {
     );
   }
 
-  if (error && !stats) {
+  if (error && !data) {
     return (
       <SafeAreaView style={styles.centered}>
         <Text style={[Typography.body, { color: DriverColors.textSecondary, marginBottom: 16 }]}>
           {error}
         </Text>
-        <ActionButton title="Повторить" onPress={() => fetchStats(false)} />
+        <ActionButton title="Повторить" onPress={() => fetch(false)} />
       </SafeAreaView>
     );
   }
 
+  const balance = data!.balance;
+  const owesMoney = balance > 0;
+
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
-      <Text style={[Typography.h1, styles.header]}>Статистика</Text>
+      <Text style={[Typography.h1, styles.header]}>Финансы</Text>
       <ScrollView
         contentContainerStyle={styles.scrollContent}
         refreshControl={
           <RefreshControl
             refreshing={refreshing}
-            onRefresh={() => fetchStats(true)}
+            onRefresh={() => fetch(true)}
             tintColor={DriverColors.primary}
           />
         }
       >
-        <View style={styles.row}>
-          <StatCard title="Сегодня" orders={stats!.today.orders} earnings={stats!.today.earnings} />
-          <StatCard title="Неделя" orders={stats!.week.orders} earnings={stats!.week.earnings} />
+        <View
+          style={[
+            styles.balanceCard,
+            owesMoney ? styles.balanceCardOwes : styles.balanceCardClear,
+          ]}
+        >
+          <Text style={[Typography.caption, styles.balanceLabel]}>
+            {owesMoney ? 'К оплате оператору' : 'Долг закрыт'}
+          </Text>
+          <Text style={[Typography.h1, styles.balanceAmount]}>
+            {formatMoney(balance)}
+          </Text>
+          {data!.last_settlement_at ? (
+            <Text style={[Typography.caption, styles.balanceMeta]}>
+              Последний платёж: {formatDate(data!.last_settlement_at)}
+            </Text>
+          ) : (
+            <Text style={[Typography.caption, styles.balanceMeta]}>
+              Платежей ещё не было
+            </Text>
+          )}
+          <Text style={[Typography.caption, styles.balanceMeta]}>
+            Расчёты — еженедельно
+          </Text>
         </View>
-        <View style={[styles.row, { marginTop: 12 }]}>
-          <StatCard title="Месяц" orders={stats!.month.orders} earnings={stats!.month.earnings} />
-          <StatCard title="Всего" orders={stats!.total.orders} earnings={stats!.total.earnings} />
+
+        <PeriodCard title="Сегодня" data={data!.today} />
+        <PeriodCard title="Эта неделя" data={data!.week} />
+        <PeriodCard title="Месяц" data={data!.month} />
+        <PeriodCard title="Всего" data={data!.total} />
+
+        <View style={styles.section}>
+          <Text style={[Typography.h3, styles.sectionTitle]}>Платежи</Text>
+          {data!.recent_settlements.length === 0 ? (
+            <Text style={[Typography.body, { color: DriverColors.textMuted }]}>
+              Пока пусто. Когда оператор зафиксирует ваш платёж — он появится здесь.
+            </Text>
+          ) : (
+            data!.recent_settlements.map((s) => (
+              <SettlementRow key={s.id} settlement={s} />
+            ))
+          )}
         </View>
       </ScrollView>
     </SafeAreaView>
@@ -107,10 +205,64 @@ const styles = StyleSheet.create({
   },
   scrollContent: {
     paddingHorizontal: 20,
-    paddingBottom: 24,
+    paddingBottom: 32,
   },
-  row: {
+  balanceCard: {
+    borderRadius: 16,
+    padding: 20,
+    marginBottom: 16,
+  },
+  balanceCardOwes: {
+    backgroundColor: '#3B1F22',
+    borderWidth: 1,
+    borderColor: DriverColors.danger,
+  },
+  balanceCardClear: {
+    backgroundColor: '#0F2A22',
+    borderWidth: 1,
+    borderColor: DriverColors.success,
+  },
+  balanceLabel: {
+    color: DriverColors.textMuted,
+    marginBottom: 6,
+  },
+  balanceAmount: {
+    color: DriverColors.textPrimary,
+    marginBottom: 8,
+  },
+  balanceMeta: {
+    color: DriverColors.textMuted,
+  },
+  periodCard: {
+    backgroundColor: DriverColors.cardBackground,
+    borderRadius: 14,
+    padding: 16,
+    marginBottom: 10,
+  },
+  periodTitle: {
+    color: DriverColors.textMuted,
+    marginBottom: 4,
+  },
+  periodEarnings: {
+    color: DriverColors.textPrimary,
+    marginBottom: 6,
+  },
+  periodMeta: {
     flexDirection: 'row',
-    gap: 12,
+    justifyContent: 'space-between',
+  },
+  section: {
+    marginTop: 16,
+  },
+  sectionTitle: {
+    color: DriverColors.textPrimary,
+    marginBottom: 10,
+  },
+  settlementRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    paddingVertical: 12,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: DriverColors.border,
   },
 });

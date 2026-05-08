@@ -317,9 +317,17 @@ class OrderService
                 throw new \RuntimeException('Cannot complete this order.');
             }
 
+            // Lock the operator commission onto the order at completion time
+            // so future rate changes don't rewrite history. Only completed
+            // orders generate commission — cancellations and the
+            // cancellation_fee don't.
+            $rate = (int) Setting::getValue('commission_rate', 7);
+            $commission = (int) round(($order->price * $rate) / 100);
+
             $order->update([
                 'status' => OrderStatus::Completed,
                 'completed_at' => now(),
+                'commission_amount' => $commission,
             ]);
 
             event(new OrderCompleted($order));

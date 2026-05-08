@@ -1,5 +1,11 @@
 import apiClient from './client';
-import { Order, DriverStats, DeclineReason, DriverCancellationReason } from './types';
+import {
+  Order,
+  DriverStats,
+  DriverBalance,
+  DeclineReason,
+  DriverCancellationReason,
+} from './types';
 
 export async function goOnline(latitude: number, longitude: number): Promise<void> {
   await apiClient.post('/api/v1/driver/go-online', { latitude, longitude });
@@ -82,5 +88,10 @@ export async function getPendingOffer(): Promise<Order | null> {
 
 export async function getDriverStats(): Promise<DriverStats> {
   const { data } = await apiClient.get<{ data: DriverStats }>('/api/v1/driver/stats');
+  return data.data;
+}
+
+export async function getDriverBalance(): Promise<DriverBalance> {
+  const { data } = await apiClient.get<{ data: DriverBalance }>('/api/v1/driver/balance');
   return data.data;
 }
