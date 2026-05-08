@@ -22,6 +22,12 @@ import { useRoute as useNavigationRoute } from '../../hooks/useRoute';
 import type { DriverStackParamList } from '../../navigation/types';
 import type { Order, DriverCancellationReason } from '../../api/types';
 import type { Route } from '../../api/routing';
+import { haversineMeters } from '../../utils/geo';
+
+// Driver must be within this distance of the pickup point before they can
+// confirm "Прибыл к клиенту". Stops them from tapping the button while still
+// driving and triggering an early "Водитель ожидает вас" push to the client.
+const ARRIVED_THRESHOLD_METERS = 150;
 
 type NavigationProp = NativeStackNavigationProp<DriverStackParamList, 'OrderActive'>;
 
@@ -137,6 +143,7 @@ function EnRouteCard({
   routeLoading,
   routeError,
   locationError,
+  distanceToPickup,
 }: {
   order: Order;
   onMarkArrived: () => void;
@@ -145,7 +152,10 @@ function EnRouteCard({
   routeLoading: boolean;
   routeError: string | null;
   locationError: string | null;
+  distanceToPickup: number | null;
 }): React.ReactNode {
+  const canArrive =
+    distanceToPickup !== null && distanceToPickup <= ARRIVED_THRESHOLD_METERS;
   return (
     <View style={styles.cardContent}>
       {route && (
@@ -226,10 +236,25 @@ function EnRouteCard({
 
       <View style={styles.spacer} />
 
+      {!canArrive && distanceToPickup !== null && (
+        <Text
+          style={[Typography.caption, styles.distanceHint]}
+          testID="distance-to-pickup"
+        >
+          До клиента: {Math.round(distanceToPickup)} м · кнопка станет
+          активной в радиусе {ARRIVED_THRESHOLD_METERS} м
+        </Text>
+      )}
+      {!canArrive && distanceToPickup === null && (
+        <Text style={[Typography.caption, styles.distanceHint]}>
+          Ждём геолокацию...
+        </Text>
+      )}
       <ActionButton
         title="Прибыл к клиенту"
         onPress={onMarkArrived}
         loading={loading}
+        disabled={!canArrive}
         style={styles.actionButton}
       />
     </View>
@@ -603,6 +628,11 @@ export default function OrderActiveScreen(): React.ReactNode {
             routeLoading={routeLoading}
             routeError={routeError}
             locationError={driverLocation.error}
+            distanceToPickup={
+              driverPoint && pickupPoint
+                ? haversineMeters(driverPoint, pickupPoint)
+                : null
+            }
           />
         )}
         {state.phase === 'arrived' && (
@@ -685,6 +715,11 @@ const styles = StyleSheet.create({
     backgroundColor: DriverColors.primary,
     borderWidth: 3,
     borderColor: '#fff',
+  },
+  distanceHint: {
+    color: DriverColors.textMuted,
+    textAlign: 'center',
+    marginTop: 8,
   },
   navigationLink: {
     marginTop: 12,

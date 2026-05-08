@@ -102,5 +102,30 @@
                 </div>
             </form>
         </div>
+
+        {{-- Push diagnostics --}}
+        <div class="mt-6 rounded-xl border border-gray-200 bg-white p-6 shadow-sm">
+            <h3 class="mb-3 text-base font-semibold text-gray-900">Push-уведомления</h3>
+            @if ($driver->expo_push_token)
+                <div class="flex items-center gap-2">
+                    <span class="inline-flex items-center rounded-full bg-emerald-100 px-2.5 py-0.5 text-xs font-medium text-emerald-700">
+                        Зарегистрирован
+                    </span>
+                    <span class="text-xs text-gray-500 break-all">{{ $driver->expo_push_token }}</span>
+                </div>
+                <p class="mt-3 text-xs text-gray-500">
+                    Если водитель жалуется что заказы не приходят — попроси его (1) зайти в Настройки → Приложения → Village Taxi → Уведомления и убедиться что они включены, (2) принудительно закрыть приложение и открыть заново.
+                </p>
+            @else
+                <div class="flex items-center gap-2">
+                    <span class="inline-flex items-center rounded-full bg-red-100 px-2.5 py-0.5 text-xs font-medium text-red-700">
+                        Нет токена
+                    </span>
+                </div>
+                <p class="mt-3 text-xs text-gray-500">
+                    Водитель не получит push-уведомления о новых заказах когда приложение свернуто. Возможные причины: запретил уведомления при первом запуске, не открывал приложение после установки, или ошибка регистрации. Попроси его открыть приложение и разрешить уведомления — токен зарегистрируется автоматически.
+                </p>
+            @endif
+        </div>
     </div>
 @endsection

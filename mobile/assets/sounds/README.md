@@ -1,31 +1,81 @@
-# Custom notification sounds
+# Custom notification sound for new orders
 
-Drop a short branded audio cue here as `order_arrived.wav` (PCM, ≤ 30 sec, ≤ 1 MB) to enable a custom sound for driver order offers. Without it, the system default plays.
+Right now the app uses Android's default notification sound on the
+`driver_offers` channel. To swap in a branded melody:
 
-## Activation steps
+## 1. Get a sound file
 
-1. Place the file: `mobile/assets/sounds/order_arrived.wav`
-2. Re-enable the `sounds` array in `mobile/app.json`:
+You need a short `.wav` (or `.mp3` for newer Android). Sources:
 
-   ```json
-   ["expo-notifications", {
-     "color": "#FBBF24",
-     "sounds": ["./assets/sounds/order_arrived.wav"]
-   }]
-   ```
+- **Record on your phone** — open voice recorder, say "Новый заказ" or play a melody, save as `.wav`. Easiest path
+- **Free libraries** — https://freesound.org / https://pixabay.com/sound-effects (filter Creative Commons / royalty-free)
+- **Generate online** — https://onlinesequencer.net or any DAW
 
-3. Switch the channel sound in `mobile/src/hooks/useNotifications.ts`:
+Constraints:
+- Length: **≤ 30 seconds** (longer files won't play correctly)
+- Format: **`.wav` PCM 16-bit, 44.1 kHz, mono** is the safest cross-platform choice
+- Size: **≤ 1 MB** (it ships in the APK)
+- Volume: keep it punchy — Android lowers volume of notification sounds on some devices
 
-   ```ts
-   sound: 'order_arrived',  // was 'default'
-   ```
+## 2. Drop the file
 
-4. Update the backend offer push to use the same file name (already configured: `app/Services/ExpoPushService.php::sendOfferToDriver` sends `sound: 'order_arrived'`).
+Save it as exactly:
 
-5. Rebuild the APK (`eas build -p android --profile preview`). OTA update alone is **not** enough — sound files are bundled into the native binary.
+```
+mobile/assets/sounds/order_arrived.wav
+```
 
-## Format notes
+Filename matters — backend already sends `sound: 'order_arrived'` in the offer push payload (see `app/Services/ExpoPushService.php::sendOfferToDriver`).
 
-- Android: `.wav` PCM 16-bit, 44.1 kHz, mono. AAC/MP3 also works on newer Android.
-- iOS: should be `.caf` ideally, but `.wav` is accepted. Keep under 30 seconds.
-- Channel sound on Android is **immutable** after first install — uninstall/reinstall the app (or clear app data) for a sound change to take effect on existing devices.
+## 3. Tell the build to bundle it
+
+Edit `mobile/app.json`, find the `expo-notifications` plugin block, and add the `sounds` array:
+
+```json
+[
+  "expo-notifications",
+  {
+    "color": "#FBBF24",
+    "sounds": ["./assets/sounds/order_arrived.wav"]
+  }
+],
+```
+
+## 4. Tell the channel to use it
+
+Edit `mobile/src/hooks/useNotifications.ts` — find the line:
+
+```ts
+sound: 'default',
+```
+
+Replace with the file name (without extension):
+
+```ts
+sound: 'order_arrived',
+```
+
+## 5. Rebuild the APK
+
+OTA is **not enough** for sound files — they live in the native bundle.
+
+```sh
+cd mobile && eas build -p android --profile preview
+```
+
+Install the new APK on each driver's phone. **Important:** Android caches notification channels permanently after the first registration. To pick up the new sound on devices that already had the old channel:
+
+1. Settings → Apps → Village Taxi → Notifications → "Новые заказы" channel → delete OR
+2. Uninstall and reinstall the app
+
+Newly installed devices will get the new sound right away.
+
+## iOS notes
+
+- iOS prefers `.caf`. Plain `.wav` works but may not play correctly on every iOS version.
+- Apple caps notification sounds at 30 seconds and 1 MB regardless.
+- iOS doesn't have channels — the `sound` value in the push payload is matched directly to a file in the app bundle.
+
+## What if you want different sounds per event type?
+
+Same pattern — register a second channel (e.g. `client_arrived`) in `useNotifications.ts`, drop a second `.wav`, update the backend method that sends that push to set `channelId: 'client_arrived'`. The plugin's `sounds` array can hold many entries.

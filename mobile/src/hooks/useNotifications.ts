@@ -1,5 +1,5 @@
 import { useEffect } from 'react';
-import { Alert, Platform } from 'react-native';
+import { Alert, AppState, Platform } from 'react-native';
 import { registerPushToken } from '../api/auth';
 import { useAuth } from '../context/AuthContext';
 import { navigationRef } from '../navigation/navigationRef';
@@ -20,6 +20,7 @@ if (Platform.OS !== 'web') {
 }
 
 const DRIVER_OFFER_CHANNEL = 'driver_offers';
+const PROJECT_ID = 'ca4f91d1-a8f4-488b-9c14-0eb60aa286b8';
 
 async function configureAndroidChannel(): Promise<void> {
   if (!Notifications || Platform.OS !== 'android') {
@@ -29,9 +30,10 @@ async function configureAndroidChannel(): Promise<void> {
     name: 'Новые заказы',
     description: 'Уведомления о новых заказах для водителей',
     importance: Notifications.AndroidImportance.MAX,
-    // To use a branded sound: drop a .wav into mobile/assets/sounds/,
-    // re-enable the `sounds` array in app.json's expo-notifications plugin,
-    // and replace 'default' below with the file name (e.g. 'order_arrived').
+    // Switch from 'default' to your bundled file name (e.g. 'order_arrived')
+    // once a .wav lands in mobile/assets/sounds/ and the `sounds` array is
+    // re-enabled in app.json's expo-notifications plugin. The channel sound
+    // is locked at first registration on each device — see the README.
     sound: 'default',
     vibrationPattern: [0, 400, 250, 400, 250, 400],
     lightColor: '#FBBF24',
@@ -43,6 +45,31 @@ async function configureAndroidChannel(): Promise<void> {
   });
 }
 
+async function registerToken(): Promise<{ ok: boolean; reason?: string; token?: string }> {
+  if (!Notifications) {
+    return { ok: false, reason: 'no-notifications-module' };
+  }
+  await configureAndroidChannel();
+
+  const { status } = await Notifications.requestPermissionsAsync();
+  if (status !== 'granted') {
+    return { ok: false, reason: 'permission-denied' };
+  }
+
+  try {
+    const tokenData = await Notifications.getExpoPushTokenAsync({ projectId: PROJECT_ID });
+    // Surfaces in EAS / Metro device logs when diagnosing missing pushes.
+    // eslint-disable-next-line no-console
+    console.log('[push] Expo token:', tokenData.data);
+    await registerPushToken(tokenData.data);
+    return { ok: true, token: tokenData.data };
+  } catch (err) {
+    // eslint-disable-next-line no-console
+    console.warn('[push] registration failed:', err);
+    return { ok: false, reason: 'token-fetch-or-server-failure' };
+  }
+}
+
 export function useNotifications(): void {
   const { isAuthenticated, user } = useAuth();
 
@@ -51,37 +78,30 @@ export function useNotifications(): void {
 
     let foregroundSub: ReturnType<typeof Notifications.addNotificationReceivedListener> | null = null;
     let responseSub: ReturnType<typeof Notifications.addNotificationResponseReceivedListener> | null = null;
+    let appStateSub: ReturnType<typeof AppState.addEventListener> | null = null;
+    let permissionAlertShown = false;
 
-    (async () => {
-      try {
-        await configureAndroidChannel();
-
-        const { status } = await Notifications!.requestPermissionsAsync();
-        if (status !== 'granted') {
-          // Without notification permission Android delivers absolutely
-          // nothing in the background — the driver would silently miss
-          // every order whenever the app isn't in front. Surface this once
-          // per session so they can fix it in system settings.
-          Alert.alert(
-            'Уведомления отключены',
-            'Чтобы получать заказы когда приложение свернуто, разрешите уведомления в настройках телефона.',
-          );
-          return;
-        }
-
-        const tokenData = await Notifications!.getExpoPushTokenAsync({
-          projectId: 'ca4f91d1-a8f4-488b-9c14-0eb60aa286b8',
-        });
-        // Visible in `npx react-native log-android` / EAS device logs while
-        // diagnosing missing-push reports.
-        // eslint-disable-next-line no-console
-        console.log('[push] Expo token:', tokenData.data);
-        await registerPushToken(tokenData.data);
-      } catch (err) {
-        // eslint-disable-next-line no-console
-        console.warn('[push] registration failed:', err);
+    const tryRegister = async (): Promise<void> => {
+      const result = await registerToken();
+      if (!result.ok && result.reason === 'permission-denied' && !permissionAlertShown) {
+        permissionAlertShown = true;
+        Alert.alert(
+          'Уведомления отключены',
+          'Чтобы получать заказы когда приложение свернуто, разрешите уведомления в настройках телефона.',
+        );
       }
-    })();
+    };
+
+    void tryRegister();
+
+    // Re-attempt registration whenever the user returns to the foreground —
+    // fixes the case where they enabled notifications in system settings
+    // and came back, but the existing session never re-registered the token.
+    appStateSub = AppState.addEventListener('change', (next) => {
+      if (next === 'active') {
+        void tryRegister();
+      }
+    });
 
     if (Notifications) {
       // When the user taps a notification (typically from a locked /
@@ -109,6 +129,7 @@ export function useNotifications(): void {
     return () => {
       foregroundSub?.remove();
       responseSub?.remove();
+      appStateSub?.remove();
     };
   }, [isAuthenticated, user?.role]);
 }
