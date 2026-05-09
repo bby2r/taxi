@@ -5,18 +5,26 @@ import { useAuth } from '../context/AuthContext';
 import { navigationRef } from '../navigation/navigationRef';
 
 let Notifications: typeof import('expo-notifications') | null = null;
+let moduleLoadError: string | null = null;
 
 if (Platform.OS !== 'web') {
-  Notifications = require('expo-notifications');
-  Notifications!.setNotificationHandler({
-    handleNotification: async () => ({
-      shouldShowAlert: true,
-      shouldPlaySound: true,
-      shouldSetBadge: false,
-      shouldShowBanner: true,
-      shouldShowList: true,
-    }),
-  });
+  try {
+    Notifications = require('expo-notifications');
+    Notifications!.setNotificationHandler({
+      handleNotification: async () => ({
+        shouldShowAlert: true,
+        shouldPlaySound: true,
+        shouldSetBadge: false,
+        shouldShowBanner: true,
+        shouldShowList: true,
+      }),
+    });
+  } catch (err) {
+    // Means the APK was built without the native side of expo-notifications.
+    // OTA can't fix this — needs a fresh `eas build`. Surface it on the banner.
+    moduleLoadError = err instanceof Error ? err.message : String(err);
+    Notifications = null;
+  }
 }
 
 const DRIVER_OFFER_CHANNEL = 'driver_offers';
@@ -24,13 +32,16 @@ const PROJECT_ID = 'ca4f91d1-a8f4-488b-9c14-0eb60aa286b8';
 
 export type PushStatus =
   | { kind: 'idle' }
+  | { kind: 'starting' }
   | { kind: 'success'; token: string }
   | { kind: 'permission-denied' }
-  | { kind: 'no-module' }
+  | { kind: 'no-module'; error?: string }
   | { kind: 'fetch-failed'; error: string }
   | { kind: 'register-failed'; error: string };
 
-let currentStatus: PushStatus = { kind: 'idle' };
+let currentStatus: PushStatus = moduleLoadError
+  ? { kind: 'no-module', error: moduleLoadError }
+  : { kind: 'idle' };
 const statusListeners: Array<(s: PushStatus) => void> = [];
 
 function setStatus(next: PushStatus): void {
@@ -72,9 +83,10 @@ async function configureAndroidChannel(): Promise<void> {
 
 export async function registerToken(): Promise<{ ok: boolean; reason?: string; token?: string }> {
   if (!Notifications) {
-    setStatus({ kind: 'no-module' });
+    setStatus({ kind: 'no-module', error: moduleLoadError ?? undefined });
     return { ok: false, reason: 'no-module' };
   }
+  setStatus({ kind: 'starting' });
   await configureAndroidChannel();
 
   const { status } = await Notifications.requestPermissionsAsync();
@@ -114,7 +126,15 @@ export function useNotifications(): void {
   const { isAuthenticated, user, refreshUser } = useAuth();
 
   useEffect(() => {
-    if (!isAuthenticated || Platform.OS === 'web' || !Notifications) return;
+    if (!isAuthenticated || Platform.OS === 'web') return;
+
+    if (!Notifications) {
+      // Make the failure visible on the home screen instead of staying
+      // silently in `idle` — a common cause is an APK built without the
+      // native side of `expo-notifications` (needs a fresh EAS build).
+      setStatus({ kind: 'no-module', error: moduleLoadError ?? undefined });
+      return;
+    }
 
     let foregroundSub: ReturnType<typeof Notifications.addNotificationReceivedListener> | null = null;
     let responseSub: ReturnType<typeof Notifications.addNotificationResponseReceivedListener> | null = null;

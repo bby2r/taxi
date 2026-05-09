@@ -205,16 +205,22 @@ export default function HomeScreen(): React.ReactNode {
         </View>
       )}
 
-      {pushStatus.kind !== 'idle' && pushStatus.kind !== 'success' && (
+      {pushStatus.kind !== 'success' && pushStatus.kind !== 'starting' && (
         <View style={styles.pushBanner}>
           <Text style={[Typography.bodyBold, { color: DriverColors.danger }]}>
             ⚠ Push-уведомления не настроены
           </Text>
-          <Text style={[Typography.caption, styles.pushBannerHint]}>
+          <Text
+            style={[Typography.caption, styles.pushBannerHint]}
+            testID="push-banner-reason"
+          >
+            {pushStatus.kind === 'idle' &&
+              'Регистрация не запускалась — модуль уведомлений недоступен в этой сборке APK. Нужна пересборка через EAS Build.'}
             {pushStatus.kind === 'permission-denied' &&
               'Разрешите уведомления в настройках телефона. Без этого заказы не придут когда приложение свернуто.'}
             {pushStatus.kind === 'no-module' &&
-              'Модуль уведомлений не загрузился. Попробуйте переустановить приложение.'}
+              'Модуль expo-notifications не загрузился. Скорее всего APK собран без него — нужна пересборка через EAS Build.' +
+                (pushStatus.error ? ' Детали: ' + pushStatus.error : '')}
             {pushStatus.kind === 'fetch-failed' &&
               'Не удалось получить токен от Expo: ' + pushStatus.error}
             {pushStatus.kind === 'register-failed' &&
