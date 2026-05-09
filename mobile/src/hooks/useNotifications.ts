@@ -1,4 +1,4 @@
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { Alert, AppState, Platform } from 'react-native';
 import { registerPushToken } from '../api/auth';
 import { useAuth } from '../context/AuthContext';
@@ -22,6 +22,35 @@ if (Platform.OS !== 'web') {
 const DRIVER_OFFER_CHANNEL = 'driver_offers';
 const PROJECT_ID = 'ca4f91d1-a8f4-488b-9c14-0eb60aa286b8';
 
+export type PushStatus =
+  | { kind: 'idle' }
+  | { kind: 'success'; token: string }
+  | { kind: 'permission-denied' }
+  | { kind: 'no-module' }
+  | { kind: 'fetch-failed'; error: string }
+  | { kind: 'register-failed'; error: string };
+
+let currentStatus: PushStatus = { kind: 'idle' };
+const statusListeners: Array<(s: PushStatus) => void> = [];
+
+function setStatus(next: PushStatus): void {
+  currentStatus = next;
+  statusListeners.forEach((l) => l(next));
+}
+
+export function usePushStatus(): PushStatus {
+  const [snapshot, setSnapshot] = useState<PushStatus>(currentStatus);
+  useEffect(() => {
+    const listener = (next: PushStatus): void => setSnapshot(next);
+    statusListeners.push(listener);
+    return () => {
+      const idx = statusListeners.indexOf(listener);
+      if (idx >= 0) statusListeners.splice(idx, 1);
+    };
+  }, []);
+  return snapshot;
+}
+
 async function configureAndroidChannel(): Promise<void> {
   if (!Notifications || Platform.OS !== 'android') {
     return;
@@ -30,10 +59,6 @@ async function configureAndroidChannel(): Promise<void> {
     name: 'Новые заказы',
     description: 'Уведомления о новых заказах для водителей',
     importance: Notifications.AndroidImportance.MAX,
-    // Switch from 'default' to your bundled file name (e.g. 'order_arrived')
-    // once a .wav lands in mobile/assets/sounds/ and the `sounds` array is
-    // re-enabled in app.json's expo-notifications plugin. The channel sound
-    // is locked at first registration on each device — see the README.
     sound: 'default',
     vibrationPattern: [0, 400, 250, 400, 250, 400],
     lightColor: '#FBBF24',
@@ -45,28 +70,43 @@ async function configureAndroidChannel(): Promise<void> {
   });
 }
 
-async function registerToken(): Promise<{ ok: boolean; reason?: string; token?: string }> {
+export async function registerToken(): Promise<{ ok: boolean; reason?: string; token?: string }> {
   if (!Notifications) {
-    return { ok: false, reason: 'no-notifications-module' };
+    setStatus({ kind: 'no-module' });
+    return { ok: false, reason: 'no-module' };
   }
   await configureAndroidChannel();
 
   const { status } = await Notifications.requestPermissionsAsync();
   if (status !== 'granted') {
+    setStatus({ kind: 'permission-denied' });
     return { ok: false, reason: 'permission-denied' };
   }
 
+  let tokenString: string;
   try {
     const tokenData = await Notifications.getExpoPushTokenAsync({ projectId: PROJECT_ID });
-    // Surfaces in EAS / Metro device logs when diagnosing missing pushes.
+    tokenString = tokenData.data;
     // eslint-disable-next-line no-console
-    console.log('[push] Expo token:', tokenData.data);
-    await registerPushToken(tokenData.data);
-    return { ok: true, token: tokenData.data };
+    console.log('[push] Expo token:', tokenString);
   } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    setStatus({ kind: 'fetch-failed', error: msg });
     // eslint-disable-next-line no-console
-    console.warn('[push] registration failed:', err);
-    return { ok: false, reason: 'token-fetch-or-server-failure' };
+    console.warn('[push] getExpoPushTokenAsync failed:', msg);
+    return { ok: false, reason: 'fetch-failed' };
+  }
+
+  try {
+    await registerPushToken(tokenString);
+    setStatus({ kind: 'success', token: tokenString });
+    return { ok: true, token: tokenString };
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    setStatus({ kind: 'register-failed', error: msg });
+    // eslint-disable-next-line no-console
+    console.warn('[push] registerPushToken POST failed:', msg);
+    return { ok: false, reason: 'register-failed' };
   }
 }
 
@@ -84,9 +124,6 @@ export function useNotifications(): void {
     const tryRegister = async (): Promise<void> => {
       const result = await registerToken();
       if (result.ok) {
-        // Pull a fresh /me so the auth context's `has_push_token` flag flips
-        // and the banner in DriverHome can disappear without requiring a
-        // re-login.
         try {
           await refreshUser();
         } catch {
@@ -105,9 +142,6 @@ export function useNotifications(): void {
 
     void tryRegister();
 
-    // Re-attempt registration whenever the user returns to the foreground —
-    // fixes the case where they enabled notifications in system settings
-    // and came back, but the existing session never re-registered the token.
     appStateSub = AppState.addEventListener('change', (next) => {
       if (next === 'active') {
         void tryRegister();
@@ -115,19 +149,13 @@ export function useNotifications(): void {
     });
 
     if (Notifications) {
-      // When the user taps a notification (typically from a locked /
-      // backgrounded device), if it's a new-order push for a driver, route
-      // them to the home screen so useDriverOrder can pick the offer up via
-      // Pusher / polling and show the OrderOfferCard with its 10-second
-      // countdown. Use the imperative navigationRef instead of useNavigation
-      // here because this hook runs above the NavigationContainer.
       responseSub = Notifications.addNotificationResponseReceivedListener((response) => {
         const data = response.notification.request.content.data as { type?: string } | undefined;
         if (data?.type === 'new_order' && user?.role === 'driver' && navigationRef.isReady()) {
           try {
             navigationRef.navigate('DriverApp' as never);
           } catch {
-            // If not ready yet, useDriverOrder picks up via polling on next focus
+            // not ready
           }
         }
       });
@@ -142,5 +170,5 @@ export function useNotifications(): void {
       responseSub?.remove();
       appStateSub?.remove();
     };
-  }, [isAuthenticated, user?.role]);
+  }, [isAuthenticated, user?.role, refreshUser]);
 }

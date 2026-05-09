@@ -21,6 +21,7 @@ import { useAuth } from '../../context/AuthContext';
 import { useDriverOrder } from '../../hooks/useDriverOrder';
 import { useDriverLocation } from '../../hooks/useDriverLocation';
 import { useLocation } from '../../hooks/useLocation';
+import { usePushStatus, registerToken } from '../../hooks/useNotifications';
 import OrderOfferCard from '../../components/OrderOfferCard';
 import { DriverColors } from '../../theme/colors';
 import { Typography } from '../../theme/typography';
@@ -47,6 +48,7 @@ export default function HomeScreen(): React.ReactNode {
   const driverLocation = useLocation();
   useDriverLocation({ enabled: isOnline });
   const mapRef = useRef<MapView>(null);
+  const pushStatus = usePushStatus();
 
   // Navigate to OrderActive when in any active phase
   useEffect(() => {
@@ -203,23 +205,43 @@ export default function HomeScreen(): React.ReactNode {
         </View>
       )}
 
-      {auth.user && auth.user.has_push_token === false && (
-        <TouchableOpacity
-          style={styles.pushBanner}
-          onPress={() => Linking.openSettings()}
-          activeOpacity={0.85}
-          testID="push-banner"
-        >
+      {pushStatus.kind !== 'idle' && pushStatus.kind !== 'success' && (
+        <View style={styles.pushBanner}>
           <Text style={[Typography.bodyBold, { color: DriverColors.danger }]}>
-            ⚠ Уведомления отключены
+            ⚠ Push-уведомления не настроены
           </Text>
           <Text style={[Typography.caption, styles.pushBannerHint]}>
-            Заказы не будут приходить когда приложение свернуто.
+            {pushStatus.kind === 'permission-denied' &&
+              'Разрешите уведомления в настройках телефона. Без этого заказы не придут когда приложение свернуто.'}
+            {pushStatus.kind === 'no-module' &&
+              'Модуль уведомлений не загрузился. Попробуйте переустановить приложение.'}
+            {pushStatus.kind === 'fetch-failed' &&
+              'Не удалось получить токен от Expo: ' + pushStatus.error}
+            {pushStatus.kind === 'register-failed' &&
+              'Токен получен, но не дошёл до сервера: ' + pushStatus.error}
           </Text>
-          <Text style={[Typography.caption, styles.pushBannerCta]}>
-            Нажмите чтобы открыть настройки →
-          </Text>
-        </TouchableOpacity>
+          <View style={styles.pushBannerActions}>
+            <TouchableOpacity
+              onPress={() => Linking.openSettings()}
+              style={[styles.pushBannerButton, styles.pushBannerButtonOutline]}
+              activeOpacity={0.7}
+            >
+              <Text style={[Typography.caption, { color: DriverColors.primary }]}>
+                Настройки
+              </Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              onPress={() => registerToken()}
+              style={[styles.pushBannerButton, styles.pushBannerButtonFilled]}
+              activeOpacity={0.7}
+              testID="push-retry"
+            >
+              <Text style={[Typography.caption, { color: DriverColors.background }]}>
+                Повторить
+              </Text>
+            </TouchableOpacity>
+          </View>
+        </View>
       )}
 
       {state.phase !== 'offer' && (
@@ -356,11 +378,24 @@ const styles = StyleSheet.create({
   },
   pushBannerHint: {
     color: DriverColors.textSecondary,
-    marginTop: 2,
+    marginTop: 4,
   },
-  pushBannerCta: {
-    color: DriverColors.primary,
-    marginTop: 6,
+  pushBannerActions: {
+    flexDirection: 'row',
+    gap: 8,
+    marginTop: 10,
+  },
+  pushBannerButton: {
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    borderRadius: 8,
+  },
+  pushBannerButtonOutline: {
+    borderWidth: 1,
+    borderColor: DriverColors.primary,
+  },
+  pushBannerButtonFilled: {
+    backgroundColor: DriverColors.primary,
   },
   driverDot: {
     width: 28,
