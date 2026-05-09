@@ -19,6 +19,10 @@ class UserResource extends JsonResource
             'name' => $this->name,
             'phone' => $this->phone,
             'role' => $this->role->value,
+            // Boolean flag (not the token itself) so the driver app can show
+            // a banner when push hasn't been registered yet without leaking
+            // the token to other clients.
+            'has_push_token' => ! empty($this->expo_push_token),
             'driver_profile' => $this->when($this->isDriver() && $this->relationLoaded('driverProfile'), fn () => [
                 'car_model' => $this->driverProfile->car_model,
                 'car_number' => $this->driverProfile->car_number,

@@ -8,6 +8,7 @@ import {
   Platform,
   StatusBar,
   ActivityIndicator,
+  Linking,
 } from 'react-native';
 import MapView, { Marker } from 'react-native-maps';
 import * as Location from 'expo-location';
@@ -202,6 +203,25 @@ export default function HomeScreen(): React.ReactNode {
         </View>
       )}
 
+      {auth.user && auth.user.has_push_token === false && (
+        <TouchableOpacity
+          style={styles.pushBanner}
+          onPress={() => Linking.openSettings()}
+          activeOpacity={0.85}
+          testID="push-banner"
+        >
+          <Text style={[Typography.bodyBold, { color: DriverColors.danger }]}>
+            ⚠ Уведомления отключены
+          </Text>
+          <Text style={[Typography.caption, styles.pushBannerHint]}>
+            Заказы не будут приходить когда приложение свернуто.
+          </Text>
+          <Text style={[Typography.caption, styles.pushBannerCta]}>
+            Нажмите чтобы открыть настройки →
+          </Text>
+        </TouchableOpacity>
+      )}
+
       {state.phase !== 'offer' && (
         <View style={styles.bottomPanel}>
           {isOnline && state.phase === 'online_idle' && (
@@ -321,6 +341,26 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     borderWidth: 1,
     borderColor: DriverColors.danger,
+  },
+  pushBanner: {
+    position: 'absolute',
+    top: TOP_INSET + 56,
+    left: 16,
+    right: 16,
+    backgroundColor: '#3B1F22',
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: DriverColors.danger,
+  },
+  pushBannerHint: {
+    color: DriverColors.textSecondary,
+    marginTop: 2,
+  },
+  pushBannerCta: {
+    color: DriverColors.primary,
+    marginTop: 6,
   },
   driverDot: {
     width: 28,

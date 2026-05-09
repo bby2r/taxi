@@ -56,6 +56,7 @@ export interface User {
   name: string;
   phone: string;
   role: 'client' | 'driver';
+  has_push_token?: boolean;
 }
 
 export interface AuthResponse {

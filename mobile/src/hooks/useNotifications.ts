@@ -71,7 +71,7 @@ async function registerToken(): Promise<{ ok: boolean; reason?: string; token?: 
 }
 
 export function useNotifications(): void {
-  const { isAuthenticated, user } = useAuth();
+  const { isAuthenticated, user, refreshUser } = useAuth();
 
   useEffect(() => {
     if (!isAuthenticated || Platform.OS === 'web' || !Notifications) return;
@@ -83,7 +83,18 @@ export function useNotifications(): void {
 
     const tryRegister = async (): Promise<void> => {
       const result = await registerToken();
-      if (!result.ok && result.reason === 'permission-denied' && !permissionAlertShown) {
+      if (result.ok) {
+        // Pull a fresh /me so the auth context's `has_push_token` flag flips
+        // and the banner in DriverHome can disappear without requiring a
+        // re-login.
+        try {
+          await refreshUser();
+        } catch {
+          // ignore — banner refresh isn't critical
+        }
+        return;
+      }
+      if (result.reason === 'permission-denied' && !permissionAlertShown) {
         permissionAlertShown = true;
         Alert.alert(
           'Уведомления отключены',

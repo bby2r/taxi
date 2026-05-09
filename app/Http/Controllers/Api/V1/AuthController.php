@@ -15,6 +15,7 @@ use App\Services\OtpService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Facades\Log;
 
 class AuthController extends Controller
 {
@@ -151,6 +152,7 @@ class AuthController extends Controller
                 'name' => $user->name,
                 'phone' => $user->phone,
                 'role' => $user->role,
+                'has_push_token' => ! empty($user->expo_push_token),
             ],
         ]);
     }
@@ -160,8 +162,15 @@ class AuthController extends Controller
      */
     public function updatePushToken(UpdatePushTokenRequest $request): JsonResponse
     {
-        $request->user()->update([
-            'expo_push_token' => $request->validated('expo_push_token'),
+        $token = $request->validated('expo_push_token');
+        $user = $request->user();
+
+        $user->update(['expo_push_token' => $token]);
+
+        Log::info('Expo push token registered', [
+            'user_id' => $user->id,
+            'role' => $user->role->value,
+            'token_suffix' => substr($token, -12),
         ]);
 
         return response()->json([
