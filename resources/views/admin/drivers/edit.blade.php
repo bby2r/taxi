@@ -106,6 +106,14 @@
         {{-- Push diagnostics --}}
         <div class="mt-6 rounded-xl border border-gray-200 bg-white p-6 shadow-sm">
             <h3 class="mb-3 text-base font-semibold text-gray-900">Push-уведомления</h3>
+
+            @if (session('success'))
+                <div class="mb-4 rounded-lg bg-emerald-50 px-3 py-2 text-sm text-emerald-800">{{ session('success') }}</div>
+            @endif
+            @if (session('error'))
+                <div class="mb-4 rounded-lg bg-red-50 px-3 py-2 text-sm text-red-800">{{ session('error') }}</div>
+            @endif
+
             @if ($driver->expo_push_token)
                 <div class="flex items-center gap-2">
                     <span class="inline-flex items-center rounded-full bg-emerald-100 px-2.5 py-0.5 text-xs font-medium text-emerald-700">
@@ -113,9 +121,26 @@
                     </span>
                     <span class="text-xs text-gray-500 break-all">{{ $driver->expo_push_token }}</span>
                 </div>
+
+                <form method="POST" action="{{ route('admin.drivers.test-push', $driver) }}" class="mt-4">
+                    @csrf
+                    <button
+                        type="submit"
+                        class="rounded-lg bg-amber-500 px-4 py-2 text-sm font-medium text-white shadow-sm hover:bg-amber-600"
+                    >
+                        Отправить тестовое уведомление
+                    </button>
+                </form>
+
                 <p class="mt-3 text-xs text-gray-500">
-                    Если водитель жалуется что заказы не приходят — попроси его (1) зайти в Настройки → Приложения → Village Taxi → Уведомления и убедиться что они включены, (2) принудительно закрыть приложение и открыть заново.
+                    Если тест приходит, а заказы — нет: проблема в диспатче (Pusher / геопозиция / уже принят другим). Если тест тоже не приходит, проблема ниже (на устройстве):
                 </p>
+                <ul class="mt-2 ml-4 list-disc text-xs text-gray-500 space-y-1">
+                    <li>Уведомления выключены: <em>Настройки → Приложения → Village Taxi → Уведомления</em></li>
+                    <li>Андроид «оптимизирует» батарею — особенно Xiaomi/Huawei. Добавь приложение в исключения (<em>Настройки → Батарея → Приложения без ограничений</em>)</li>
+                    <li>Принудительная остановка приложения — нужно открыть заново чтобы FCM-связь восстановилась</li>
+                    <li>Нет интернета на телефоне</li>
+                </ul>
             @else
                 <div class="flex items-center gap-2">
                     <span class="inline-flex items-center rounded-full bg-red-100 px-2.5 py-0.5 text-xs font-medium text-red-700">
@@ -123,7 +148,7 @@
                     </span>
                 </div>
                 <p class="mt-3 text-xs text-gray-500">
-                    Водитель не получит push-уведомления о новых заказах когда приложение свернуто. Возможные причины: запретил уведомления при первом запуске, не открывал приложение после установки, или ошибка регистрации. Попроси его открыть приложение и разрешить уведомления — токен зарегистрируется автоматически.
+                    Водитель не получит push-уведомления о новых заказах когда приложение свернуто. Возможные причины: запретил уведомления при первом запуске, не открывал приложение после установки, или ошибка регистрации. Попроси его открыть приложение и разрешить уведомления — токен зарегистрируется автоматически на следующем переходе в активное состояние.
                 </p>
             @endif
         </div>

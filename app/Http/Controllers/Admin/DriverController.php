@@ -6,6 +6,7 @@ use App\Enums\OrderStatus;
 use App\Enums\UserRole;
 use App\Http\Controllers\Controller;
 use App\Models\User;
+use App\Services\ExpoPushService;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -120,6 +121,37 @@ class DriverController extends Controller
     /**
      * Remove the specified driver from storage.
      */
+    /**
+     * Fire a one-off heads-up push to the driver via the same path used by
+     * order offers. Lets the operator confirm end-to-end whether
+     * Expo / FCM is reaching the device.
+     */
+    public function sendTestPush(User $driver, ExpoPushService $push): RedirectResponse
+    {
+        abort_unless($driver->isDriver(), 404);
+
+        if (! $driver->expo_push_token) {
+            return back()->with('error', 'У водителя нет push-токена. Попроси его открыть приложение и разрешить уведомления.');
+        }
+
+        $sent = $push->sendToUser(
+            $driver,
+            'Тестовое уведомление',
+            'Если вы видите это сообщение — push работает.',
+            ['type' => 'admin_test'],
+            [
+                'sound' => 'default',
+                'priority' => 'high',
+                'channelId' => 'driver_offers',
+                'ttl' => 30,
+            ],
+        );
+
+        return $sent
+            ? back()->with('success', 'Тестовый push отправлен. Должно прийти на устройство в течение 5–10 секунд.')
+            : back()->with('error', 'Не удалось отправить push. Проверь логи Render — Expo вернул ошибку (токен мог устареть).');
+    }
+
     public function destroy(User $driver): RedirectResponse
     {
         abort_unless($driver->isDriver(), 404);
