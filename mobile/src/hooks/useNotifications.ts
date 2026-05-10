@@ -20,6 +20,26 @@ if (Platform.OS !== 'web') {
         shouldShowList: true,
       }),
     });
+    // Register the ride_offer category at module load — BEFORE the
+    // permission grant — so the very first server push that lands on
+    // the device already shows Принять / Отказаться buttons. Previously
+    // we did this inside registerToken, which only runs after the user
+    // grants notification permission, leaving the very first push
+    // without buttons.
+    Notifications!.setNotificationCategoryAsync('ride_offer', [
+      {
+        identifier: 'accept',
+        buttonTitle: 'Принять',
+        options: { opensAppToForeground: true },
+      },
+      {
+        identifier: 'decline',
+        buttonTitle: 'Отказаться',
+        options: { opensAppToForeground: true },
+      },
+    ]).catch(() => {
+      // best effort; failure here just means actions won't show — not fatal
+    });
   } catch (err) {
     // Means the APK was built without the native side of expo-notifications.
     // OTA can't fix this — needs a fresh `eas build`. Surface it on the banner.
@@ -33,25 +53,11 @@ const RIDE_OFFER_CATEGORY = 'ride_offer';
 const PROJECT_ID = 'ca4f91d1-a8f4-488b-9c14-0eb60aa286b8';
 
 async function configureRideOfferCategory(): Promise<void> {
-  if (!Notifications) {
-    return;
-  }
-  // Buttons that show up directly in the notification shade. Tapping them
-  // queues a pending action (consumed by useDriverOrder when the offer
-  // arrives in JS) and brings the app to foreground. iOS shows them via
-  // long-press; Android renders them inline in the heads-up notification.
-  await Notifications.setNotificationCategoryAsync(RIDE_OFFER_CATEGORY, [
-    {
-      identifier: 'accept',
-      buttonTitle: 'Принять',
-      options: { opensAppToForeground: true },
-    },
-    {
-      identifier: 'decline',
-      buttonTitle: 'Отказаться',
-      options: { opensAppToForeground: true },
-    },
-  ]);
+  // The actual setNotificationCategoryAsync call now happens at module load
+  // above so the first push delivered to the device already carries the
+  // action buttons. This stays as a no-op stub so nothing else has to
+  // change in the call sites; it's safe to call multiple times anyway.
+  return;
 }
 
 export type PushStatus =

@@ -73,6 +73,17 @@ class OrderService
      */
     public function offerToNextDriver(Order $order): void
     {
+        // Guard: declineOrder calls this with a freshly refreshed order, but
+        // by the time we get here the order may have been moved out of
+        // Searching by another concurrent flow (server-side timeout job,
+        // client cancel, system cancel). Without this check we'd end up
+        // calling cancelOrder() on a non-cancellable order and throwing
+        // a 500 to whoever triggered the chain (the driver tapping
+        // "Отказаться" from the notification shade was the report).
+        if ($order->status !== OrderStatus::Searching) {
+            return;
+        }
+
         $drivers = $this->geoService->findNearestDrivers(
             (float) $order->pickup_latitude,
             (float) $order->pickup_longitude,

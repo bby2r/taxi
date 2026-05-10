@@ -7,55 +7,21 @@ import React, {
   useRef,
   useMemo,
 } from 'react';
-import { Alert, AppState, Platform, Vibration } from 'react-native';
+import { Alert, Platform, Vibration } from 'react-native';
 import { Order, DeclineReason, DriverCancellationReason } from '../api/types';
 
-let LocalNotifications: typeof import('expo-notifications') | null = null;
+// Optional dependency — only available once expo-audio is installed and the
+// APK is rebuilt. Until then we degrade silently to vibration-only alerts.
+let ExpoAudio: typeof import('expo-audio') | null = null;
 if (Platform.OS !== 'web') {
   try {
-    LocalNotifications = require('expo-notifications');
+    ExpoAudio = require('expo-audio');
   } catch {
-    LocalNotifications = null;
+    ExpoAudio = null;
   }
 }
 
 const VIBRATION_PATTERN = [0, 400, 250, 400, 250, 400];
-
-function alertDriverAboutOffer(order: Order): void {
-  // The repeating-vibration loop is owned by an effect tied to state.phase
-  // below, so we don't fire a one-shot here — that would cause a double-buzz
-  // overlap with the loop's first cycle.
-
-  // When the app is in the foreground, the OS does not deliver the server-side
-  // push (Expo / FCM) — the JS already received the Pusher event, so no system
-  // notification fires and the driver hears nothing. Schedule a local one on
-  // the `driver_offers` channel: Android then plays the channel sound and
-  // shows the heads-up even if the screen is currently in another app's view.
-  if (
-    LocalNotifications &&
-    Platform.OS !== 'web' &&
-    AppState.currentState === 'active'
-  ) {
-    const body = order.pickup_address
-      ? `Подача: ${order.pickup_address} · ${order.price} сом`
-      : `Новый заказ · ${order.price} сом`;
-    LocalNotifications.scheduleNotificationAsync({
-      content: {
-        title: 'Новый заказ',
-        body,
-        data: { order_id: order.id, type: 'new_order' },
-        sound: 'default',
-        // Android-specific channel routing — picks up vibration / lights / sound
-        // configured in useNotifications.ts. Cast to any because the type
-        // surface differs slightly between expo-notifications versions.
-        ...({ android: { channelId: 'driver_offers' } } as Record<string, unknown>),
-      } as Parameters<typeof LocalNotifications.scheduleNotificationAsync>[0]['content'],
-      trigger: null,
-    }).catch(() => {
-      // Falls back silently — vibration above already alerted the driver.
-    });
-  }
-}
 import {
   goOnline,
   goOffline,
@@ -207,7 +173,12 @@ function useDriverOrderState(): UseDriverOrderReturn {
     const orderData = data as { order: Order } | Order;
     const order = 'order' in orderData ? orderData.order : orderData;
     setState({ phase: 'offer', order });
-    alertDriverAboutOffer(order);
+    // Sound + vibration are now driven by phase-tied effects below — they
+    // start when phase becomes 'offer' and stop the moment it leaves.
+    // No more local notification: the OrderOfferCard is the in-app surface,
+    // and the server-side Expo push covers the case when the app is in
+    // the background. That removes the duplicate notification the driver
+    // saw when the app was already foregrounded.
   }, []);
 
   const handleOrderCancelled = useCallback((data: unknown) => {
@@ -262,6 +233,40 @@ function useDriverOrderState(): UseDriverOrderReturn {
     };
   }, [state.phase]);
 
+  // Loop the offer sound the same way. Requires expo-audio (added to
+  // package.json) and the bundled `assets/sounds/order_arrived.wav` from
+  // app.json's expo-notifications plugin `sounds` array. Degrades to
+  // silence if the module isn't present (older APK without expo-audio).
+  useEffect(() => {
+    if (state.phase !== 'offer' || !ExpoAudio) {
+      return;
+    }
+    let player: ReturnType<typeof ExpoAudio.createAudioPlayer> | null = null;
+    let disposed = false;
+    try {
+      player = ExpoAudio.createAudioPlayer(
+        require('../../assets/sounds/order_arrived.wav'),
+      );
+      player.loop = true;
+      player.volume = 1.0;
+      player.play();
+    } catch {
+      // ignore — vibration above already covers the alert
+    }
+    return () => {
+      disposed = true;
+      if (player) {
+        try {
+          player.pause();
+          player.remove();
+        } catch {
+          // ignore
+        }
+      }
+      void disposed;
+    };
+  }, [state.phase]);
+
   // Poll for pending offers when online and idle (fallback if Pusher is down)
   useEffect(() => {
     if (state.phase !== 'online_idle') return;
@@ -274,7 +279,6 @@ function useDriverOrderState(): UseDriverOrderReturn {
         if (cancelled) return;
         if (offer) {
           setState({ phase: 'offer', order: offer });
-          alertDriverAboutOffer(offer);
         }
       } catch {
         // Ignore polling errors
@@ -365,8 +369,18 @@ function useDriverOrderState(): UseDriverOrderReturn {
       const order = await acceptOrder(current.order.id);
       setState({ phase: 'active', order });
     } catch (err: unknown) {
-      const message = err instanceof Error ? err.message : 'Ошибка при принятии заказа';
-      setError(message);
+      // 422 = order is no longer offered to us (server-side timeout fired,
+      // another driver took it, or the client cancelled while we were
+      // tapping). Drop back to online_idle and tell the driver, instead
+      // of leaving them stuck on a stale offer card.
+      const status = (err as { response?: { status?: number } })?.response?.status;
+      if (status === 422) {
+        setState({ phase: 'online_idle', order: null });
+        Alert.alert('Заказ уже недоступен', 'Заказ уже принял другой водитель или истекло время.');
+      } else {
+        const message = err instanceof Error ? err.message : 'Ошибка при принятии заказа';
+        setError(message);
+      }
     } finally {
       setLoading(false);
     }
@@ -381,8 +395,16 @@ function useDriverOrderState(): UseDriverOrderReturn {
       await declineOrder(current.order.id, reason);
       setState({ phase: 'online_idle', order: null });
     } catch (err: unknown) {
-      const message = err instanceof Error ? err.message : 'Ошибка при отклонении заказа';
-      setError(message);
+      // Even if the decline POST fails (e.g. 5xx from a stale order chain),
+      // the offer is no longer relevant to this driver — clear the card
+      // and let polling / Pusher resync state. Otherwise the card stays
+      // stuck and we keep the looping vibration on forever.
+      setState({ phase: 'online_idle', order: null });
+      const status = (err as { response?: { status?: number } })?.response?.status;
+      if (status !== 422 && status !== 500) {
+        const message = err instanceof Error ? err.message : 'Ошибка при отклонении заказа';
+        setError(message);
+      }
     } finally {
       setLoading(false);
     }
