@@ -77,6 +77,17 @@ jobs:
       - name: Install npm dependencies
         run: npm ci
 
+      - name: Write google-services.json from secret
+        env:
+          GOOGLE_SERVICES_JSON: ${{ secrets.GOOGLE_SERVICES_JSON }}
+        run: |
+          if [ -z "$GOOGLE_SERVICES_JSON" ]; then
+            echo "::error::GOOGLE_SERVICES_JSON secret is not set — Firebase config is required for FCM push to work."
+            exit 1
+          fi
+          printf '%s' "$GOOGLE_SERVICES_JSON" > google-services.json
+          echo "google-services.json written ($(wc -c < google-services.json) bytes)"
+
       - name: Expo prebuild (generate native android project)
         run: npx expo prebuild --platform android --no-install --clean
 

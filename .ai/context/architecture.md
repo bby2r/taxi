@@ -37,7 +37,7 @@ app/
 | Pusher | WebSocket broadcasting (order events) |
 | Nikita SMS | OTP delivery (Kyrgyz provider) |
 | Expo Push | Mobile push notifications |
-| EAS Build | Mobile app builds (Android package: `com.bby2r.taxi`) |
+| EAS Build | Mobile app builds (Android package: `kg.villagetaxi.app`) |
 
 ## Queue
 Database queue driver. Single key job: `OfferTimeoutJob` (10s delay for driver offer timeout). Supervisor runs 1 worker in production.
