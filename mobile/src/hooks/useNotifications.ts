@@ -3,6 +3,7 @@ import { Alert, AppState, Platform } from 'react-native';
 import { registerPushToken } from '../api/auth';
 import { useAuth } from '../context/AuthContext';
 import { navigationRef } from '../navigation/navigationRef';
+import { setPendingDriverAction } from '../utils/pendingNotificationAction';
 
 let Notifications: typeof import('expo-notifications') | null = null;
 let moduleLoadError: string | null = null;
@@ -28,7 +29,30 @@ if (Platform.OS !== 'web') {
 }
 
 const DRIVER_OFFER_CHANNEL = 'driver_offers';
+const RIDE_OFFER_CATEGORY = 'ride_offer';
 const PROJECT_ID = 'ca4f91d1-a8f4-488b-9c14-0eb60aa286b8';
+
+async function configureRideOfferCategory(): Promise<void> {
+  if (!Notifications) {
+    return;
+  }
+  // Buttons that show up directly in the notification shade. Tapping them
+  // queues a pending action (consumed by useDriverOrder when the offer
+  // arrives in JS) and brings the app to foreground. iOS shows them via
+  // long-press; Android renders them inline in the heads-up notification.
+  await Notifications.setNotificationCategoryAsync(RIDE_OFFER_CATEGORY, [
+    {
+      identifier: 'accept',
+      buttonTitle: 'Принять',
+      options: { opensAppToForeground: true },
+    },
+    {
+      identifier: 'decline',
+      buttonTitle: 'Отказаться',
+      options: { opensAppToForeground: true },
+    },
+  ]);
+}
 
 export type PushStatus =
   | { kind: 'idle' }
@@ -88,6 +112,7 @@ export async function registerToken(): Promise<{ ok: boolean; reason?: string; t
   }
   setStatus({ kind: 'starting' });
   await configureAndroidChannel();
+  await configureRideOfferCategory();
 
   const { status } = await Notifications.requestPermissionsAsync();
   if (status !== 'granted') {
@@ -169,16 +194,54 @@ export function useNotifications(): void {
     });
 
     if (Notifications) {
-      responseSub = Notifications.addNotificationResponseReceivedListener((response) => {
-        const data = response.notification.request.content.data as { type?: string } | undefined;
-        if (data?.type === 'new_order' && user?.role === 'driver' && navigationRef.isReady()) {
+      const handleResponse = (response: import('expo-notifications').NotificationResponse): void => {
+        const data = response.notification.request.content.data as
+          | { type?: string; order_id?: number | string }
+          | undefined;
+        if (data?.type !== 'new_order' || user?.role !== 'driver') {
+          return;
+        }
+
+        // Capture which action button (if any) the driver tapped. Default
+        // tap (anywhere on the notification body) gives the platform's
+        // "DEFAULT" identifier — fall back to opening the offer card.
+        const actionId = response.actionIdentifier;
+        const orderIdRaw = data.order_id;
+        const orderId =
+          typeof orderIdRaw === 'string' ? parseInt(orderIdRaw, 10) : orderIdRaw;
+
+        if (
+          orderId !== undefined &&
+          Number.isFinite(orderId) &&
+          (actionId === 'accept' || actionId === 'decline')
+        ) {
+          setPendingDriverAction({ orderId, kind: actionId });
+        }
+
+        if (navigationRef.isReady()) {
           try {
             navigationRef.navigate('DriverApp' as never);
           } catch {
-            // not ready
+            // not ready — useDriverOrder will pick it up via Pusher / polling
           }
         }
-      });
+      };
+
+      responseSub = Notifications.addNotificationResponseReceivedListener(handleResponse);
+
+      // Cold-start path: if the OS launched us straight from a notification
+      // tap, the listener registered above never fires for that tap.
+      // Replay the queued response so the action button still works after
+      // a force-stop.
+      Notifications.getLastNotificationResponseAsync()
+        .then((last) => {
+          if (last) {
+            handleResponse(last);
+          }
+        })
+        .catch(() => {
+          // ignore
+        });
 
       foregroundSub = Notifications.addNotificationReceivedListener(() => {
         // No-op: handler config above already presents the banner + sound.

@@ -38,6 +38,11 @@ class ExpoPushService
             'sound' => 'order_arrived',
             'priority' => 'high',
             'channelId' => 'driver_offers',
+            // Links the push to the locally-registered "ride_offer" category
+            // on the device, which has Принять / Отказаться action buttons.
+            // The driver can react straight from the notification shade
+            // without unlocking the phone.
+            'categoryId' => 'ride_offer',
             'ttl' => 30,
             '_displayInForeground' => true,
         ]);

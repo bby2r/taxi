@@ -70,6 +70,7 @@ import {
 } from '../api/driver';
 import { useAuth } from '../context/AuthContext';
 import { usePusher } from './usePusher';
+import { consumePendingDriverAction } from '../utils/pendingNotificationAction';
 
 export type DriverPhase =
   | 'offline'
@@ -386,6 +387,23 @@ function useDriverOrderState(): UseDriverOrderReturn {
       setLoading(false);
     }
   }, []);
+
+  // If the driver tapped "Принять" or "Отказаться" directly inside the
+  // notification shade, the action button queued a pending decision in the
+  // pendingNotificationAction module. As soon as we have the corresponding
+  // offer in state (via Pusher event or polling fallback), consume the
+  // queued action and fire the matching API call. The offer card never
+  // gets a chance to render — the driver moves straight to the active
+  // ride screen (accept) or back to online_idle (decline).
+  useEffect(() => {
+    if (state.phase !== 'offer') return;
+    const queued = consumePendingDriverAction(state.order.id);
+    if (queued === 'accept') {
+      void acceptOffer();
+    } else if (queued === 'decline') {
+      void declineOffer('personal');
+    }
+  }, [state.phase, acceptOffer, declineOffer]);
 
   const markArrived = useCallback(async (): Promise<void> => {
     const current = stateRef.current;
