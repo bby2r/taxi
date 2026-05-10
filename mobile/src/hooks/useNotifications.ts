@@ -70,7 +70,7 @@ async function configureAndroidChannel(): Promise<void> {
     name: 'Новые заказы',
     description: 'Уведомления о новых заказах для водителей',
     importance: Notifications.AndroidImportance.MAX,
-    sound: 'default',
+    sound: 'order_arrived',
     vibrationPattern: [0, 400, 250, 400, 250, 400],
     lightColor: '#FBBF24',
     bypassDnd: true,

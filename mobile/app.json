@@ -68,7 +68,8 @@
       [
         "expo-notifications",
         {
-          "color": "#FBBF24"
+          "color": "#FBBF24",
+          "sounds": ["./assets/sounds/order_arrived.wav"]
         }
       ],
       "expo-secure-store"
