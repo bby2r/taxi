@@ -13,11 +13,17 @@ import { Order, DeclineReason, DriverCancellationReason } from '../api/types';
 // Optional dependency — only available once expo-audio is installed and the
 // APK is rebuilt. Until then we degrade silently to vibration-only alerts.
 let ExpoAudio: typeof import('expo-audio') | null = null;
+let LocalNotifications: typeof import('expo-notifications') | null = null;
 if (Platform.OS !== 'web') {
   try {
     ExpoAudio = require('expo-audio');
   } catch {
     ExpoAudio = null;
+  }
+  try {
+    LocalNotifications = require('expo-notifications');
+  } catch {
+    LocalNotifications = null;
   }
 }
 
@@ -218,6 +224,18 @@ function useDriverOrderState(): UseDriverOrderReturn {
     events,
     enabled: isOnline,
   });
+
+  // When an offer enters state, sweep any matching server push out of the
+  // notification shade — the OrderOfferCard is now the source of truth for
+  // this offer, and leaving the shade entry there causes a confusing
+  // duplicate ("there's a card AND a notification with buttons").
+  useEffect(() => {
+    if (state.phase !== 'offer') return;
+    if (!LocalNotifications || Platform.OS === 'web') return;
+    LocalNotifications.dismissAllNotificationsAsync().catch(() => {
+      // best-effort cleanup
+    });
+  }, [state.phase]);
 
   // Loop the vibration the entire time an offer is on screen — stops the
   // moment the driver accepts/declines, the offer is cancelled by client,

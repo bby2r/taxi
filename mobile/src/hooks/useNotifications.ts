@@ -11,13 +11,19 @@ let moduleLoadError: string | null = null;
 if (Platform.OS !== 'web') {
   try {
     Notifications = require('expo-notifications');
+    // In foreground: don't show the system heads-up or play the OS sound.
+    // The driver already has the OrderOfferCard slide up in the app, plus
+    // the looping audio + vibration effects in useDriverOrder. Showing the
+    // shade banner on top of that gave drivers a duplicate "double
+    // notification" feeling. The system push is now only visible in the
+    // shade when the app is backgrounded / locked.
     Notifications!.setNotificationHandler({
       handleNotification: async () => ({
-        shouldShowAlert: true,
-        shouldPlaySound: true,
+        shouldShowAlert: false,
+        shouldPlaySound: false,
         shouldSetBadge: false,
-        shouldShowBanner: true,
-        shouldShowList: true,
+        shouldShowBanner: false,
+        shouldShowList: false,
       }),
     });
     // Register the ride_offer category at module load — BEFORE the
