@@ -15,6 +15,10 @@ interface OrderOfferCardProps {
   order: Order;
   onAccept: () => void;
   onDecline: (reason: DeclineReason) => void;
+  // Length of the on-card countdown before auto-decline. 20 s gives the
+  // driver enough breathing room to glance at price + address; the
+  // server-side OfferTimeoutJob still fires at 30 s (intra) / 45 s
+  // (inter-district), so this stays under the server limit.
   countdownSeconds?: number;
 }
 
@@ -29,7 +33,7 @@ export default function OrderOfferCard({
   order,
   onAccept,
   onDecline,
-  countdownSeconds = 10,
+  countdownSeconds = 20,
 }: OrderOfferCardProps): React.ReactNode {
   const [remaining, setRemaining] = useState(countdownSeconds);
   const [reasonSheetOpen, setReasonSheetOpen] = useState(false);

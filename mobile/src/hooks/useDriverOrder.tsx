@@ -22,7 +22,9 @@ if (Platform.OS !== 'web') {
 const VIBRATION_PATTERN = [0, 400, 250, 400, 250, 400];
 
 function alertDriverAboutOffer(order: Order): void {
-  Vibration.vibrate(VIBRATION_PATTERN);
+  // The repeating-vibration loop is owned by an effect tied to state.phase
+  // below, so we don't fire a one-shot here — that would cause a double-buzz
+  // overlap with the loop's first cycle.
 
   // When the app is in the foreground, the OS does not deliver the server-side
   // push (Expo / FCM) — the JS already received the Pusher event, so no system
@@ -244,6 +246,20 @@ function useDriverOrderState(): UseDriverOrderReturn {
     events,
     enabled: isOnline,
   });
+
+  // Loop the vibration the entire time an offer is on screen — stops the
+  // moment the driver accepts/declines, the offer is cancelled by client,
+  // or the in-card 20-second timer auto-declines. Android-only repeat;
+  // iOS only buzzes once per cycle but still re-fires on each pattern.
+  useEffect(() => {
+    if (state.phase !== 'offer') {
+      return;
+    }
+    Vibration.vibrate(VIBRATION_PATTERN, true);
+    return () => {
+      Vibration.cancel();
+    };
+  }, [state.phase]);
 
   // Poll for pending offers when online and idle (fallback if Pusher is down)
   useEffect(() => {
