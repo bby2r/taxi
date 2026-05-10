@@ -233,37 +233,69 @@ function useDriverOrderState(): UseDriverOrderReturn {
     };
   }, [state.phase]);
 
-  // Loop the offer sound the same way. Requires expo-audio (added to
-  // package.json) and the bundled `assets/sounds/order_arrived.wav` from
-  // app.json's expo-notifications plugin `sounds` array. Degrades to
-  // silence if the module isn't present (older APK without expo-audio).
+  // Loop the offer sound for the entire offer window. Behaviour is tuned
+  // for the worst case — driver listening to music in a noisy car:
+  //
+  //   - Plays even when the phone is on silent (`playsInSilentMode: true`)
+  //   - Ducks any background audio so the alert is audible over music
+  //     (`interruptionMode: 'duckOthers'`)
+  //   - Doesn't play in background — once the offer card disappears,
+  //     audio stops
+  //   - Volume forced to 1.0 — Android caps notification volume per
+  //     channel, but in-app playback respects this directly
+  //
+  // The cleanup runs the moment phase leaves 'offer' (accept, decline,
+  // 20-second auto-timeout, server-side cancel). Degrades gracefully to
+  // vibration-only if expo-audio isn't bundled (older APK).
   useEffect(() => {
     if (state.phase !== 'offer' || !ExpoAudio) {
       return;
     }
     let player: ReturnType<typeof ExpoAudio.createAudioPlayer> | null = null;
-    let disposed = false;
-    try {
-      player = ExpoAudio.createAudioPlayer(
-        require('../../assets/sounds/order_arrived.wav'),
-      );
-      player.loop = true;
-      player.volume = 1.0;
-      player.play();
-    } catch {
-      // ignore — vibration above already covers the alert
-    }
+    let active = true;
+
+    (async () => {
+      try {
+        await ExpoAudio!.setAudioModeAsync({
+          playsInSilentMode: true,
+          shouldPlayInBackground: false,
+          interruptionMode: 'duckOthers',
+          interruptionModeAndroid: 'duckOthers',
+          allowsRecording: false,
+        });
+      } catch {
+        // setAudioModeAsync isn't critical — proceed even if it fails.
+      }
+
+      if (!active) return;
+
+      try {
+        const p = ExpoAudio!.createAudioPlayer(
+          require('../../assets/sounds/order_arrived.wav'),
+        );
+        if (!active) {
+          p.remove();
+          return;
+        }
+        p.loop = true;
+        p.volume = 1.0;
+        p.play();
+        player = p;
+      } catch {
+        // file not bundled / module mismatch — fall back to vibration only
+      }
+    })();
+
     return () => {
-      disposed = true;
+      active = false;
       if (player) {
         try {
           player.pause();
           player.remove();
         } catch {
-          // ignore
+          // ignore — already torn down
         }
       }
-      void disposed;
     };
   }, [state.phase]);
 
