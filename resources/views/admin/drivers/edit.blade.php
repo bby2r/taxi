@@ -103,6 +103,58 @@
             </form>
         </div>
 
+        @php
+            $isBlocked = $driver->driverProfile && $driver->driverProfile->blocked_until && $driver->driverProfile->blocked_until->isFuture();
+            $declineCount = $driver->driverProfile?->shift_declines_count ?? 0;
+        @endphp
+
+        {{-- Block status --}}
+        <div class="mt-6 rounded-xl border border-gray-200 bg-white p-6 shadow-sm">
+            <h3 class="mb-3 text-base font-semibold text-gray-900">Блокировка</h3>
+
+            @if ($isBlocked)
+                <div class="flex flex-wrap items-center gap-3">
+                    <span class="inline-flex items-center rounded-full bg-red-100 px-2.5 py-0.5 text-xs font-medium text-red-700">
+                        Заблокирован
+                    </span>
+                    <span class="text-sm text-gray-700">
+                        до {{ $driver->driverProfile->blocked_until->format('d M Y, H:i') }}
+                    </span>
+                    <span class="text-xs text-gray-500">
+                        (отказов за смену: {{ $declineCount }})
+                    </span>
+                </div>
+                <p class="mt-2 text-xs text-gray-500">
+                    Водитель не может выйти на линию пока блокировка активна. Стандартный срок — 2 часа после 5 явных отказов за смену.
+                </p>
+                <form method="POST" action="{{ route('admin.drivers.unblock', $driver) }}" class="mt-4">
+                    @csrf
+                    <button
+                        type="submit"
+                        class="rounded-lg bg-emerald-600 px-4 py-2 text-sm font-medium text-white shadow-sm hover:bg-emerald-700"
+                    >
+                        Снять блокировку
+                    </button>
+                </form>
+            @else
+                <div class="flex items-center gap-2">
+                    <span class="inline-flex items-center rounded-full bg-emerald-100 px-2.5 py-0.5 text-xs font-medium text-emerald-700">
+                        Не заблокирован
+                    </span>
+                    @if ($declineCount > 0)
+                        <span class="text-xs text-gray-500">
+                            Отказов за смену: {{ $declineCount }} / 5
+                        </span>
+                    @endif
+                </div>
+                @if ($declineCount > 0)
+                    <p class="mt-2 text-xs text-gray-500">
+                        Счётчик сбросится автоматически при следующем выходе на линию.
+                    </p>
+                @endif
+            @endif
+        </div>
+
         {{-- Push diagnostics --}}
         <div class="mt-6 rounded-xl border border-gray-200 bg-white p-6 shadow-sm">
             <h3 class="mb-3 text-base font-semibold text-gray-900">Push-уведомления</h3>

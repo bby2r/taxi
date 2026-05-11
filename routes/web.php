@@ -39,6 +39,7 @@ Route::prefix('admin')->name('admin.')->group(function () {
 
         Route::resource('drivers', DriverController::class)->except(['show']);
         Route::post('drivers/{driver}/test-push', [DriverController::class, 'sendTestPush'])->name('drivers.test-push');
+        Route::post('drivers/{driver}/unblock', [DriverController::class, 'unblock'])->name('drivers.unblock');
 
         Route::get('clients', [ClientController::class, 'index'])->name('clients.index');
 

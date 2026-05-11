@@ -441,6 +441,29 @@ function useDriverOrderState(): UseDriverOrderReturn {
         setState({ phase: 'offline', order: null });
       }
     } catch (err: unknown) {
+      const response = (err as {
+        response?: { status?: number; data?: { message?: string; blocked_until?: string } };
+      })?.response;
+
+      // Driver hit the 5-decline shift block. The server returns 423 with
+      // the Russian message and `blocked_until`. Show a friendly alert
+      // with the wall-clock time instead of a raw HTTP error.
+      if (response?.status === 423) {
+        const until = response.data?.blocked_until
+          ? new Date(response.data.blocked_until)
+          : null;
+        const untilText = until
+          ? until.toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' })
+          : null;
+        Alert.alert(
+          'Вы временно заблокированы',
+          untilText
+            ? `За частые отказы выход на линию закрыт до ${untilText}. После этого времени откройте приложение заново.`
+            : (response.data?.message ?? 'За частые отказы выход на линию временно закрыт.'),
+        );
+        return;
+      }
+
       const message = err instanceof Error ? err.message : 'Ошибка при переключении';
       setError(message);
     } finally {

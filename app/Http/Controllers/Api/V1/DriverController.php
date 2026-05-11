@@ -39,7 +39,7 @@ class DriverController extends Controller
 
         if ($profile->isBlocked()) {
             return response()->json([
-                'message' => 'Driver is temporarily blocked from accepting orders.',
+                'message' => 'Вы временно заблокированы за частые отказы. Дождитесь окончания блокировки или обратитесь в поддержку.',
                 'blocked_until' => $profile->blocked_until?->toISOString(),
             ], 423);
         }

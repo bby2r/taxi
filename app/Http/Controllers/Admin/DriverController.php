@@ -122,6 +122,28 @@ class DriverController extends Controller
      * Remove the specified driver from storage.
      */
     /**
+     * Clear a temporary block on the driver (e.g. after 5+ shift declines).
+     * Resets the decline counter and lifts `blocked_until` so the driver
+     * can immediately call /go-online again.
+     */
+    public function unblock(User $driver): RedirectResponse
+    {
+        abort_unless($driver->isDriver(), 404);
+
+        $profile = $driver->driverProfile;
+        if (! $profile) {
+            return back()->with('error', 'У водителя нет профиля.');
+        }
+
+        $profile->update([
+            'blocked_until' => null,
+            'shift_declines_count' => 0,
+        ]);
+
+        return back()->with('success', "Блокировка снята. {$driver->name} может выйти на линию.");
+    }
+
+    /**
      * Fire a one-off heads-up push to the driver via the same path used by
      * order offers. Lets the operator confirm end-to-end whether
      * Expo / FCM is reaching the device.
