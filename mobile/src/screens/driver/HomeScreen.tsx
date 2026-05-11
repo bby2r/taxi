@@ -67,7 +67,12 @@ export default function HomeScreen(): React.ReactNode {
     navigation,
   ]);
 
-  // Re-center map when driver location changes significantly
+  // Re-center map when the driver actually moves, not only on
+  // loading / error transitions. The previous effect read `latitude` and
+  // `longitude` but didn't list them as deps, so once we got our first
+  // fix the camera never followed the driver. Camera updates are cheap;
+  // the upstream useLocation hook already throttles location pushes to
+  // ~5 s / 10 m, so this only fires on meaningful movement.
   useEffect(() => {
     if (driverLocation.loading || driverLocation.error || !mapRef.current) {
       return;
@@ -82,7 +87,12 @@ export default function HomeScreen(): React.ReactNode {
       },
       { duration: 600 },
     );
-  }, [driverLocation.loading, driverLocation.error]);
+  }, [
+    driverLocation.loading,
+    driverLocation.error,
+    driverLocation.latitude,
+    driverLocation.longitude,
+  ]);
 
   const handleToggle = async (): Promise<void> => {
     const { status } = await Location.requestForegroundPermissionsAsync();

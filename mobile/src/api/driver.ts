@@ -66,8 +66,8 @@ export async function getCurrentDriverOrder(): Promise<Order | null> {
   try {
     const { data } = await apiClient.get<{ data: Order }>('/api/v1/driver/orders/active');
     return data.data;
-  } catch (error: any) {
-    if (error.response?.status === 404) {
+  } catch (error: unknown) {
+    if ((error as { response?: { status?: number } })?.response?.status === 404) {
       return null;
     }
     throw error;
@@ -78,8 +78,8 @@ export async function getPendingOffer(): Promise<Order | null> {
   try {
     const { data } = await apiClient.get<{ data: Order }>('/api/v1/driver/orders/pending-offer');
     return data.data;
-  } catch (error: any) {
-    if (error.response?.status === 404) {
+  } catch (error: unknown) {
+    if ((error as { response?: { status?: number } })?.response?.status === 404) {
       return null;
     }
     throw error;
