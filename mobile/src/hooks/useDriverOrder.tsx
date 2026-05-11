@@ -38,6 +38,10 @@ import {
   raiseVolumeForOffer,
   restoreVolumeAfterOffer,
 } from '../lib/volumeGuard';
+import {
+  startShiftForegroundService,
+  stopShiftForegroundService,
+} from '../lib/foregroundService';
 
 // Optional native modules — degrade to vibration-only if the APK was built
 // before they were added (require() throws → we just stay silent).
@@ -499,9 +503,15 @@ function useDriverOrderState(): UseDriverOrderReturn {
       if (stateRef.current.phase === 'offline') {
         await goOnline(latitude, longitude);
         setState({ phase: 'online_idle', order: null });
+        // Foreground service keeps the JS process alive so Pusher stays
+        // connected and notifee can fire full-screen incoming-call
+        // notifications even when the app is swiped away or the screen
+        // is locked. No-op on iOS / older APKs.
+        void startShiftForegroundService();
       } else {
         await goOffline();
         setState({ phase: 'offline', order: null });
+        void stopShiftForegroundService();
       }
     } catch (err: unknown) {
       const response = (err as {
