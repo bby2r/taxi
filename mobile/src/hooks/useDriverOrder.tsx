@@ -23,7 +23,17 @@ import {
 } from '../api/driver';
 import { useAuth } from '../context/AuthContext';
 import { usePusher } from './usePusher';
-import { consumePendingDriverAction } from '../utils/pendingNotificationAction';
+import {
+  consumePendingDriverAction,
+  setPendingDriverAction,
+} from '../utils/pendingNotificationAction';
+import {
+  displayOfferNotification,
+  dismissOfferNotification,
+  ensureNotifeeChannel,
+  isNotifeeAvailable,
+  subscribeForegroundEvents,
+} from '../lib/notifee';
 
 // Optional native modules — degrade to vibration-only if the APK was built
 // before they were added (require() throws → we just stay silent).
@@ -147,6 +157,24 @@ function useDriverOrderState(): UseDriverOrderReturn {
 
   const isOnline = state.phase !== 'offline';
 
+  // Subscribe to notifee shade-button presses while the app is alive.
+  // When the driver taps Принять / Отказаться directly in the
+  // heads-up / full-screen notification, the action id + order id come
+  // through here. We queue them via pendingDriverAction so the existing
+  // offer-arrival effect (below) picks them up the moment Pusher
+  // delivers the matching offer.
+  useEffect(() => {
+    const unsub = subscribeForegroundEvents(({ actionId, orderId }) => {
+      if (orderId === null) return;
+      if (actionId === 'accept' || actionId === 'decline') {
+        setPendingDriverAction({ orderId, kind: actionId });
+      }
+    });
+    return () => {
+      unsub();
+    };
+  }, []);
+
   // Check for existing active order on mount
   useEffect(() => {
     let cancelled = false;
@@ -225,51 +253,67 @@ function useDriverOrderState(): UseDriverOrderReturn {
     enabled: isOnline,
   });
 
-  // When an offer enters state, sweep any matching server push out of the
-  // notification shade — the OrderOfferCard is now the source of truth for
-  // this offer, and leaving the shade entry there causes a confusing
-  // duplicate. Then schedule a silent local notification on the alarm
-  // channel so its sound plays through the alarm stream and bypasses the
-  // phone's silent / vibrate switch even while the driver has the app
-  // open (expo-audio in-app loop is subject to ringer mode on Android;
-  // the alarm channel isn't). We dismiss this same local notification
-  // the moment the offer leaves state so it doesn't linger in the shade.
+  // When an offer enters state, fire the Yandex-style notifee notification:
+  // full-screen on lock screen, looping ringtone via the alarm stream,
+  // Принять / Отказаться buttons. Notifee handles the alarm bypass,
+  // looping sound, and timeout. We dismiss it the moment the offer leaves
+  // state so the loop stops immediately on accept / decline / cancel.
+  //
+  // If notifee isn't bundled (older APK), we fall back to the previous
+  // expo-notifications local schedule so the driver still gets *something*.
   useEffect(() => {
     if (state.phase !== 'offer') return;
-    if (!LocalNotifications || Platform.OS === 'web') return;
+    if (Platform.OS === 'web') return;
 
-    LocalNotifications.dismissAllNotificationsAsync().catch(() => {
-      // best-effort cleanup
-    });
+    const orderId = state.order.id;
+    const body = state.order.pickup_address
+      ? `Подача: ${state.order.pickup_address} · ${state.order.price} сом`
+      : `Новый заказ · ${state.order.price} сом`;
 
-    let scheduledId: string | undefined;
-    LocalNotifications.scheduleNotificationAsync({
-      content: {
-        title: 'Новый заказ',
-        body: 'Откройте приложение чтобы принять',
-        data: { type: 'new_order_silent', order_id: state.order.id },
-        // Plays the channel sound (which is now pinned to USAGE_ALARM and
-        // bypasses silent mode). Empty title would still flag the OS
-        // notification visible — that's acceptable for an alarm cue.
-      } as Parameters<typeof LocalNotifications.scheduleNotificationAsync>[0]['content'],
-      trigger: Platform.OS === 'android'
-        ? ({
-            channelId: 'driver_offers_v3',
-          } as unknown as Parameters<
-            typeof LocalNotifications.scheduleNotificationAsync
-          >[0]['trigger'])
-        : null,
-    })
-      .then((id) => {
-        scheduledId = id;
+    // Clear any leftover entries before showing the fresh one.
+    LocalNotifications?.dismissAllNotificationsAsync().catch(() => {});
+
+    let notifeeId: string | null = null;
+
+    if (isNotifeeAvailable()) {
+      // Notifee path — full Yandex Pro UX.
+      (async () => {
+        await ensureNotifeeChannel();
+        notifeeId = await displayOfferNotification({
+          orderId,
+          title: 'Новый заказ',
+          body,
+          expiresInSeconds: 30,
+        });
+      })();
+    } else if (LocalNotifications) {
+      // Fallback path for APKs built before notifee landed.
+      LocalNotifications.scheduleNotificationAsync({
+        content: {
+          title: 'Новый заказ',
+          body,
+          data: { type: 'new_order_silent', order_id: orderId },
+        } as Parameters<typeof LocalNotifications.scheduleNotificationAsync>[0]['content'],
+        trigger:
+          Platform.OS === 'android'
+            ? ({ channelId: 'driver_offers_v3' } as unknown as Parameters<
+                typeof LocalNotifications.scheduleNotificationAsync
+              >[0]['trigger'])
+            : null,
       })
-      .catch(() => {
-        // ignore — vibration + in-app audio loop still alert the driver
-      });
+        .then((id) => {
+          notifeeId = id; // reused var, expo-notifications also returns string id
+        })
+        .catch(() => {
+          // vibration + in-app audio loop still alert
+        });
+    }
 
     return () => {
-      if (scheduledId) {
-        LocalNotifications?.cancelScheduledNotificationAsync(scheduledId).catch(() => {});
+      if (isNotifeeAvailable()) {
+        dismissOfferNotification(notifeeId).catch(() => {});
+      } else if (notifeeId && LocalNotifications) {
+        LocalNotifications.cancelScheduledNotificationAsync(notifeeId).catch(() => {});
       }
       LocalNotifications?.dismissAllNotificationsAsync().catch(() => {});
     };
