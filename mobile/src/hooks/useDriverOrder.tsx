@@ -34,6 +34,10 @@ import {
   isNotifeeAvailable,
   subscribeForegroundEvents,
 } from '../lib/notifee';
+import {
+  raiseVolumeForOffer,
+  restoreVolumeAfterOffer,
+} from '../lib/volumeGuard';
 
 // Optional native modules — degrade to vibration-only if the APK was built
 // before they were added (require() throws → we just stay silent).
@@ -330,6 +334,21 @@ function useDriverOrderState(): UseDriverOrderReturn {
     Vibration.vibrate(VIBRATION_PATTERN, true);
     return () => {
       Vibration.cancel();
+    };
+  }, [state.phase]);
+
+  // Yandex-style aggressive volume management: when an offer lands we
+  // snapshot the driver's current volume, raise it to ~95%, and listen
+  // for manual changes — if the driver tries to lower it while the offer
+  // card is on screen, the listener clamps it back up. When the offer
+  // leaves state (accept / decline / timeout / cancel) we restore the
+  // original volume the driver had set. Android-only via native
+  // AudioManager hooks; silent no-op on iOS or older APKs.
+  useEffect(() => {
+    if (state.phase !== 'offer') return;
+    void raiseVolumeForOffer();
+    return () => {
+      void restoreVolumeAfterOffer();
     };
   }, [state.phase]);
 
