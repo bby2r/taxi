@@ -9,11 +9,11 @@ let Notifications: typeof import('expo-notifications') | null = null;
 let moduleLoadError: string | null = null;
 
 // Bump this whenever the channel config changes in a way that needs to take
-// effect on existing devices (sound, vibration pattern, lights). Android
-// permanently caches a channel's sound / vibration once it's been created
-// the first time — the only way to apply changes without an app reinstall
+// effect on existing devices (sound, vibration pattern, lights, audio
+// attributes). Android permanently caches a channel's settings once it's
+// been created — the only way to apply changes without an app reinstall
 // is to give the channel a NEW id.
-const DRIVER_OFFER_CHANNEL = 'driver_offers_v2';
+const DRIVER_OFFER_CHANNEL = 'driver_offers_v3';
 const RIDE_OFFER_CATEGORY = 'ride_offer';
 const PROJECT_ID = 'ca4f91d1-a8f4-488b-9c14-0eb60aa286b8';
 
@@ -55,13 +55,15 @@ if (Platform.OS !== 'web') {
       // best effort — without this, the buttons just don't appear
     });
 
-    // Sweep the old channel id once. Android holds onto channels until the
-    // app is uninstalled, so the v1 channel (created when we still had
-    // `sound: 'default'`) would otherwise live forever alongside v2 in the
-    // user's notification settings. Cheap to attempt every boot, idempotent.
+    // Sweep older channel ids so they don't linger in the user's
+    // notification settings forever. Each version was created with stale
+    // sound / audio-attribute defaults; this is the only way to retire
+    // them without an app reinstall.
     if (Platform.OS === 'android') {
-      Notifications!.deleteNotificationChannelAsync('driver_offers').catch(() => {
-        // already gone or never created — fine
+      ['driver_offers', 'driver_offers_v2'].forEach((id) => {
+        Notifications!.deleteNotificationChannelAsync(id).catch(() => {
+          // already gone or never created — fine
+        });
       });
     }
   } catch (err) {
@@ -106,9 +108,35 @@ async function configureAndroidChannel(): Promise<void> {
   if (!Notifications || Platform.OS !== 'android') {
     return;
   }
+
+  // Audio attributes pin the channel sound to the ALARM stream so it plays
+  // even when the phone is on Silent / Vibrate mode and respects the alarm
+  // volume slider (which users almost always keep loud). This is the
+  // managed-Expo way of "ignore silent mode for new-order alerts" — no
+  // native code required, no ringer-mode mutation needed. The phone stays
+  // in whatever mode the driver set; the alarm stream just isn't subject
+  // to the silent toggle.
+  const audioAttributes = ((): unknown => {
+    try {
+      return {
+        usage: (Notifications as unknown as { AndroidAudioUsage?: Record<string, number> })
+          .AndroidAudioUsage?.ALARM,
+        contentType: (
+          Notifications as unknown as { AndroidAudioContentType?: Record<string, number> }
+        ).AndroidAudioContentType?.SONIFICATION,
+        flags: {
+          enforceAudibility: true,
+          requestHardwareAudioVideoSynchronization: false,
+        },
+      };
+    } catch {
+      return undefined;
+    }
+  })();
+
   await Notifications.setNotificationChannelAsync(DRIVER_OFFER_CHANNEL, {
     name: 'Новые заказы',
-    description: 'Уведомления о новых заказах для водителей',
+    description: 'Срочные уведомления о новых заказах. Звучат даже на беззвучном режиме.',
     importance: Notifications.AndroidImportance.MAX,
     sound: 'order_arrived',
     vibrationPattern: [0, 400, 250, 400, 250, 400],
@@ -118,7 +146,10 @@ async function configureAndroidChannel(): Promise<void> {
     enableLights: true,
     enableVibrate: true,
     showBadge: false,
-  });
+    // Type cast — older expo-notifications type defs don't include
+    // audioAttributes but the native side reads it.
+    ...(audioAttributes ? { audioAttributes } : {}),
+  } as Parameters<typeof Notifications.setNotificationChannelAsync>[1]);
 }
 
 export async function registerToken(): Promise<{ ok: boolean; reason?: string; token?: string }> {

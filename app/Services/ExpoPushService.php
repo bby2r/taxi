@@ -38,10 +38,11 @@ class ExpoPushService
             'sound' => 'order_arrived',
             'priority' => 'high',
             // Versioned channel id — must match DRIVER_OFFER_CHANNEL in the
-            // mobile hook. Bumped from `driver_offers` after Android cached
-            // the original channel with the system-default sound; the new
-            // id forces a fresh channel with the custom .wav.
-            'channelId' => 'driver_offers_v2',
+            // mobile hook. v3 added `audioAttributes.usage = ALARM` so the
+            // sound plays through the alarm stream and bypasses silent /
+            // vibrate mode. Android requires a new channel id whenever the
+            // sound or audio routing changes.
+            'channelId' => 'driver_offers_v3',
             // Links the push to the locally-registered "ride_offer" category
             // on the device, which has Принять / Отказаться action buttons.
             // The driver can react straight from the notification shade

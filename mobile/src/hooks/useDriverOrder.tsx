@@ -228,13 +228,51 @@ function useDriverOrderState(): UseDriverOrderReturn {
   // When an offer enters state, sweep any matching server push out of the
   // notification shade — the OrderOfferCard is now the source of truth for
   // this offer, and leaving the shade entry there causes a confusing
-  // duplicate ("there's a card AND a notification with buttons").
+  // duplicate. Then schedule a silent local notification on the alarm
+  // channel so its sound plays through the alarm stream and bypasses the
+  // phone's silent / vibrate switch even while the driver has the app
+  // open (expo-audio in-app loop is subject to ringer mode on Android;
+  // the alarm channel isn't). We dismiss this same local notification
+  // the moment the offer leaves state so it doesn't linger in the shade.
   useEffect(() => {
     if (state.phase !== 'offer') return;
     if (!LocalNotifications || Platform.OS === 'web') return;
+
     LocalNotifications.dismissAllNotificationsAsync().catch(() => {
       // best-effort cleanup
     });
+
+    let scheduledId: string | undefined;
+    LocalNotifications.scheduleNotificationAsync({
+      content: {
+        title: 'Новый заказ',
+        body: 'Откройте приложение чтобы принять',
+        data: { type: 'new_order_silent', order_id: state.order.id },
+        // Plays the channel sound (which is now pinned to USAGE_ALARM and
+        // bypasses silent mode). Empty title would still flag the OS
+        // notification visible — that's acceptable for an alarm cue.
+      } as Parameters<typeof LocalNotifications.scheduleNotificationAsync>[0]['content'],
+      trigger: Platform.OS === 'android'
+        ? ({
+            channelId: 'driver_offers_v3',
+          } as unknown as Parameters<
+            typeof LocalNotifications.scheduleNotificationAsync
+          >[0]['trigger'])
+        : null,
+    })
+      .then((id) => {
+        scheduledId = id;
+      })
+      .catch(() => {
+        // ignore — vibration + in-app audio loop still alert the driver
+      });
+
+    return () => {
+      if (scheduledId) {
+        LocalNotifications?.cancelScheduledNotificationAsync(scheduledId).catch(() => {});
+      }
+      LocalNotifications?.dismissAllNotificationsAsync().catch(() => {});
+    };
   }, [state.phase]);
 
   // Loop the vibration the entire time an offer is on screen — stops the
