@@ -37,7 +37,11 @@ class ExpoPushService
         return $this->sendToUser($driver, $title, $body, $data, [
             'sound' => 'order_arrived',
             'priority' => 'high',
-            'channelId' => 'driver_offers',
+            // Versioned channel id — must match DRIVER_OFFER_CHANNEL in the
+            // mobile hook. Bumped from `driver_offers` after Android cached
+            // the original channel with the system-default sound; the new
+            // id forces a fresh channel with the custom .wav.
+            'channelId' => 'driver_offers_v2',
             // Links the push to the locally-registered "ride_offer" category
             // on the device, which has Принять / Отказаться action buttons.
             // The driver can react straight from the notification shade

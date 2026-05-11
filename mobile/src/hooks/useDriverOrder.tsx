@@ -9,9 +9,24 @@ import React, {
 } from 'react';
 import { Alert, Platform, Vibration } from 'react-native';
 import { Order, DeclineReason, DriverCancellationReason } from '../api/types';
+import {
+  goOnline,
+  goOffline,
+  acceptOrder,
+  declineOrder,
+  arriveAtPickup,
+  startRide,
+  completeOrder,
+  cancelOrderByDriver,
+  getCurrentDriverOrder,
+  getPendingOffer,
+} from '../api/driver';
+import { useAuth } from '../context/AuthContext';
+import { usePusher } from './usePusher';
+import { consumePendingDriverAction } from '../utils/pendingNotificationAction';
 
-// Optional dependency — only available once expo-audio is installed and the
-// APK is rebuilt. Until then we degrade silently to vibration-only alerts.
+// Optional native modules — degrade to vibration-only if the APK was built
+// before they were added (require() throws → we just stay silent).
 let ExpoAudio: typeof import('expo-audio') | null = null;
 let LocalNotifications: typeof import('expo-notifications') | null = null;
 if (Platform.OS !== 'web') {
@@ -28,21 +43,6 @@ if (Platform.OS !== 'web') {
 }
 
 const VIBRATION_PATTERN = [0, 400, 250, 400, 250, 400];
-import {
-  goOnline,
-  goOffline,
-  acceptOrder,
-  declineOrder,
-  arriveAtPickup,
-  startRide,
-  completeOrder,
-  cancelOrderByDriver,
-  getCurrentDriverOrder,
-  getPendingOffer,
-} from '../api/driver';
-import { useAuth } from '../context/AuthContext';
-import { usePusher } from './usePusher';
-import { consumePendingDriverAction } from '../utils/pendingNotificationAction';
 
 export type DriverPhase =
   | 'offline'

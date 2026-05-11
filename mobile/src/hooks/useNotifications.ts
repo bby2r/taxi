@@ -8,15 +8,23 @@ import { setPendingDriverAction } from '../utils/pendingNotificationAction';
 let Notifications: typeof import('expo-notifications') | null = null;
 let moduleLoadError: string | null = null;
 
+// Bump this whenever the channel config changes in a way that needs to take
+// effect on existing devices (sound, vibration pattern, lights). Android
+// permanently caches a channel's sound / vibration once it's been created
+// the first time — the only way to apply changes without an app reinstall
+// is to give the channel a NEW id.
+const DRIVER_OFFER_CHANNEL = 'driver_offers_v2';
+const RIDE_OFFER_CATEGORY = 'ride_offer';
+const PROJECT_ID = 'ca4f91d1-a8f4-488b-9c14-0eb60aa286b8';
+
 if (Platform.OS !== 'web') {
   try {
     Notifications = require('expo-notifications');
-    // In foreground: don't show the system heads-up or play the OS sound.
-    // The driver already has the OrderOfferCard slide up in the app, plus
-    // the looping audio + vibration effects in useDriverOrder. Showing the
-    // shade banner on top of that gave drivers a duplicate "double
-    // notification" feeling. The system push is now only visible in the
-    // shade when the app is backgrounded / locked.
+
+    // Foreground policy: stay out of the OS shade entirely. OrderOfferCard +
+    // the looping audio / vibration in useDriverOrder are the in-app surface.
+    // Background pushes are unaffected — shouldShow* only applies while the
+    // app is in front.
     Notifications!.setNotificationHandler({
       handleNotification: async () => ({
         shouldShowAlert: false,
@@ -26,13 +34,13 @@ if (Platform.OS !== 'web') {
         shouldShowList: false,
       }),
     });
-    // Register the ride_offer category at module load — BEFORE the
-    // permission grant — so the very first server push that lands on
-    // the device already shows Принять / Отказаться buttons. Previously
-    // we did this inside registerToken, which only runs after the user
-    // grants notification permission, leaving the very first push
-    // without buttons.
-    Notifications!.setNotificationCategoryAsync('ride_offer', [
+
+    // Register the ride_offer category at module-load time (before the user
+    // is even authenticated) so the very first server push to land on the
+    // device already shows the Принять / Отказаться buttons. Doing this
+    // inside the post-permission registerToken path was leaving the first
+    // push button-less.
+    Notifications!.setNotificationCategoryAsync(RIDE_OFFER_CATEGORY, [
       {
         identifier: 'accept',
         buttonTitle: 'Принять',
@@ -44,26 +52,22 @@ if (Platform.OS !== 'web') {
         options: { opensAppToForeground: true },
       },
     ]).catch(() => {
-      // best effort; failure here just means actions won't show — not fatal
+      // best effort — without this, the buttons just don't appear
     });
+
+    // Sweep the old channel id once. Android holds onto channels until the
+    // app is uninstalled, so the v1 channel (created when we still had
+    // `sound: 'default'`) would otherwise live forever alongside v2 in the
+    // user's notification settings. Cheap to attempt every boot, idempotent.
+    if (Platform.OS === 'android') {
+      Notifications!.deleteNotificationChannelAsync('driver_offers').catch(() => {
+        // already gone or never created — fine
+      });
+    }
   } catch (err) {
-    // Means the APK was built without the native side of expo-notifications.
-    // OTA can't fix this — needs a fresh `eas build`. Surface it on the banner.
     moduleLoadError = err instanceof Error ? err.message : String(err);
     Notifications = null;
   }
-}
-
-const DRIVER_OFFER_CHANNEL = 'driver_offers';
-const RIDE_OFFER_CATEGORY = 'ride_offer';
-const PROJECT_ID = 'ca4f91d1-a8f4-488b-9c14-0eb60aa286b8';
-
-async function configureRideOfferCategory(): Promise<void> {
-  // The actual setNotificationCategoryAsync call now happens at module load
-  // above so the first push delivered to the device already carries the
-  // action buttons. This stays as a no-op stub so nothing else has to
-  // change in the call sites; it's safe to call multiple times anyway.
-  return;
 }
 
 export type PushStatus =
@@ -124,7 +128,6 @@ export async function registerToken(): Promise<{ ok: boolean; reason?: string; t
   }
   setStatus({ kind: 'starting' });
   await configureAndroidChannel();
-  await configureRideOfferCategory();
 
   const { status } = await Notifications.requestPermissionsAsync();
   if (status !== 'granted') {
@@ -166,102 +169,104 @@ export function useNotifications(): void {
     if (!isAuthenticated || Platform.OS === 'web') return;
 
     if (!Notifications) {
-      // Make the failure visible on the home screen instead of staying
-      // silently in `idle` — a common cause is an APK built without the
-      // native side of `expo-notifications` (needs a fresh EAS build).
       setStatus({ kind: 'no-module', error: moduleLoadError ?? undefined });
       return;
     }
 
-    let foregroundSub: ReturnType<typeof Notifications.addNotificationReceivedListener> | null = null;
     let responseSub: ReturnType<typeof Notifications.addNotificationResponseReceivedListener> | null = null;
     let appStateSub: ReturnType<typeof AppState.addEventListener> | null = null;
     let permissionAlertShown = false;
+    let registrationInFlight = false;
 
     const tryRegister = async (): Promise<void> => {
-      const result = await registerToken();
-      if (result.ok) {
-        try {
-          await refreshUser();
-        } catch {
-          // ignore — banner refresh isn't critical
+      // Don't fan out concurrent registration attempts when the user
+      // background-foregrounds rapidly. The first one will succeed or fail;
+      // the rest just wait.
+      if (registrationInFlight) return;
+      registrationInFlight = true;
+      try {
+        const result = await registerToken();
+        if (result.ok) {
+          try {
+            await refreshUser();
+          } catch {
+            // banner refresh isn't critical
+          }
+          return;
         }
-        return;
-      }
-      if (result.reason === 'permission-denied' && !permissionAlertShown) {
-        permissionAlertShown = true;
-        Alert.alert(
-          'Уведомления отключены',
-          'Чтобы получать заказы когда приложение свернуто, разрешите уведомления в настройках телефона.',
-        );
+        if (result.reason === 'permission-denied' && !permissionAlertShown) {
+          permissionAlertShown = true;
+          Alert.alert(
+            'Уведомления отключены',
+            'Чтобы получать заказы когда приложение свернуто, разрешите уведомления в настройках телефона.',
+          );
+        }
+      } finally {
+        registrationInFlight = false;
       }
     };
 
     void tryRegister();
 
+    // Re-attempt registration whenever the driver foregrounds the app —
+    // fixes the case where they enabled notifications in system settings
+    // and came back. Cheap on the happy path because the token request is
+    // a single POST and is already cached server-side after the first call.
     appStateSub = AppState.addEventListener('change', (next) => {
       if (next === 'active') {
         void tryRegister();
       }
     });
 
-    if (Notifications) {
-      const handleResponse = (response: import('expo-notifications').NotificationResponse): void => {
-        const data = response.notification.request.content.data as
-          | { type?: string; order_id?: number | string }
-          | undefined;
-        if (data?.type !== 'new_order' || user?.role !== 'driver') {
-          return;
+    const handleResponse = (
+      response: import('expo-notifications').NotificationResponse,
+    ): void => {
+      const data = response.notification.request.content.data as
+        | { type?: string; order_id?: number | string }
+        | undefined;
+      if (data?.type !== 'new_order' || user?.role !== 'driver') {
+        return;
+      }
+
+      const actionId = response.actionIdentifier;
+      const orderIdRaw = data.order_id;
+      const orderId =
+        typeof orderIdRaw === 'string' ? parseInt(orderIdRaw, 10) : orderIdRaw;
+
+      if (
+        orderId !== undefined &&
+        Number.isFinite(orderId) &&
+        (actionId === 'accept' || actionId === 'decline')
+      ) {
+        setPendingDriverAction({ orderId, kind: actionId });
+      }
+
+      if (navigationRef.isReady()) {
+        try {
+          navigationRef.navigate('DriverApp' as never);
+        } catch {
+          // not ready — useDriverOrder picks it up via Pusher / polling
         }
+      }
+    };
 
-        // Capture which action button (if any) the driver tapped. Default
-        // tap (anywhere on the notification body) gives the platform's
-        // "DEFAULT" identifier — fall back to opening the offer card.
-        const actionId = response.actionIdentifier;
-        const orderIdRaw = data.order_id;
-        const orderId =
-          typeof orderIdRaw === 'string' ? parseInt(orderIdRaw, 10) : orderIdRaw;
+    responseSub = Notifications.addNotificationResponseReceivedListener(handleResponse);
 
-        if (
-          orderId !== undefined &&
-          Number.isFinite(orderId) &&
-          (actionId === 'accept' || actionId === 'decline')
-        ) {
-          setPendingDriverAction({ orderId, kind: actionId });
+    // Cold-start path: if the OS launched us straight from a notification
+    // tap, the listener registered above never fires for that tap. Replay
+    // the queued response so the action button still works after a
+    // force-stop.
+    Notifications.getLastNotificationResponseAsync()
+      .then((last) => {
+        if (last) {
+          handleResponse(last);
         }
-
-        if (navigationRef.isReady()) {
-          try {
-            navigationRef.navigate('DriverApp' as never);
-          } catch {
-            // not ready — useDriverOrder will pick it up via Pusher / polling
-          }
-        }
-      };
-
-      responseSub = Notifications.addNotificationResponseReceivedListener(handleResponse);
-
-      // Cold-start path: if the OS launched us straight from a notification
-      // tap, the listener registered above never fires for that tap.
-      // Replay the queued response so the action button still works after
-      // a force-stop.
-      Notifications.getLastNotificationResponseAsync()
-        .then((last) => {
-          if (last) {
-            handleResponse(last);
-          }
-        })
-        .catch(() => {
-          // ignore
-        });
-
-      foregroundSub = Notifications.addNotificationReceivedListener(() => {
-        // No-op: handler config above already presents the banner + sound.
+      })
+      .catch(() => {
+        // ignore
       });
-    }
 
     return () => {
-      foregroundSub?.remove();
       responseSub?.remove();
       appStateSub?.remove();
     };
