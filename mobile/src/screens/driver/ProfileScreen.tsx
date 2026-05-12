@@ -376,10 +376,17 @@ export default function ProfileScreen(): React.ReactNode {
         {/* Support */}
         <TouchableOpacity
           style={styles.supportButton}
-          onPress={() => Linking.openURL('tel:+996509397226')}
+          onPress={() =>
+            Linking.openURL(
+              'https://wa.me/996509397226?text=' +
+                encodeURIComponent(
+                  'Здравствуйте, я водитель Village Taxi. Нужна помощь.',
+                ),
+            )
+          }
           activeOpacity={0.85}
         >
-          <Text style={styles.supportLabel}>Поддержка</Text>
+          <Text style={styles.supportLabel}>Поддержка в WhatsApp</Text>
           <Text style={styles.supportPhone}>+996 509 397 226</Text>
         </TouchableOpacity>
 
