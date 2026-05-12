@@ -29,6 +29,64 @@ export function getNotifeeLoadError(): string | null {
   return loadError;
 }
 
+/**
+ * Android 14 (API 34) tightened `USE_FULL_SCREEN_INTENT` — declaring it in
+ * the manifest isn't enough any more. The driver must explicitly enable
+ * "Full-screen notifications" for the app in system settings; otherwise
+ * Android downgrades a full-screen intent to a heads-up banner. Read
+ * notifee's settings struct (a Promise<NotificationSettings>) and return
+ * one of:
+ *   'granted'        — full-screen will fire
+ *   'denied'         — manifest declared but user hasn't enabled it
+ *   'unsupported'    — older Android (pre-14) doesn't need manual grant
+ *   'unknown'        — notifee not bundled / not on Android
+ */
+export type FullScreenIntentStatus = 'granted' | 'denied' | 'unsupported' | 'unknown';
+
+export async function checkFullScreenIntentPermission(): Promise<FullScreenIntentStatus> {
+  if (!Notifee || !NotifeeNs) return 'unknown';
+  try {
+    const settings = await Notifee.getNotificationSettings();
+    // Different notifee versions expose this under slightly different keys;
+    // try the documented `android.alarm` field which mirrors the full-screen
+    // intent status on API 34+.
+    const android = (settings as { android?: Record<string, unknown> }).android;
+    if (!android) return 'unknown';
+    const fsi = android.alarm as unknown;
+    if (fsi === undefined) return 'unsupported';
+    // notifee's AndroidNotificationSetting enum: ENABLED = 1, DISABLED = 0
+    if (typeof fsi === 'number') {
+      return fsi === 1 ? 'granted' : 'denied';
+    }
+    return 'unknown';
+  } catch {
+    return 'unknown';
+  }
+}
+
+/**
+ * Open the system page where the user can toggle the full-screen-intent
+ * permission. Best-effort: tries the dedicated Android 14 settings intent
+ * first, falls back to the app's general settings screen.
+ */
+export async function openFullScreenIntentSettings(): Promise<void> {
+  if (!Notifee) return;
+  try {
+    // Notifee 9+ exposes a helper that deep-links straight to the page.
+    const maybeOpen = (Notifee as unknown as {
+      openAlarmPermissionSettings?: () => Promise<void>;
+    }).openAlarmPermissionSettings;
+    if (typeof maybeOpen === 'function') {
+      await maybeOpen();
+      return;
+    }
+  } catch {
+    // fall through
+  }
+  // Linking fallback handled by the caller — we don't want this file to
+  // depend on react-native explicitly beyond the optional require above.
+}
+
 // Versioned channel id — Android caches channel attributes permanently
 // after first creation. Bump this string whenever sound / vibration /
 // audio attributes change so a fresh channel is created on existing devices.

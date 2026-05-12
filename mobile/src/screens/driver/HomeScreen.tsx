@@ -1,4 +1,4 @@
-import React, { useEffect, useRef } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import {
   View,
   Text,
@@ -22,6 +22,11 @@ import { useDriverOrder } from '../../hooks/useDriverOrder';
 import { useDriverLocation } from '../../hooks/useDriverLocation';
 import { useLocation } from '../../hooks/useLocation';
 import { usePushStatus, registerToken } from '../../hooks/useNotifications';
+import {
+  checkFullScreenIntentPermission,
+  openFullScreenIntentSettings,
+  type FullScreenIntentStatus,
+} from '../../lib/notifee';
 import OrderOfferCard from '../../components/OrderOfferCard';
 import { DriverColors } from '../../theme/colors';
 import { Typography } from '../../theme/typography';
@@ -49,6 +54,23 @@ export default function HomeScreen(): React.ReactNode {
   useDriverLocation({ enabled: isOnline });
   const mapRef = useRef<MapView>(null);
   const pushStatus = usePushStatus();
+  const [fsiStatus, setFsiStatus] = useState<FullScreenIntentStatus>('unknown');
+
+  // Android 14+ requires a separate manual grant for full-screen
+  // notifications. Without it the offer notification falls back to a
+  // plain heads-up in the shade instead of taking over the lock screen.
+  // Re-check every time the screen mounts (driver might have just
+  // returned from settings) plus once when push status flips to success.
+  useEffect(() => {
+    let cancelled = false;
+    void (async () => {
+      const status = await checkFullScreenIntentPermission();
+      if (!cancelled) setFsiStatus(status);
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [pushStatus.kind]);
 
   // Navigate to OrderActive when in any active phase
   useEffect(() => {
@@ -260,6 +282,29 @@ export default function HomeScreen(): React.ReactNode {
         </View>
       )}
 
+      {fsiStatus === 'denied' && pushStatus.kind === 'success' && (
+        <TouchableOpacity
+          style={styles.fsiBanner}
+          onPress={async () => {
+            await openFullScreenIntentSettings();
+            // Fallback if notifee doesn't ship the deep-link helper.
+            Linking.openSettings().catch(() => undefined);
+          }}
+          activeOpacity={0.85}
+          testID="fsi-banner"
+        >
+          <Text style={[Typography.bodyBold, { color: DriverColors.danger }]}>
+            ⚠ Заказ не открывается на экране
+          </Text>
+          <Text style={[Typography.caption, styles.pushBannerHint]}>
+            Включите «Уведомления на весь экран» в настройках телефона. Без этого заказы будут приходить только маленькой шторкой сверху, без таймера и кнопки «Принять».
+          </Text>
+          <Text style={[Typography.caption, styles.pushBannerCta]}>
+            Нажмите чтобы открыть настройки →
+          </Text>
+        </TouchableOpacity>
+      )}
+
       {state.phase !== 'offer' && (
         <View style={styles.bottomPanel}>
           {isOnline && state.phase === 'online_idle' && (
@@ -391,6 +436,23 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     borderWidth: 1,
     borderColor: DriverColors.danger,
+  },
+  fsiBanner: {
+    position: 'absolute',
+    top: TOP_INSET + 56,
+    left: 16,
+    right: 16,
+    backgroundColor: '#3B1F22',
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: DriverColors.danger,
+  },
+  pushBannerCta: {
+    color: DriverColors.primary,
+    marginTop: 8,
+    fontWeight: '600' as const,
   },
   pushBannerHint: {
     color: DriverColors.textSecondary,
