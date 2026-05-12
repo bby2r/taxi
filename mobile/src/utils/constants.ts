@@ -1,12 +1,12 @@
-// Production-installed APKs (eas build --profile preview / production) always
-// hit the Render-hosted backend — it lives at https://taxi-l1jn.onrender.com
-// and is up 24/7 regardless of whether the dev machine is on. The ngrok
-// branch is only for local development where the driver app talks to a
-// laptop-side `php artisan serve` via an ngrok tunnel. `__DEV__` is true
-// when running through `expo start` / Metro, false in any EAS-built APK.
+// Both branches point at the ngrok tunnel served by the dev laptop's
+// `php artisan serve`. While the Render service is suspended this is
+// the only working backend; the laptop must be running ngrok + the
+// Laravel dev server for the APK to reach the API. Switch the
+// production branch back to https://taxi-l1jn.onrender.com once the
+// Render service is reactivated.
 export const API_BASE_URL = __DEV__
   ? 'https://glottal-brigid-oversensibly.ngrok-free.dev'
-  : 'https://taxi-l1jn.onrender.com';
+  : 'https://glottal-brigid-oversensibly.ngrok-free.dev';
 
 export const PUSHER_KEY = '0d48c79a3cabdd93025a';
 export const PUSHER_CLUSTER = 'ap1';
