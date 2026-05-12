@@ -37,7 +37,7 @@ export default function ActionButton({
 
   const textColor =
     variant === 'primary'
-      ? ClientColors.dark
+      ? ClientColors.white
       : variant === 'danger'
         ? ClientColors.white
         : ClientColors.primary;
@@ -69,15 +69,16 @@ export default function ActionButton({
 
 const styles = StyleSheet.create({
   button: {
-    height: 52,
-    borderRadius: 12,
+    height: 54,
+    borderRadius: 16,
     alignItems: 'center',
     justifyContent: 'center',
     paddingHorizontal: 24,
   },
   outline: {
-    borderWidth: 2,
-    borderColor: ClientColors.primary,
+    borderWidth: 1.5,
+    borderColor: ClientColors.border,
+    backgroundColor: 'transparent',
   },
   disabled: {
     opacity: 0.5,

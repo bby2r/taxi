@@ -9,6 +9,7 @@ import {
   Easing,
   Platform,
   StatusBar,
+  TouchableOpacity,
 } from 'react-native';
 import MapView, { Marker, Region } from 'react-native-maps';
 import { useLocation } from '../../hooks/useLocation';
@@ -64,10 +65,7 @@ function PulsingDot(): React.ReactNode {
 
   return (
     <Animated.View
-      style={[
-        styles.pulsingDot,
-        { transform: [{ scale }], opacity },
-      ]}
+      style={[styles.pulsingDot, { transform: [{ scale }], opacity }]}
     />
   );
 }
@@ -78,12 +76,23 @@ export default function HomeScreen(): React.ReactNode {
   const mapRef = useRef<MapView>(null);
   const [regionSelectorVisible, setRegionSelectorVisible] = useState(false);
   const [currentPrice, setCurrentPrice] = useState<number>(80);
+  const cardAnim = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
     getCurrentPrice()
       .then(setCurrentPrice)
       .catch(() => setCurrentPrice(80));
   }, []);
+
+  // Slide the bottom card up on first mount for a more "alive" feel.
+  useEffect(() => {
+    Animated.timing(cardAnim, {
+      toValue: 1,
+      duration: 420,
+      easing: Easing.out(Easing.cubic),
+      useNativeDriver: true,
+    }).start();
+  }, [cardAnim]);
 
   const initialRegion: Region = {
     latitude: location.latitude,
@@ -114,6 +123,11 @@ export default function HomeScreen(): React.ReactNode {
       ? { latitude: state.order.driver.latitude, longitude: state.order.driver.longitude }
       : null;
 
+  const cardTranslate = cardAnim.interpolate({
+    inputRange: [0, 1],
+    outputRange: [80, 0],
+  });
+
   return (
     <View style={styles.container}>
       <MapView
@@ -122,44 +136,89 @@ export default function HomeScreen(): React.ReactNode {
         initialRegion={initialRegion}
         showsUserLocation
         showsMyLocationButton
-        mapPadding={{ top: Platform.OS === 'android' ? (StatusBar.currentHeight ?? 40) + 8 : 0, right: 0, bottom: 0, left: 0 }}
+        mapPadding={{
+          top: Platform.OS === 'android' ? (StatusBar.currentHeight ?? 40) + 8 : 0,
+          right: 0,
+          bottom: 0,
+          left: 0,
+        }}
       >
         {driverCoords && (
           <Marker coordinate={driverCoords} title="Водитель">
-            <Text style={styles.carEmoji}>🚗</Text>
+            <View style={styles.carBadge}>
+              <Text style={styles.carEmoji}>🚗</Text>
+            </View>
           </Marker>
         )}
       </MapView>
 
-      {/* Bottom Card */}
-      <View style={styles.bottomCard}>
-        {error && (
-          <Text style={[Typography.caption, { color: ClientColors.danger, marginBottom: 8 }]}>
-            {error}
+      {/* Floating cancelled banner — slides from the top, replaces the
+          previous raw red toast. */}
+      {state.phase === 'cancelled' && (
+        <View style={styles.cancelledToast}>
+          <Text style={styles.cancelledToastEmoji}>🚫</Text>
+          <Text style={[Typography.bodyBold, styles.cancelledToastText]}>
+            {state.reason === 'no_drivers'
+              ? 'Свободных водителей сейчас нет'
+              : 'Заказ отменён'}
           </Text>
+        </View>
+      )}
+
+      {/* Bottom card */}
+      <Animated.View
+        style={[styles.bottomCard, { transform: [{ translateY: cardTranslate }] }]}
+      >
+        {/* Pull tab */}
+        <View style={styles.handle} />
+
+        {error && (
+          <View style={styles.errorPill}>
+            <Text style={styles.errorEmoji}>⚠️</Text>
+            <Text style={[Typography.caption, styles.errorText]}>{error}</Text>
+          </View>
         )}
 
         {state.phase === 'idle' && (
           <>
-            <Text style={[Typography.body, { color: ClientColors.textSecondary, marginBottom: 4 }]}>
-              Текущее местоположение
-            </Text>
-            <Text style={[Typography.h2, { color: ClientColors.dark, marginBottom: 16 }]}>
-              {currentPrice} сом
-            </Text>
-            <ActionButton
-              title="Вызвать такси"
+            <Text style={styles.greeting}>Куда поедем?</Text>
+            <View style={styles.priceRow}>
+              <View style={styles.priceChip}>
+                <Text style={styles.priceChipLabel}>в селе</Text>
+                <Text style={styles.priceChipValue}>{currentPrice} сом</Text>
+              </View>
+              <TouchableOpacity
+                style={styles.regionChip}
+                onPress={() => setRegionSelectorVisible(true)}
+                activeOpacity={0.85}
+              >
+                <Text style={styles.regionChipEmoji}>🌍</Text>
+                <Text style={styles.regionChipText}>Межгород</Text>
+              </TouchableOpacity>
+            </View>
+
+            {/* Hero call button — large, primary teal, pill-shaped */}
+            <TouchableOpacity
+              style={[
+                styles.heroButton,
+                (location.loading || loading) && styles.heroButtonDisabled,
+              ]}
               onPress={handleCallTaxi}
-              loading={loading}
-              disabled={location.loading}
-            />
-            <ActionButton
-              title="Межгород"
-              onPress={() => setRegionSelectorVisible(true)}
-              variant="outline"
-              disabled={location.loading}
-              style={{ marginTop: 12 }}
-            />
+              disabled={location.loading || loading}
+              activeOpacity={0.9}
+            >
+              {loading ? (
+                <ActivityIndicator color={ClientColors.white} />
+              ) : (
+                <>
+                  <Text style={styles.heroButtonEmoji}>🚕</Text>
+                  <Text style={styles.heroButtonText}>Вызвать такси</Text>
+                </>
+              )}
+            </TouchableOpacity>
+            <Text style={styles.helperText}>
+              Подача — ваше текущее местоположение
+            </Text>
           </>
         )}
 
@@ -167,16 +226,19 @@ export default function HomeScreen(): React.ReactNode {
           <>
             <View style={styles.searchingRow}>
               <PulsingDot />
-              <Text style={[Typography.h3, { color: ClientColors.dark, marginLeft: 12 }]}>
-                Ищем водителя...
-              </Text>
+              <View style={{ marginLeft: 14, flex: 1 }}>
+                <Text style={styles.searchingTitle}>Ищем водителя</Text>
+                <Text style={styles.searchingSubtitle}>
+                  Обычно занимает 1-2 минуты
+                </Text>
+              </View>
             </View>
             <ActionButton
               title="Отменить"
               onPress={cancelOrder}
               loading={loading}
               variant="outline"
-              style={{ marginTop: 16 }}
+              style={{ marginTop: 18 }}
             />
           </>
         )}
@@ -185,15 +247,13 @@ export default function HomeScreen(): React.ReactNode {
           state.order.driver && (
             <>
               <DriverCard driver={state.order.driver} status={state.phase} />
-              {/* Cancel button is hidden once the ride is in_progress —
-                  driver has already started the trip and can't be cancelled
-                  by the client per backend rules (Order::isCancellable). */}
               {(state.phase === 'accepted' || state.phase === 'arrived') && (
                 <ActionButton
                   title="Отменить"
                   onPress={cancelOrder}
                   loading={loading}
                   variant="outline"
+                  style={{ marginTop: 8 }}
                 />
               )}
             </>
@@ -203,23 +263,29 @@ export default function HomeScreen(): React.ReactNode {
           !state.order.driver && (
             <ActivityIndicator color={ClientColors.primary} />
           )}
-      </View>
+      </Animated.View>
 
-      {/* Completed Modal */}
+      {/* Completed Modal — slightly festive */}
       <Modal visible={state.phase === 'completed'} transparent animationType="fade">
         <View style={styles.modalOverlay}>
           <View style={styles.modalContent}>
-            <Text style={[Typography.h2, { color: ClientColors.dark, textAlign: 'center', marginBottom: 8 }]}>
-              Поездка завершена!
-            </Text>
+            <Text style={styles.completedEmoji}>🎉</Text>
+            <Text style={styles.completedTitle}>Поездка завершена!</Text>
             {state.phase === 'completed' && (
-              <Text
-                style={[Typography.h3, { color: ClientColors.primaryDark, textAlign: 'center', marginBottom: 20 }]}
-              >
-                {state.order.price} сом
-              </Text>
+              <View style={styles.completedPriceBlock}>
+                <Text style={styles.completedPriceLabel}>К оплате водителю</Text>
+                <Text style={styles.completedPriceValue}>
+                  {state.order.price} <Text style={styles.completedPriceCurrency}>сом</Text>
+                </Text>
+              </View>
             )}
-            <ActionButton title="Готово" onPress={dismissCompleted} />
+            <TouchableOpacity
+              style={styles.modalButton}
+              onPress={dismissCompleted}
+              activeOpacity={0.9}
+            >
+              <Text style={styles.modalButtonText}>Спасибо!</Text>
+            </TouchableOpacity>
           </View>
         </View>
       </Modal>
@@ -229,17 +295,6 @@ export default function HomeScreen(): React.ReactNode {
         onSelect={handleRegionSelect}
         onClose={() => setRegionSelectorVisible(false)}
       />
-
-      {/* Cancelled Toast */}
-      {state.phase === 'cancelled' && (
-        <View style={styles.cancelledToast}>
-          <Text style={[Typography.bodyBold, { color: ClientColors.white }]}>
-            {state.reason === 'no_drivers'
-              ? 'Нет свободных водителей'
-              : 'Заказ отменён'}
-          </Text>
-        </View>
-      )}
     </View>
   );
 }
@@ -248,26 +303,157 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
   },
+  carBadge: {
+    backgroundColor: ClientColors.white,
+    borderRadius: 18,
+    padding: 4,
+    shadowColor: '#000',
+    shadowOpacity: 0.2,
+    shadowRadius: 4,
+    shadowOffset: { width: 0, height: 2 },
+    elevation: 4,
+  },
+  carEmoji: {
+    fontSize: 28,
+  },
   bottomCard: {
     position: 'absolute',
     bottom: 0,
     left: 0,
     right: 0,
-    backgroundColor: ClientColors.white,
-    borderTopLeftRadius: 24,
-    borderTopRightRadius: 24,
-    paddingHorizontal: 20,
-    paddingTop: 20,
-    paddingBottom: 34,
+    backgroundColor: ClientColors.cardBackground,
+    borderTopLeftRadius: 32,
+    borderTopRightRadius: 32,
+    paddingHorizontal: 24,
+    paddingTop: 14,
+    paddingBottom: 36,
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: -2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 8,
-    elevation: 8,
+    shadowOffset: { width: 0, height: -4 },
+    shadowOpacity: 0.12,
+    shadowRadius: 16,
+    elevation: 12,
+  },
+  handle: {
+    width: 44,
+    height: 4,
+    borderRadius: 2,
+    backgroundColor: ClientColors.border,
+    alignSelf: 'center',
+    marginBottom: 18,
+  },
+  greeting: {
+    fontSize: 26,
+    fontWeight: '700' as const,
+    color: ClientColors.dark,
+    marginBottom: 16,
+    letterSpacing: -0.3,
+  },
+  priceRow: {
+    flexDirection: 'row',
+    gap: 10,
+    marginBottom: 22,
+  },
+  priceChip: {
+    flex: 1,
+    backgroundColor: ClientColors.primaryTint,
+    borderRadius: 16,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+  },
+  priceChipLabel: {
+    fontSize: 12,
+    color: ClientColors.primaryDark,
+    fontWeight: '500' as const,
+  },
+  priceChipValue: {
+    fontSize: 20,
+    fontWeight: '700' as const,
+    color: ClientColors.primaryDark,
+    marginTop: 2,
+  },
+  regionChip: {
+    flex: 1,
+    backgroundColor: ClientColors.accentTint,
+    borderRadius: 16,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  regionChipEmoji: {
+    fontSize: 22,
+  },
+  regionChipText: {
+    fontSize: 15,
+    fontWeight: '600' as const,
+    color: '#9A3412',
+  },
+  heroButton: {
+    backgroundColor: ClientColors.primary,
+    borderRadius: 28,
+    height: 60,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 10,
+    shadowColor: ClientColors.primary,
+    shadowOpacity: 0.35,
+    shadowRadius: 12,
+    shadowOffset: { width: 0, height: 6 },
+    elevation: 6,
+  },
+  heroButtonDisabled: {
+    opacity: 0.6,
+  },
+  heroButtonEmoji: {
+    fontSize: 22,
+  },
+  heroButtonText: {
+    color: ClientColors.white,
+    fontSize: 17,
+    fontWeight: '700' as const,
+    letterSpacing: 0.2,
+  },
+  helperText: {
+    textAlign: 'center',
+    marginTop: 12,
+    fontSize: 12,
+    color: ClientColors.textMuted,
+  },
+  errorPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#FEF2F2',
+    borderColor: '#FECACA',
+    borderWidth: 1,
+    borderRadius: 12,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    marginBottom: 12,
+    gap: 8,
+  },
+  errorEmoji: {
+    fontSize: 16,
+  },
+  errorText: {
+    color: ClientColors.danger,
+    flex: 1,
   },
   searchingRow: {
     flexDirection: 'row',
     alignItems: 'center',
+    marginTop: 8,
+  },
+  searchingTitle: {
+    fontSize: 19,
+    fontWeight: '700' as const,
+    color: ClientColors.dark,
+  },
+  searchingSubtitle: {
+    fontSize: 13,
+    color: ClientColors.textSecondary,
+    marginTop: 2,
   },
   pulsingDot: {
     width: 14,
@@ -275,31 +461,88 @@ const styles = StyleSheet.create({
     borderRadius: 7,
     backgroundColor: ClientColors.primary,
   },
-  carEmoji: {
-    fontSize: 28,
-  },
   modalOverlay: {
     flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.5)',
+    backgroundColor: 'rgba(15,23,42,0.55)',
     justifyContent: 'center',
     alignItems: 'center',
-    paddingHorizontal: 32,
+    paddingHorizontal: 28,
   },
   modalContent: {
     backgroundColor: ClientColors.white,
-    borderRadius: 20,
-    paddingHorizontal: 24,
-    paddingVertical: 32,
+    borderRadius: 28,
+    paddingHorizontal: 28,
+    paddingTop: 28,
+    paddingBottom: 24,
     width: '100%',
+    alignItems: 'center',
+  },
+  completedEmoji: {
+    fontSize: 56,
+    marginBottom: 8,
+  },
+  completedTitle: {
+    fontSize: 22,
+    fontWeight: '700' as const,
+    color: ClientColors.dark,
+    textAlign: 'center',
+    marginBottom: 18,
+  },
+  completedPriceBlock: {
+    alignItems: 'center',
+    marginBottom: 26,
+  },
+  completedPriceLabel: {
+    fontSize: 13,
+    color: ClientColors.textSecondary,
+    marginBottom: 4,
+  },
+  completedPriceValue: {
+    fontSize: 38,
+    fontWeight: '800' as const,
+    color: ClientColors.primaryDark,
+  },
+  completedPriceCurrency: {
+    fontSize: 18,
+    fontWeight: '600' as const,
+  },
+  modalButton: {
+    backgroundColor: ClientColors.primary,
+    borderRadius: 24,
+    paddingHorizontal: 40,
+    height: 52,
+    justifyContent: 'center',
+    alignItems: 'center',
+    width: '100%',
+  },
+  modalButtonText: {
+    color: ClientColors.white,
+    fontSize: 16,
+    fontWeight: '700' as const,
   },
   cancelledToast: {
     position: 'absolute',
-    top: 60,
-    left: 20,
-    right: 20,
-    backgroundColor: ClientColors.danger,
-    borderRadius: 12,
+    top: Platform.OS === 'android' ? (StatusBar.currentHeight ?? 40) + 12 : 56,
+    left: 16,
+    right: 16,
+    backgroundColor: ClientColors.dark,
+    borderRadius: 14,
     paddingVertical: 14,
+    paddingHorizontal: 16,
+    flexDirection: 'row',
     alignItems: 'center',
+    gap: 10,
+    shadowColor: '#000',
+    shadowOpacity: 0.25,
+    shadowRadius: 10,
+    shadowOffset: { width: 0, height: 4 },
+    elevation: 6,
+  },
+  cancelledToastEmoji: {
+    fontSize: 22,
+  },
+  cancelledToastText: {
+    color: ClientColors.white,
+    flex: 1,
   },
 });

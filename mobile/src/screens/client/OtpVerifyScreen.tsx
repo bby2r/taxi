@@ -89,13 +89,17 @@ export default function OtpVerifyScreen({ navigation, route }: Props): React.Rea
           accessibilityRole="button"
           accessibilityLabel="Назад"
         >
-          <Text style={styles.backText}>{'<'}</Text>
+          <Text style={styles.backText}>←</Text>
         </TouchableOpacity>
 
         <View style={styles.content}>
-          <Text style={[Typography.h1, styles.title]}>Введите код</Text>
-          <Text style={[Typography.body, styles.subtitle]}>
-            Код отправлен на {phone}
+          <View style={styles.iconCircle}>
+            <Text style={styles.iconEmoji}>📩</Text>
+          </View>
+          <Text style={styles.title}>Код подтверждения</Text>
+          <Text style={styles.subtitle}>
+            Мы отправили 4-значный код на{'\n'}
+            <Text style={styles.phoneText}>{phone}</Text>
           </Text>
 
           <View style={styles.otpContainer}>
@@ -103,23 +107,24 @@ export default function OtpVerifyScreen({ navigation, route }: Props): React.Rea
           </View>
 
           {errorMessage ? (
-            <Text style={[Typography.caption, styles.errorText]}>
-              {errorMessage}
-            </Text>
+            <Text style={styles.errorText}>{errorMessage}</Text>
           ) : null}
 
           <View style={styles.resendContainer}>
             {timer > 0 ? (
-              <Text style={[Typography.caption, styles.timerText]}>
-                Повторная отправка через {timer} сек
+              <Text style={styles.timerText}>
+                Запросить новый код можно через{' '}
+                <Text style={styles.timerNumber}>{timer} сек</Text>
               </Text>
             ) : (
               <TouchableOpacity
                 onPress={handleResend}
                 disabled={resending}
                 accessibilityRole="button"
+                style={styles.resendButton}
+                activeOpacity={0.7}
               >
-                <Text style={[Typography.body, styles.resendText]}>
+                <Text style={styles.resendText}>
                   {resending ? 'Отправляем...' : 'Отправить код повторно'}
                 </Text>
               </TouchableOpacity>
@@ -140,47 +145,81 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   backButton: {
-    paddingHorizontal: 24,
-    paddingVertical: 12,
+    paddingHorizontal: 20,
+    paddingVertical: 14,
     alignSelf: 'flex-start',
+    marginTop: 8,
   },
   backText: {
     fontSize: 28,
     color: ClientColors.dark,
-    fontWeight: '600',
+    fontWeight: '600' as const,
   },
   content: {
     flex: 1,
     justifyContent: 'center',
     paddingHorizontal: 24,
   },
+  iconCircle: {
+    width: 80,
+    height: 80,
+    borderRadius: 40,
+    backgroundColor: ClientColors.primaryTint,
+    alignSelf: 'center',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 20,
+  },
+  iconEmoji: {
+    fontSize: 40,
+  },
   title: {
+    fontSize: 26,
+    fontWeight: '800' as const,
     color: ClientColors.dark,
     textAlign: 'center',
-    marginBottom: 8,
+    letterSpacing: -0.3,
+    marginBottom: 10,
   },
   subtitle: {
+    fontSize: 15,
     color: ClientColors.textSecondary,
     textAlign: 'center',
     marginBottom: 32,
+    lineHeight: 22,
+  },
+  phoneText: {
+    color: ClientColors.dark,
+    fontWeight: '700' as const,
   },
   otpContainer: {
-    marginBottom: 16,
+    marginBottom: 12,
   },
   errorText: {
     color: ClientColors.danger,
+    fontSize: 13,
     textAlign: 'center',
-    marginBottom: 8,
+    marginTop: 4,
   },
   resendContainer: {
     alignItems: 'center',
-    marginTop: 24,
+    marginTop: 28,
   },
   timerText: {
+    fontSize: 13,
     color: ClientColors.textMuted,
+  },
+  timerNumber: {
+    color: ClientColors.textPrimary,
+    fontWeight: '600' as const,
+  },
+  resendButton: {
+    paddingVertical: 10,
+    paddingHorizontal: 16,
   },
   resendText: {
     color: ClientColors.primary,
-    fontWeight: '600',
+    fontSize: 15,
+    fontWeight: '700' as const,
   },
 });
