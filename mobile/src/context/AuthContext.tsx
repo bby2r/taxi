@@ -1,7 +1,7 @@
 import React, { createContext, useContext, useEffect, useState, useCallback } from 'react';
 import { User } from '../api/types';
 import { getMe, logout as apiLogout } from '../api/auth';
-import { saveToken, saveUser, clearAuth, getToken } from '../utils/storage';
+import { saveToken, saveUser, clearAuth, getToken, getUser } from '../utils/storage';
 import { setOnUnauthorized } from '../api/client';
 
 interface AuthContextValue {
@@ -32,15 +32,42 @@ export function AuthProvider({ children }: { children: React.ReactNode }): React
   useEffect(() => {
     (async () => {
       const storedToken = await getToken();
-      if (storedToken) {
-        try {
-          const me = await getMe();
-          setUser(me);
-        } catch {
-          await clearAuth();
+      if (!storedToken) {
+        setIsLoading(false);
+        return;
+      }
+
+      // Optimistic restore — if we have cached user data, surface it
+      // immediately so the driver / client stays logged in across
+      // app launches without the home screen flashing the login form.
+      // The /auth/me round-trip happens in parallel for freshness.
+      try {
+        const cachedJson = await getUser();
+        if (cachedJson) {
+          const cached = JSON.parse(cachedJson) as User;
+          setUser(cached);
         }
+      } catch {
+        // bad JSON or storage hiccup — ignore, the network path below
+        // will populate fresh
       }
       setIsLoading(false);
+
+      try {
+        const me = await getMe();
+        await saveUser(me);
+        setUser(me);
+      } catch (err) {
+        // Only clear auth on a confirmed 401 (token is actually invalid).
+        // Network errors, 5xx, timeouts and Render cold-starts shouldn't
+        // boot the user back to login — the cached session is good enough
+        // until the next call succeeds.
+        const status = (err as { response?: { status?: number } })?.response?.status;
+        if (status === 401) {
+          await clearAuth();
+          setUser(null);
+        }
+      }
     })();
   }, []);
 

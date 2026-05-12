@@ -470,6 +470,25 @@ export default function OrderActiveScreen(): React.ReactNode {
     }
   }, [state.phase, navigation]);
 
+  // Block the Android hardware back button + swipe-back gesture while
+  // there's an active order. Previously the driver could press back,
+  // land on the home map, and lose access to the order management UI —
+  // the order was still active server-side but invisible until they
+  // killed and reopened the app.
+  useEffect(() => {
+    const sub = navigation.addListener('beforeRemove', (e) => {
+      const phase = state.phase;
+      const isActive =
+        phase === 'active' ||
+        phase === 'arrived' ||
+        phase === 'in_progress';
+      if (isActive) {
+        e.preventDefault();
+      }
+    });
+    return sub;
+  }, [navigation, state.phase]);
+
   const order =
     state.phase === 'active' ||
     state.phase === 'arrived' ||

@@ -8,6 +8,7 @@ import {
   ActivityIndicator,
   TouchableOpacity,
   ScrollView,
+  Linking,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useAuth } from '../../context/AuthContext';
@@ -206,6 +207,16 @@ export default function ProfileScreen(): React.ReactNode {
           )}
         </View>
 
+        {/* Support */}
+        <TouchableOpacity
+          style={styles.supportButton}
+          onPress={() => Linking.openURL('tel:+996509397226')}
+          activeOpacity={0.85}
+        >
+          <Text style={styles.supportLabel}>Поддержка</Text>
+          <Text style={styles.supportPhone}>+996 509 397 226</Text>
+        </TouchableOpacity>
+
         {/* Logout */}
         <TouchableOpacity style={styles.logoutButton} onPress={handleLogout}>
           <Text style={styles.logoutButtonText}>Выйти</Text>
@@ -316,12 +327,32 @@ const styles = StyleSheet.create({
     color: ClientColors.textSecondary,
     fontSize: 13,
   },
+  supportButton: {
+    backgroundColor: ClientColors.cardBackground,
+    borderRadius: 12,
+    paddingVertical: 14,
+    paddingHorizontal: 16,
+    marginTop: 16,
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: ClientColors.border,
+  },
+  supportLabel: {
+    ...Typography.bodyBold,
+    color: ClientColors.textPrimary,
+  },
+  supportPhone: {
+    ...Typography.body,
+    color: ClientColors.primary,
+  },
   logoutButton: {
     backgroundColor: ClientColors.danger,
     borderRadius: 12,
     paddingVertical: 14,
     alignItems: 'center',
-    marginTop: 16,
+    marginTop: 12,
   },
   logoutButtonText: {
     ...Typography.button,
