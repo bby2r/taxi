@@ -51,20 +51,22 @@ class OfferOverlayModule : Module() {
         Events("onOfferAction")
 
         Function("hasOverlayPermission") {
-            return@Function hasPermission()
+            hasPermission()
         }
 
         Function("openOverlaySettings") {
-            val context = appContext.reactContext ?: return@Function
-            val intent = Intent(
-                Settings.ACTION_MANAGE_OVERLAY_PERMISSION,
-                Uri.parse("package:${context.packageName}"),
-            )
-            intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-            try {
-                context.startActivity(intent)
-            } catch (e: Exception) {
-                // ignore — fallback caller can use Linking.openSettings()
+            val context = appContext.reactContext
+            if (context != null) {
+                val intent = Intent(
+                    Settings.ACTION_MANAGE_OVERLAY_PERMISSION,
+                    Uri.parse("package:${context.packageName}"),
+                )
+                intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                try {
+                    context.startActivity(intent)
+                } catch (e: Exception) {
+                    // ignore — fallback caller can use Linking.openSettings()
+                }
             }
         }
 
