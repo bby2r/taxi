@@ -65,7 +65,7 @@ cd mobile && eas build -p android --profile preview
 
 Install the new APK on each driver's phone. **Important:** Android caches notification channels permanently after the first registration. To pick up the new sound on devices that already had the old channel:
 
-1. Settings → Apps → Village Taxi → Notifications → "Новые заказы" channel → delete OR
+1. Settings → Apps → AIYL Taxi → Notifications → "Новые заказы" channel → delete OR
 2. Uninstall and reinstall the app
 
 Newly installed devices will get the new sound right away.

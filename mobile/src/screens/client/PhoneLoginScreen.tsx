@@ -56,7 +56,7 @@ export default function PhoneLoginScreen({ navigation }: Props): React.ReactNode
         <View style={styles.content}>
           <View style={styles.heroBlock}>
             <Text style={styles.brandEmoji}>🚕</Text>
-            <Text style={styles.title}>Village Taxi</Text>
+            <Text style={styles.title}>AIYL Taxi</Text>
             <Text style={styles.subtitle}>
               Такси в селе и до города{'\n'}за пару минут
             </Text>

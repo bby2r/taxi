@@ -21,7 +21,7 @@ issues: none
 
 All 13 files present and match the step spec:
 
-- **app.json**: Village Taxi branding, location permissions for iOS/Android, bundle ID `com.villagetaxi.app`, expo plugins configured.
+- **app.json**: AIYL Taxi branding, location permissions for iOS/Android, bundle ID `com.aiyltaxi.app`, expo plugins configured.
 - **colors.ts**: Exports `ClientColors` (light theme) and `DriverColors` (dark theme) as const objects.
 - **typography.ts**: Exports `Typography` with h1/h2/h3/body/bodyBold/caption/button/buttonLarge text styles.
 - **constants.ts**: API_BASE_URL (dev/prod), PUSHER_KEY/CLUSTER, ORDER_STATUSES, OTP_LENGTH, DEFAULT_MAP_REGION, FIXED_PRICE.

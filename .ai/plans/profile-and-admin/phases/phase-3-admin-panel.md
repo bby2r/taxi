@@ -441,14 +441,14 @@ This is a self-contained page with its own `<!DOCTYPE html>` (not using `layouts
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Village Taxi</title>
+    <title>AIYL Taxi</title>
     @vite(['resources/css/app.css', 'resources/js/app.js'])
 </head>
 <body class="flex min-h-screen flex-col bg-gray-50">
     {{-- Header --}}
     <header class="border-b border-gray-200 bg-white">
         <div class="mx-auto max-w-4xl px-6 py-6">
-            <span class="text-2xl font-bold text-amber-500">Village Taxi</span>
+            <span class="text-2xl font-bold text-amber-500">AIYL Taxi</span>
         </div>
     </header>
 
@@ -456,7 +456,7 @@ This is a self-contained page with its own `<!DOCTYPE html>` (not using `layouts
     <main class="flex flex-1 items-center justify-center px-6">
         <div class="mx-auto max-w-2xl text-center">
             <h1 class="text-4xl font-bold tracking-tight text-gray-900 sm:text-5xl">
-                Your Village Taxi Service
+                Your AIYL Taxi Service
             </h1>
             <p class="mt-6 text-lg leading-8 text-gray-600">
                 Fast, reliable rides across the village. Open the mobile app to book your next trip.
@@ -468,7 +468,7 @@ This is a self-contained page with its own `<!DOCTYPE html>` (not using `layouts
     <footer class="border-t border-gray-200 bg-white">
         <div class="mx-auto max-w-4xl px-6 py-4 text-center">
             <p class="text-xs text-gray-400">
-                &copy; {{ date('Y') }} Village Taxi &middot;
+                &copy; {{ date('Y') }} AIYL Taxi &middot;
                 <a href="{{ route('admin.login') }}" class="text-gray-400 hover:text-gray-500">Admin</a>
             </p>
         </div>
@@ -480,7 +480,7 @@ This is a self-contained page with its own `<!DOCTYPE html>` (not using `layouts
 Design decisions:
 - Standalone HTML document -- does NOT extend admin layout
 - Uses `@vite` to load TailwindCSS 4 from the same bundle
-- Title matches the admin panel name "Village Taxi"
+- Title matches the admin panel name "AIYL Taxi"
 - Hero section is centered vertically (flex-1 with items-center)
 - Footer link to admin login is intentionally subtle: `text-xs text-gray-400` (tiny, gray, blends with copyright)
 - Mobile responsive: uses `sm:text-5xl` breakpoint for hero heading
@@ -519,8 +519,8 @@ Create via: `php artisan make:test --phpunit LandingPageTest`
 
 | Test Method | What It Verifies |
 |---|---|
-| `test_landing_page_loads_for_guest` | GET `/`, assert 200, assert `assertSee('Village Taxi')` |
-| `test_landing_page_contains_hero_heading` | GET `/`, assert `assertSee('Your Village Taxi Service')` |
+| `test_landing_page_loads_for_guest` | GET `/`, assert 200, assert `assertSee('AIYL Taxi')` |
+| `test_landing_page_contains_hero_heading` | GET `/`, assert `assertSee('Your AIYL Taxi Service')` |
 | `test_landing_page_contains_admin_link` | GET `/`, assert response contains `route('admin.login')` URL (the `/admin/login` path) |
 | `test_landing_page_admin_link_is_in_footer` | GET `/`, assert `assertSee('Admin')` within context of footer content |
 | `test_landing_page_does_not_use_admin_layout` | GET `/`, assert `assertDontSee('Admin Panel')` (the admin sidebar subtitle), confirming standalone layout |
@@ -598,9 +598,9 @@ Create via: `php artisan make:test --phpunit AdminRedirectTest`
 | Test Method | What It Verifies |
 |---|---|
 | `test_authenticated_admin_redirected_from_root_to_dashboard` | Login as admin, GET `/`, assert redirect to `admin.dashboard` route |
-| `test_guest_sees_landing_page_at_root` | GET `/` without auth, assert 200, assert `assertSee('Village Taxi')` |
-| `test_authenticated_driver_sees_landing_page` | Login as driver, GET `/`, assert 200 (not redirected), assert `assertSee('Village Taxi')` |
-| `test_authenticated_client_sees_landing_page` | Login as client, GET `/`, assert 200 (not redirected), assert `assertSee('Village Taxi')` |
+| `test_guest_sees_landing_page_at_root` | GET `/` without auth, assert 200, assert `assertSee('AIYL Taxi')` |
+| `test_authenticated_driver_sees_landing_page` | Login as driver, GET `/`, assert 200 (not redirected), assert `assertSee('AIYL Taxi')` |
+| `test_authenticated_client_sees_landing_page` | Login as client, GET `/`, assert 200 (not redirected), assert `assertSee('AIYL Taxi')` |
 | `test_authenticated_admin_redirected_from_admin_login` | Login as admin, GET `/admin/login`, assert redirect (302) away from login page |
 | `test_authenticated_admin_login_redirect_goes_to_dashboard` | Login as admin, GET `/admin/login`, follow redirects, assert final URL is `/admin/dashboard` |
 | `test_guest_can_access_admin_login` | GET `/admin/login` without auth, assert 200, assert login form is visible |

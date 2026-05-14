@@ -30,7 +30,7 @@ class AdminRedirectTest extends TestCase
         $response = $this->get('/');
 
         $response->assertStatus(200);
-        $response->assertSee('Village Taxi');
+        $response->assertSee('AIYL Taxi');
     }
 
     /**
@@ -43,7 +43,7 @@ class AdminRedirectTest extends TestCase
         $response = $this->actingAs($driver)->get('/');
 
         $response->assertStatus(200);
-        $response->assertSee('Village Taxi');
+        $response->assertSee('AIYL Taxi');
     }
 
     /**
@@ -56,7 +56,7 @@ class AdminRedirectTest extends TestCase
         $response = $this->actingAs($client)->get('/');
 
         $response->assertStatus(200);
-        $response->assertSee('Village Taxi');
+        $response->assertSee('AIYL Taxi');
     }
 
     /**

@@ -52,7 +52,7 @@ export default function DriverLoginScreen({ navigation }: Props): React.ReactNod
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
       >
         <View style={styles.content}>
-          <Text style={[Typography.h1, styles.title]}>Village Taxi</Text>
+          <Text style={[Typography.h1, styles.title]}>AIYL Taxi</Text>
           <Text style={[Typography.body, styles.subtitle]}>
             Вход для водителей
           </Text>

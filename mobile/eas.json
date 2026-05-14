@@ -28,7 +28,7 @@
         "enterpriseProvisioning": "adhoc"
       },
       "env": {
-        "EXPO_PUBLIC_API_URL": "https://staging.villagetaxi.kg/api",
+        "EXPO_PUBLIC_API_URL": "https://staging.aiyltaxi.kg/api",
         "EXPO_PUBLIC_PUSHER_KEY": "your-staging-pusher-key",
         "EXPO_PUBLIC_PUSHER_CLUSTER": "ap1"
       },
@@ -43,7 +43,7 @@
         "autoIncrement": true
       },
       "env": {
-        "EXPO_PUBLIC_API_URL": "https://villagetaxi.kg/api",
+        "EXPO_PUBLIC_API_URL": "https://aiyltaxi.kg/api",
         "EXPO_PUBLIC_PUSHER_KEY": "your-production-pusher-key",
         "EXPO_PUBLIC_PUSHER_CLUSTER": "ap1"
       },
@@ -57,7 +57,7 @@
         "track": "internal"
       },
       "ios": {
-        "appleId": "developer@villagetaxi.kg",
+        "appleId": "developer@aiyltaxi.kg",
         "ascAppId": "YOUR_ASC_APP_ID",
         "appleTeamId": "YOUR_TEAM_ID"
       }

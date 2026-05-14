@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>@yield('title', 'Admin') — Village Taxi</title>
+    <title>@yield('title', 'Admin') — AIYL Taxi</title>
     @vite(['resources/css/app.css', 'resources/js/app.js'])
 </head>
 <body class="min-h-screen bg-gray-100">
@@ -11,7 +11,7 @@
         {{-- Sidebar --}}
         <aside class="flex w-64 flex-col bg-gray-800">
             <div class="px-6 py-6">
-                <span class="text-xl font-bold text-amber-400">Village Taxi</span>
+                <span class="text-xl font-bold text-amber-400">AIYL Taxi</span>
                 <span class="mt-0.5 block text-xs text-gray-400">Admin Panel</span>
             </div>
 

@@ -1,4 +1,4 @@
-# Plan Memory: Village Taxi Service
+# Plan Memory: AIYL Taxi Service
 
 Last updated: 2026-04-07 (after Phase 8 — FINAL)
 
@@ -41,7 +41,7 @@ Last updated: 2026-04-07 (after Phase 8 — FINAL)
 - Pusher: cluster ap1, private channels per user
 - Admin auth: session-based (NOT Sanctum tokens), phone + password
 - Push: Expo Push API, never throws, sound='default', outside transactions
-- Bundle ID: kg.villagetaxi.app (both platforms)
+- Bundle ID: kg.aiyltaxi.app (both platforms)
 
 ## Final Architecture State
 - Backend: 4 models, 2 enums, 5 services, 7 controllers (3 API + 4 Admin), 6 form requests, 1 middleware, 3 API resources, 1 job, 6 events, 1 command, 22 API + 13 web routes, 238 PHP tests

@@ -98,7 +98,7 @@ class DashboardTest extends TestCase
 
         $response->assertStatus(200);
         $response->assertSee('Dashboard');
-        $response->assertSee('Village Taxi');
+        $response->assertSee('AIYL Taxi');
         $response->assertSee('Admin User');
         $response->assertSee('Logout');
     }

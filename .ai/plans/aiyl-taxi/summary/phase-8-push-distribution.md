@@ -25,7 +25,7 @@ Completed: 2026-04-07
   - Production: AAB + store, auto-increment iOS, OTA channel
   - Submit config for Google Play (service account) and App Store (Apple ID)
   - EXPO_PUBLIC_ prefixed env vars for client-side access
-- **app.json updates**: OTA updates URL, runtimeVersion policy, EAS projectId, bundle identifiers updated to `kg.villagetaxi.app`
+- **app.json updates**: OTA updates URL, runtimeVersion policy, EAS projectId, bundle identifiers updated to `kg.aiyltaxi.app`
 
 ## Test Coverage
 

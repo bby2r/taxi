@@ -37,7 +37,7 @@ jobs:
     timeout-minutes: 60
 
     env:
-      EXPO_PUBLIC_API_URL: ${{ vars.EXPO_PUBLIC_API_URL || 'https://staging.villagetaxi.kg/api' }}
+      EXPO_PUBLIC_API_URL: ${{ vars.EXPO_PUBLIC_API_URL || 'https://staging.aiyltaxi.kg/api' }}
       EXPO_PUBLIC_PUSHER_KEY: ${{ vars.EXPO_PUBLIC_PUSHER_KEY }}
       EXPO_PUBLIC_PUSHER_CLUSTER: ${{ vars.EXPO_PUBLIC_PUSHER_CLUSTER || 'ap1' }}
 
@@ -126,8 +126,11 @@ jobs:
             echo "No APK produced" >&2
             exit 1
           fi
+          APP_VERSION=$(node -p "require('./app.json').expo.version")
+          SHORT_SHA=$(echo "${{ github.sha }}" | cut -c1-7)
+          ARTIFACT_NAME="aiyl-taxi-v${APP_VERSION}-build${{ github.run_number }}-${SHORT_SHA}"
           echo "path=$APK_PATH" >> "$GITHUB_OUTPUT"
-          echo "name=village-taxi-${{ github.sha }}.apk" >> "$GITHUB_OUTPUT"
+          echo "name=${ARTIFACT_NAME}.apk" >> "$GITHUB_OUTPUT"
 
       - name: Upload APK artifact
         uses: actions/upload-artifact@v4

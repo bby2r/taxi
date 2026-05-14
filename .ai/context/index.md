@@ -1,6 +1,6 @@
 # Project Context Index
 
-Village Taxi — a taxi dispatch app for a small village in Kyrgyzstan (Bishkek region). Flat-rate pricing, cash or bank transfer payments, admin-managed drivers, phone OTP auth for clients. Binary feedback system (👍/👎). Drivers can cancel with reasons. Client blacklist for repeat offenders.
+AIYL Taxi — a taxi dispatch app for a small village in Kyrgyzstan (Bishkek region). Flat-rate pricing, cash or bank transfer payments, admin-managed drivers, phone OTP auth for clients. Binary feedback system (👍/👎). Drivers can cancel with reasons. Client blacklist for repeat offenders.
 
 ## Domains
 - **[data-model](data-model.md)** — Entities (User, Order, DriverProfile, OtpCode, DriverChangeRequest), relationships, status workflows, constraints

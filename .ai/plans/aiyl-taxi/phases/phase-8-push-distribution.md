@@ -412,7 +412,7 @@ Configure Expo Application Services (EAS) for building and distributing the Reac
         "enterpriseProvisioning": "adhoc"
       },
       "env": {
-        "API_URL": "https://staging.villagetaxi.kg/api",
+        "API_URL": "https://staging.aiyltaxi.kg/api",
         "PUSHER_KEY": "your-staging-pusher-key",
         "PUSHER_CLUSTER": "ap2"
       },
@@ -427,7 +427,7 @@ Configure Expo Application Services (EAS) for building and distributing the Reac
         "autoIncrement": true
       },
       "env": {
-        "API_URL": "https://villagetaxi.kg/api",
+        "API_URL": "https://aiyltaxi.kg/api",
         "PUSHER_KEY": "your-production-pusher-key",
         "PUSHER_CLUSTER": "ap2"
       },
@@ -441,7 +441,7 @@ Configure Expo Application Services (EAS) for building and distributing the Reac
         "track": "internal"
       },
       "ios": {
-        "appleId": "developer@villagetaxi.kg",
+        "appleId": "developer@aiyltaxi.kg",
         "ascAppId": "YOUR_ASC_APP_ID",
         "appleTeamId": "YOUR_TEAM_ID"
       }
@@ -498,8 +498,8 @@ Ensure `mobile/app.json` (or `app.config.js`) has the required fields:
 ```json
 {
   "expo": {
-    "name": "Village Taxi",
-    "slug": "village-taxi",
+    "name": "AIYL Taxi",
+    "slug": "aiyl-taxi",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
@@ -515,7 +515,7 @@ Ensure `mobile/app.json` (or `app.config.js`) has the required fields:
       "policy": "appVersion"
     },
     "ios": {
-      "bundleIdentifier": "kg.villagetaxi.app",
+      "bundleIdentifier": "kg.aiyltaxi.app",
       "supportsTablet": false,
       "infoPlist": {
         "NSLocationWhenInUseUsageDescription": "We need your location to find nearby drivers and show your position on the map.",
@@ -523,7 +523,7 @@ Ensure `mobile/app.json` (or `app.config.js`) has the required fields:
       }
     },
     "android": {
-      "package": "kg.villagetaxi.app",
+      "package": "kg.aiyltaxi.app",
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
         "backgroundColor": "#FBBF24"
@@ -588,7 +588,7 @@ Update `eas.json` env keys to use `EXPO_PUBLIC_` prefix for client-side access:
 
 ```json
 "env": {
-    "EXPO_PUBLIC_API_URL": "https://villagetaxi.kg/api",
+    "EXPO_PUBLIC_API_URL": "https://aiyltaxi.kg/api",
     "EXPO_PUBLIC_PUSHER_KEY": "your-pusher-key",
     "EXPO_PUBLIC_PUSHER_CLUSTER": "ap2"
 }

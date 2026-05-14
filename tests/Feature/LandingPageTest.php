@@ -17,7 +17,7 @@ class LandingPageTest extends TestCase
         $response = $this->get('/');
 
         $response->assertStatus(200);
-        $response->assertSee('Village Taxi');
+        $response->assertSee('AIYL Taxi');
     }
 
     /**
@@ -27,7 +27,7 @@ class LandingPageTest extends TestCase
     {
         $response = $this->get('/');
 
-        $response->assertSee('Your Village Taxi Service');
+        $response->assertSee('Your AIYL Taxi Service');
     }
 
     /**

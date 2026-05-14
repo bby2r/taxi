@@ -1,7 +1,7 @@
 {
   "expo": {
-    "name": "Village Taxi",
-    "slug": "village-taxi",
+    "name": "AIYL Taxi",
+    "slug": "aiyl-taxi",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
@@ -9,7 +9,7 @@
     "splash": {
       "image": "./assets/splash-icon.png",
       "resizeMode": "contain",
-      "backgroundColor": "#FBBF24"
+      "backgroundColor": "#FFFFFF"
     },
     "updates": {
       "url": "https://u.expo.dev/ca4f91d1-a8f4-488b-9c14-0eb60aa286b8"
@@ -19,7 +19,7 @@
     },
     "ios": {
       "supportsTablet": false,
-      "bundleIdentifier": "kg.villagetaxi.app",
+      "bundleIdentifier": "kg.aiyltaxi.app",
       "infoPlist": {
         "NSLocationWhenInUseUsageDescription": "Нужен доступ к геолокации для определения точки подачи такси",
         "NSLocationAlwaysAndWhenInUseUsageDescription": "Нужен доступ к геолокации для отслеживания маршрута",
@@ -31,9 +31,9 @@
     "android": {
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
-        "backgroundColor": "#FBBF24"
+        "backgroundColor": "#FFFFFF"
       },
-      "package": "kg.villagetaxi.app",
+      "package": "kg.aiyltaxi.app",
       "googleServicesFile": "./google-services.json",
       "config": {
         "googleMaps": {

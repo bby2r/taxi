@@ -214,7 +214,7 @@ export default function ProfileScreen(): React.ReactNode {
             Linking.openURL(
               'https://wa.me/996509397226?text=' +
                 encodeURIComponent(
-                  'Здравствуйте, нужна помощь по приложению Village Taxi.',
+                  'Здравствуйте, нужна помощь по приложению AIYL Taxi.',
                 ),
             )
           }

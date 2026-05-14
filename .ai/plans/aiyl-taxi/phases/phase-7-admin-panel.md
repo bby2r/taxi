@@ -93,7 +93,7 @@ Reuse the existing `EnsureUserRole` middleware. Verify it:
 ```
 - Full-page centered card on #F9FAFB background
 - Card: white, rounded-xl, shadow-lg, max-w-sm, p-8
-- Logo/Title: "Village Taxi Admin" in #1F2937, text-2xl font-bold, centered
+- Logo/Title: "AIYL Taxi Admin" in #1F2937, text-2xl font-bold, centered
 - Subtitle: "Sign in to your account" text-gray-500 text-sm
 - Form fields:
   - Phone: <input type="tel" name="phone" placeholder="Phone number" required>
@@ -114,7 +114,7 @@ Reuse the existing `EnsureUserRole` middleware. Verify it:
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>@yield('title', 'Admin') — Village Taxi</title>
+    <title>@yield('title', 'Admin') — AIYL Taxi</title>
     @vite(['resources/css/app.css', 'resources/js/app.js'])
 </head>
 <body class="bg-gray-50 min-h-screen flex">
@@ -123,7 +123,7 @@ Reuse the existing `EnsureUserRole` middleware. Verify it:
     <aside class="w-64 bg-gray-800 min-h-screen flex-shrink-0 flex flex-col">
         <!-- Brand -->
         <div class="px-6 py-5 border-b border-gray-700">
-            <h1 class="text-amber-400 text-xl font-bold">Village Taxi</h1>
+            <h1 class="text-amber-400 text-xl font-bold">AIYL Taxi</h1>
             <p class="text-gray-400 text-xs mt-1">Admin Panel</p>
         </div>
 
@@ -200,7 +200,7 @@ Create via: `php artisan make:test Admin/AuthTest --phpunit --no-interaction`
 ```
 testAdminLoginPageIsAccessible(): void
     - GET /admin/login → 200
-    - assertSee('Village Taxi Admin')
+    - assertSee('AIYL Taxi Admin')
 
 testAdminCanLoginWithValidCredentials(): void
     - Create User factory with role=admin, phone='1234567890', password=Hash::make('password')
@@ -495,7 +495,7 @@ testDashboardPageLoadsWithLayout(): void
     - actingAs admin
     - GET /admin/dashboard → 200
     - assertSee('Dashboard')  // heading
-    - assertSee('Village Taxi')  // sidebar brand
+    - assertSee('AIYL Taxi')  // sidebar brand
     - assertSee(admin->name)  // top bar
     - assertSee('Logout')
 ```
