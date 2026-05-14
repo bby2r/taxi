@@ -48,3 +48,5 @@ google-service-account*.json
 # generated native folders
 /ios
 /android
+
+# (CI rebuild marker)
