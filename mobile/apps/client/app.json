@@ -24,7 +24,6 @@
         "backgroundColor": "#FBF8F2"
       },
       "package": "kg.aiyltaxi.client",
-      "googleServicesFile": "./google-services.json",
       "config": {
         "googleMaps": {
           "apiKey": "AIzaSyAtbF4MY6NGAfxHyF75anFC6LxLzmjr878"

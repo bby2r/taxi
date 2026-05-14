@@ -79,13 +79,14 @@ jobs:
         working-directory: mobile
         run: npm ci
 
-      - name: Write google-services.json from secret
+      - name: Write google-services.json from secret (driver only)
+        if: matrix.app == 'driver'
         working-directory: mobile/apps/${{ matrix.app }}
         env:
           GOOGLE_SERVICES_JSON: ${{ secrets.GOOGLE_SERVICES_JSON }}
         run: |
           if [ -z "$GOOGLE_SERVICES_JSON" ]; then
-            echo "::error::GOOGLE_SERVICES_JSON secret is not set — Firebase config is required for FCM push to work."
+            echo "::error::GOOGLE_SERVICES_JSON secret is not set — Firebase config is required for FCM push to work in the driver app."
             exit 1
           fi
           printf '%s' "$GOOGLE_SERVICES_JSON" > google-services.json
