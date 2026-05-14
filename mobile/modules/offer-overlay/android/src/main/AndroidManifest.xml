@@ -1,0 +1,7 @@
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+  <!-- Draw the offer overlay on top of any other app. User must grant this
+       at runtime via Settings → Apps → AIYL Taxi → "Display over other
+       apps". Module exposes hasOverlayPermission() + openOverlaySettings()
+       so the JS side can lead the driver through that flow. -->
+  <uses-permission android:name="android.permission.SYSTEM_ALERT_WINDOW" />
+</manifest>

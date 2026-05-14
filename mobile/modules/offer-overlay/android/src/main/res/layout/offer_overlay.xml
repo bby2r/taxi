@@ -1,0 +1,112 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:orientation="vertical"
+    android:background="@drawable/offer_card_bg"
+    android:padding="20dp"
+    android:elevation="20dp">
+
+    <!-- Drag handle -->
+    <View
+        android:layout_width="44dp"
+        android:layout_height="4dp"
+        android:layout_gravity="center_horizontal"
+        android:layout_marginBottom="14dp"
+        android:background="@drawable/offer_handle_bg" />
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal"
+        android:gravity="center_vertical"
+        android:layout_marginBottom="12dp">
+
+        <TextView
+            android:id="@+id/offer_badge"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="Новый заказ"
+            android:textColor="#FBBF24"
+            android:textSize="13sp"
+            android:textStyle="bold"
+            android:background="@drawable/offer_badge_bg"
+            android:paddingHorizontal="10dp"
+            android:paddingVertical="4dp" />
+
+        <View
+            android:layout_width="0dp"
+            android:layout_height="0dp"
+            android:layout_weight="1" />
+
+        <TextView
+            android:id="@+id/offer_timer"
+            android:layout_width="44dp"
+            android:layout_height="44dp"
+            android:text="20"
+            android:textColor="#FBBF24"
+            android:textSize="18sp"
+            android:textStyle="bold"
+            android:gravity="center"
+            android:background="@drawable/offer_timer_bg" />
+
+    </LinearLayout>
+
+    <TextView
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="Адрес подачи"
+        android:textColor="#9CA3AF"
+        android:textSize="12sp" />
+
+    <TextView
+        android:id="@+id/offer_address"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:textColor="#FFFFFF"
+        android:textSize="16sp"
+        android:textStyle="bold"
+        android:maxLines="2"
+        android:ellipsize="end"
+        android:layout_marginTop="2dp"
+        android:layout_marginBottom="12dp" />
+
+    <TextView
+        android:id="@+id/offer_price"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:textColor="#FBBF24"
+        android:textSize="28sp"
+        android:textStyle="bold"
+        android:layout_marginBottom="18dp" />
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal">
+
+        <Button
+            android:id="@+id/offer_decline"
+            android:layout_width="0dp"
+            android:layout_height="52dp"
+            android:layout_weight="1"
+            android:text="Отказаться"
+            android:textColor="#D1D5DB"
+            android:textAllCaps="false"
+            android:background="@drawable/offer_decline_bg"
+            android:layout_marginEnd="8dp" />
+
+        <Button
+            android:id="@+id/offer_accept"
+            android:layout_width="0dp"
+            android:layout_height="52dp"
+            android:layout_weight="2"
+            android:text="Принять"
+            android:textColor="#FFFFFF"
+            android:textStyle="bold"
+            android:textAllCaps="false"
+            android:background="@drawable/offer_accept_bg" />
+
+    </LinearLayout>
+
+</LinearLayout>

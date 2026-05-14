@@ -42,6 +42,19 @@ import {
   startShiftForegroundService,
   stopShiftForegroundService,
 } from '../lib/foregroundService';
+import { AppState as RNAppState } from 'react-native';
+
+// Locally-resolved overlay module — same lazy-require pattern as the rest
+// of /lib/. Old APKs without the native module fall through to the
+// existing notifee fullScreenAction path.
+let OfferOverlay: typeof import('../../modules/offer-overlay/src') | null = null;
+if (Platform.OS === 'android') {
+  try {
+    OfferOverlay = require('../../modules/offer-overlay/src');
+  } catch {
+    OfferOverlay = null;
+  }
+}
 
 // Optional native modules — degrade to vibration-only if the APK was built
 // before they were added (require() throws → we just stay silent).
@@ -180,6 +193,25 @@ function useDriverOrderState(): UseDriverOrderReturn {
     });
     return () => {
       unsub();
+    };
+  }, []);
+
+  // Subscribe to the system-alert-window overlay button presses. Same
+  // pattern as the notifee shade-button listener above — queue a
+  // pendingDriverAction with the order id + kind, then the offer-arrival
+  // effect (later in this file) picks it up and fires accept/decline.
+  // 'timeout' is silently ignored (the in-app 20-second countdown will
+  // expire on its own and trigger the same decline path).
+  useEffect(() => {
+    if (!OfferOverlay) return;
+    const sub = OfferOverlay.addOfferOverlayListener((event) => {
+      if (event.orderId < 0) return;
+      if (event.action === 'accept' || event.action === 'decline') {
+        setPendingDriverAction({ orderId: event.orderId, kind: event.action });
+      }
+    });
+    return () => {
+      sub.remove();
     };
   }, []);
 
@@ -340,6 +372,46 @@ function useDriverOrderState(): UseDriverOrderReturn {
       Vibration.cancel();
     };
   }, [state.phase]);
+
+  // Bottom-sheet overlay on top of any other app while the offer is live
+  // AND the driver is currently in another app (background AppState).
+  // While the app is in the foreground, the in-app OrderOfferCard is
+  // already visible — we hide the overlay so the driver doesn't see two
+  // copies of the same offer. The overlay's own accept/decline button
+  // presses route through the subscribeForegroundEvents above and end
+  // up firing the existing acceptOffer / declineOffer flow.
+  useEffect(() => {
+    if (state.phase !== 'offer' || !OfferOverlay) return;
+    if (!OfferOverlay.isOfferOverlayAvailable()) return;
+
+    let active = true;
+
+    const showIfNeeded = (appState: string): void => {
+      if (!active) return;
+      if (!OfferOverlay!.hasOverlayPermission()) return;
+      if (appState === 'active') {
+        OfferOverlay!.hideOfferOverlay();
+        return;
+      }
+      OfferOverlay!.showOfferOverlay({
+        orderId: state.order.id,
+        address: state.order.pickup_address ?? 'Геолокация клиента',
+        price: state.order.price,
+        durationSeconds: 20,
+      });
+    };
+
+    showIfNeeded(RNAppState.currentState);
+    const sub = RNAppState.addEventListener('change', (next) => {
+      showIfNeeded(next);
+    });
+
+    return () => {
+      active = false;
+      sub.remove();
+      OfferOverlay?.hideOfferOverlay();
+    };
+  }, [state.phase, state.phase === 'offer' ? state.order.id : null]);
 
   // Yandex-style aggressive volume management: when an offer lands we
   // snapshot the driver's current volume, raise it to ~95%, and listen

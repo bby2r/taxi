@@ -1,0 +1,8 @@
+{
+  "name": "offer-overlay",
+  "version": "0.1.0",
+  "description": "System-alert overlay used to surface incoming taxi offers on top of any other app.",
+  "main": "src/index.ts",
+  "types": "src/index.ts",
+  "private": true
+}

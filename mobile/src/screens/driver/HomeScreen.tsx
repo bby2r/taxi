@@ -27,6 +27,11 @@ import {
   openFullScreenIntentSettings,
   type FullScreenIntentStatus,
 } from '../../lib/notifee';
+import {
+  isOfferOverlayAvailable,
+  hasOverlayPermission,
+  openOverlaySettings,
+} from '../../../modules/offer-overlay/src';
 import OrderOfferCard from '../../components/OrderOfferCard';
 import { DriverColors } from '../../theme/colors';
 import { Typography } from '../../theme/typography';
@@ -55,6 +60,7 @@ export default function HomeScreen(): React.ReactNode {
   const mapRef = useRef<MapView>(null);
   const pushStatus = usePushStatus();
   const [fsiStatus, setFsiStatus] = useState<FullScreenIntentStatus>('unknown');
+  const [overlayGranted, setOverlayGranted] = useState<boolean>(true);
 
   // Android 14+ requires a separate manual grant for full-screen
   // notifications. Without it the offer notification falls back to a
@@ -71,6 +77,17 @@ export default function HomeScreen(): React.ReactNode {
       cancelled = true;
     };
   }, [pushStatus.kind]);
+
+  // Check the SYSTEM_ALERT_WINDOW grant for the bottom-sheet overlay each
+  // time the home screen mounts (driver might have just returned from
+  // settings). No-op on builds without the native overlay module.
+  useEffect(() => {
+    if (!isOfferOverlayAvailable()) {
+      setOverlayGranted(true); // hide the banner — feature absent
+      return;
+    }
+    setOverlayGranted(hasOverlayPermission());
+  }, []);
 
   // Navigate to OrderActive when in any active phase
   useEffect(() => {
@@ -284,7 +301,7 @@ export default function HomeScreen(): React.ReactNode {
         </View>
       )}
 
-      {fsiStatus === 'denied' && pushStatus.kind === 'success' && (
+      {fsiStatus === 'denied' && pushStatus.kind === 'success' && overlayGranted && (
         <TouchableOpacity
           style={styles.fsiBanner}
           onPress={async () => {
@@ -300,6 +317,28 @@ export default function HomeScreen(): React.ReactNode {
           </Text>
           <Text style={[Typography.caption, styles.pushBannerHint]}>
             Включите «Уведомления на весь экран» в настройках телефона. Без этого заказы будут приходить только маленькой шторкой сверху, без таймера и кнопки «Принять».
+          </Text>
+          <Text style={[Typography.caption, styles.pushBannerCta]}>
+            Нажмите чтобы открыть настройки →
+          </Text>
+        </TouchableOpacity>
+      )}
+
+      {!overlayGranted && (
+        <TouchableOpacity
+          style={styles.fsiBanner}
+          onPress={() => {
+            openOverlaySettings();
+            setTimeout(() => setOverlayGranted(hasOverlayPermission()), 1500);
+          }}
+          activeOpacity={0.85}
+          testID="overlay-banner"
+        >
+          <Text style={[Typography.bodyBold, { color: DriverColors.danger }]}>
+            ⚠ Поверх других приложений выключено
+          </Text>
+          <Text style={[Typography.caption, styles.pushBannerHint]}>
+            Включите «Поверх других приложений», чтобы заказ всплывал карточкой снизу прямо когда вы в WhatsApp или браузере, без открытия приложения.
           </Text>
           <Text style={[Typography.caption, styles.pushBannerCta]}>
             Нажмите чтобы открыть настройки →
