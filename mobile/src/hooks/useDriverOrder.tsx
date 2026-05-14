@@ -75,6 +75,31 @@ if (Platform.OS !== 'web') {
 
 const VIBRATION_PATTERN = [0, 400, 250, 400, 250, 400];
 
+// Translate axios/native errors into a short Russian message for driver
+// action failures. 401 surfaces when the local Sanctum token no longer
+// matches the backend (server was restarted with a fresh DB, token was
+// revoked from admin, etc.); 503 surfaces when the Render free-tier
+// instance is suspended or cold-starting and ngrok's auth wall returns
+// HTML. The driver shouldn't see a raw "Request failed with status code
+// 503" — they should see a friendly hint about what to do next.
+function describeDriverActionError(err: unknown): string {
+  const response = (err as { response?: { status?: number } })?.response;
+  const status = response?.status;
+  if (status === 401) {
+    return 'Сессия истекла. Войдите в приложение заново.';
+  }
+  if (status === 503 || status === 502 || status === 504) {
+    return 'Сервер временно недоступен, попробуйте ещё раз через минуту.';
+  }
+  if (status === 408 || (err as { code?: string })?.code === 'ECONNABORTED') {
+    return 'Нет связи с сервером. Проверьте интернет и попробуйте снова.';
+  }
+  if (err instanceof Error && err.message) {
+    return err.message;
+  }
+  return 'Ошибка';
+}
+
 export type DriverPhase =
   | 'offline'
   | 'online_idle'
@@ -196,19 +221,23 @@ function useDriverOrderState(): UseDriverOrderReturn {
     };
   }, []);
 
-  // Subscribe to the system-alert-window overlay button presses. Same
-  // pattern as the notifee shade-button listener above — queue a
-  // pendingDriverAction with the order id + kind, then the offer-arrival
-  // effect (later in this file) picks it up and fires accept/decline.
-  // 'timeout' is silently ignored (the in-app 20-second countdown will
-  // expire on its own and trigger the same decline path).
+  // Subscribe to the system-alert-window overlay button presses. The
+  // overlay is shown after phase has already become 'offer' (and stays
+  // 'offer' until accept/decline resolves), so the consumePendingDriverAction
+  // effect — which only re-runs on phase change — would never pick the
+  // queued action up. Instead we bump a tick counter; an effect tied to
+  // (phase, tick) drains the pending action and dispatches accept/decline
+  // directly. We *also* queue into pendingDriverAction so the legacy
+  // notifee shade-button effect still works if the offer Pusher event
+  // races with the tap.
+  const [overlayActionTick, setOverlayActionTick] = useState(0);
   useEffect(() => {
     if (!OfferOverlay) return;
     const sub = OfferOverlay.addOfferOverlayListener((event) => {
       if (event.orderId < 0) return;
-      if (event.action === 'accept' || event.action === 'decline') {
-        setPendingDriverAction({ orderId: event.orderId, kind: event.action });
-      }
+      if (event.action !== 'accept' && event.action !== 'decline') return;
+      setPendingDriverAction({ orderId: event.orderId, kind: event.action });
+      setOverlayActionTick((t) => t + 1);
     });
     return () => {
       sub.remove();
@@ -667,12 +696,18 @@ function useDriverOrderState(): UseDriverOrderReturn {
   }, []);
 
   // If the driver tapped "Принять" or "Отказаться" directly inside the
-  // notification shade, the action button queued a pending decision in the
-  // pendingNotificationAction module. As soon as we have the corresponding
-  // offer in state (via Pusher event or polling fallback), consume the
-  // queued action and fire the matching API call. The offer card never
-  // gets a chance to render — the driver moves straight to the active
-  // ride screen (accept) or back to online_idle (decline).
+  // notification shade or the system-alert-window overlay, the action
+  // button queued a pending decision in the pendingNotificationAction
+  // module. As soon as we have the corresponding offer in state (via
+  // Pusher event or polling fallback), consume the queued action and
+  // fire the matching API call. The offer card never gets a chance to
+  // render — the driver moves straight to the active ride screen
+  // (accept) or back to online_idle (decline).
+  //
+  // overlayActionTick is included in the deps so this effect re-runs
+  // when the user taps a button on the overlay while phase is already
+  // 'offer' (the overlay is mounted *after* phase becomes 'offer', so
+  // depending on phase alone wouldn't catch that path).
   useEffect(() => {
     if (state.phase !== 'offer') return;
     const queued = consumePendingDriverAction(state.order.id);
@@ -681,7 +716,7 @@ function useDriverOrderState(): UseDriverOrderReturn {
     } else if (queued === 'decline') {
       void declineOffer('personal');
     }
-  }, [state.phase, acceptOffer, declineOffer]);
+  }, [state.phase, overlayActionTick, acceptOffer, declineOffer]);
 
   const markArrived = useCallback(async (): Promise<void> => {
     const current = stateRef.current;
@@ -692,8 +727,7 @@ function useDriverOrderState(): UseDriverOrderReturn {
       const order = await arriveAtPickup(current.order.id);
       setState({ phase: 'arrived', order });
     } catch (err: unknown) {
-      const message = err instanceof Error ? err.message : 'Ошибка';
-      setError(message);
+      setError(describeDriverActionError(err));
     } finally {
       setLoading(false);
     }
@@ -708,8 +742,7 @@ function useDriverOrderState(): UseDriverOrderReturn {
       const order = await startRide(current.order.id);
       setState({ phase: 'in_progress', order });
     } catch (err: unknown) {
-      const message = err instanceof Error ? err.message : 'Ошибка';
-      setError(message);
+      setError(describeDriverActionError(err));
     } finally {
       setLoading(false);
     }
@@ -724,8 +757,7 @@ function useDriverOrderState(): UseDriverOrderReturn {
       const order = await completeOrder(current.order.id);
       setState({ phase: 'completed', order });
     } catch (err: unknown) {
-      const message = err instanceof Error ? err.message : 'Ошибка';
-      setError(message);
+      setError(describeDriverActionError(err));
     } finally {
       setLoading(false);
     }
@@ -742,8 +774,7 @@ function useDriverOrderState(): UseDriverOrderReturn {
       setState({ phase: 'online_idle', order: null });
     } catch (err: unknown) {
       suppressNextCancelAlertRef.current = false;
-      const message = err instanceof Error ? err.message : 'Ошибка отмены';
-      setError(message);
+      setError(describeDriverActionError(err));
     } finally {
       setLoading(false);
     }

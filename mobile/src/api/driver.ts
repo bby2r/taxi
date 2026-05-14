@@ -65,6 +65,15 @@ export async function cancelOrderByDriver(
 export async function getCurrentDriverOrder(): Promise<Order | null> {
   try {
     const { data } = await apiClient.get<{ data: Order }>('/api/v1/driver/orders/active');
+    // Only treat a strictly well-formed response as authoritative. ngrok's
+    // auth wall, Render's cold-start HTML, and partial proxy responses all
+    // surface as 200 OK with a body that doesn't contain `data.data`, and
+    // the active-order poller treats null as "order was cancelled" and
+    // resets the driver's screen. Throw instead so the poller's catch
+    // branch logs and ignores the tick.
+    if (!data || typeof data !== 'object' || !data.data) {
+      throw new Error('malformed active-order response');
+    }
     return data.data;
   } catch (error: unknown) {
     if ((error as { response?: { status?: number } })?.response?.status === 404) {
