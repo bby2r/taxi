@@ -75,13 +75,10 @@ if (Platform.OS !== 'web') {
 
 const VIBRATION_PATTERN = [0, 400, 250, 400, 250, 400];
 
-// Translate axios/native errors into a short Russian message for driver
-// action failures. 401 surfaces when the local Sanctum token no longer
-// matches the backend (server was restarted with a fresh DB, token was
-// revoked from admin, etc.); 503 surfaces when the Render free-tier
-// instance is suspended or cold-starting and ngrok's auth wall returns
-// HTML. The driver shouldn't see a raw "Request failed with status code
-// 503" — they should see a friendly hint about what to do next.
+// 401 here means the Sanctum token is stale (backend was restarted with a
+// fresh DB, or token was revoked); 5xx + ECONNABORTED cover Render cold
+// starts and ngrok HTML auth-walls. Raw axios messages aren't useful to a
+// driver mid-ride, so we map to Russian hints.
 function describeDriverActionError(err: unknown): string {
   const response = (err as { response?: { status?: number } })?.response;
   const status = response?.status;
@@ -221,15 +218,9 @@ function useDriverOrderState(): UseDriverOrderReturn {
     };
   }, []);
 
-  // Subscribe to the system-alert-window overlay button presses. The
-  // overlay is shown after phase has already become 'offer' (and stays
-  // 'offer' until accept/decline resolves), so the consumePendingDriverAction
-  // effect — which only re-runs on phase change — would never pick the
-  // queued action up. Instead we bump a tick counter; an effect tied to
-  // (phase, tick) drains the pending action and dispatches accept/decline
-  // directly. We *also* queue into pendingDriverAction so the legacy
-  // notifee shade-button effect still works if the offer Pusher event
-  // races with the tap.
+  // Overlay buttons fire *after* phase becomes 'offer', so a phase-only
+  // effect would miss them. The tick bumps on every tap to re-run the
+  // pending-action drainer below.
   const [overlayActionTick, setOverlayActionTick] = useState(0);
   useEffect(() => {
     if (!OfferOverlay) return;
@@ -695,19 +686,10 @@ function useDriverOrderState(): UseDriverOrderReturn {
     }
   }, []);
 
-  // If the driver tapped "Принять" or "Отказаться" directly inside the
-  // notification shade or the system-alert-window overlay, the action
-  // button queued a pending decision in the pendingNotificationAction
-  // module. As soon as we have the corresponding offer in state (via
-  // Pusher event or polling fallback), consume the queued action and
-  // fire the matching API call. The offer card never gets a chance to
-  // render — the driver moves straight to the active ride screen
-  // (accept) or back to online_idle (decline).
-  //
-  // overlayActionTick is included in the deps so this effect re-runs
-  // when the user taps a button on the overlay while phase is already
-  // 'offer' (the overlay is mounted *after* phase becomes 'offer', so
-  // depending on phase alone wouldn't catch that path).
+  // Drain a queued accept/decline from the notifee shade button or the
+  // system-alert-window overlay. Phase change covers shade taps that
+  // arrive before the offer Pusher event; overlayActionTick covers
+  // overlay taps that happen after phase is already 'offer'.
   useEffect(() => {
     if (state.phase !== 'offer') return;
     const queued = consumePendingDriverAction(state.order.id);
