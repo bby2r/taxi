@@ -13,7 +13,7 @@
     },
     "ios": {
       "supportsTablet": false,
-      "bundleIdentifier": "kg.aiyltaxi.driver",
+      "bundleIdentifier": "kg.aiyltaxi.app",
       "infoPlist": {
         "NSLocationWhenInUseUsageDescription": "Нужен доступ к геолокации для определения вашего положения и приёма заказов",
         "NSLocationAlwaysAndWhenInUseUsageDescription": "Нужен доступ к геолокации в фоне для отправки координат пассажирам и диспетчеру",
@@ -28,7 +28,7 @@
         "foregroundImage": "./assets/adaptive-icon.png",
         "backgroundColor": "#1F2937"
       },
-      "package": "kg.aiyltaxi.driver",
+      "package": "kg.aiyltaxi.app",
       "googleServicesFile": "./google-services.json",
       "config": {
         "googleMaps": {
