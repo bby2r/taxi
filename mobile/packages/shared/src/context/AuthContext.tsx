@@ -15,7 +15,18 @@ interface AuthContextValue {
 
 const AuthContext = createContext<AuthContextValue | undefined>(undefined);
 
-export function AuthProvider({ children }: { children: React.ReactNode }): React.ReactNode {
+interface AuthProviderProps {
+  children: React.ReactNode;
+  // Each app declares the role it expects. A cached or server-side user
+  // whose role doesn't match (e.g. a leftover client SecureStore token
+  // when launching the driver-only app on a device that previously had
+  // the combined app installed under the same kg.aiyltaxi.app id) is
+  // dropped immediately — otherwise every /api/v1/{role}/* call would
+  // 403 forever and the user would be stuck on a "logged in" home screen.
+  requiredRole?: 'client' | 'driver';
+}
+
+export function AuthProvider({ children, requiredRole }: AuthProviderProps): React.ReactNode {
   const [user, setUser] = useState<User | null>(null);
   const [isLoading, setIsLoading] = useState(true);
 
@@ -45,6 +56,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }): React
         const cachedJson = await getUser();
         if (cachedJson) {
           const cached = JSON.parse(cachedJson) as User;
+          if (requiredRole && cached.role !== requiredRole) {
+            await clearAuth();
+            setIsLoading(false);
+            return;
+          }
           setUser(cached);
         }
       } catch {
@@ -55,6 +71,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }): React
 
       try {
         const me = await getMe();
+        if (requiredRole && me.role !== requiredRole) {
+          await clearAuth();
+          setUser(null);
+          return;
+        }
         await saveUser(me);
         setUser(me);
       } catch (err) {
@@ -69,7 +90,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }): React
         }
       }
     })();
-  }, []);
+  }, [requiredRole]);
 
   useEffect(() => {
     setOnUnauthorized(() => {
@@ -77,11 +98,21 @@ export function AuthProvider({ children }: { children: React.ReactNode }): React
     });
   }, [logoutHandler]);
 
-  const login = useCallback(async (token: string, userData: User) => {
-    await saveToken(token);
-    await saveUser(userData);
-    setUser(userData);
-  }, []);
+  const login = useCallback(
+    async (token: string, userData: User) => {
+      if (requiredRole && userData.role !== requiredRole) {
+        throw new Error(
+          requiredRole === 'driver'
+            ? 'Этот аккаунт не водительский. Используй приложение для пассажиров.'
+            : 'Этот аккаунт водительский. Используй приложение для водителей.',
+        );
+      }
+      await saveToken(token);
+      await saveUser(userData);
+      setUser(userData);
+    },
+    [requiredRole],
+  );
 
   const refreshUser = useCallback(async () => {
     const me = await getMe();

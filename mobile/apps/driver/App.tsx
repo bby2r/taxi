@@ -5,7 +5,7 @@ import RootNavigator from './src/navigation/RootNavigator';
 
 export default function App(): React.ReactNode {
   return (
-    <AuthProvider>
+    <AuthProvider requiredRole="driver">
       <StatusBar style="light" />
       <RootNavigator />
     </AuthProvider>
