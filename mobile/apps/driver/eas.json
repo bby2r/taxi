@@ -1,0 +1,40 @@
+{
+  "cli": {
+    "version": ">= 12.0.0",
+    "appVersionSource": "remote"
+  },
+  "build": {
+    "development": {
+      "developmentClient": true,
+      "distribution": "internal",
+      "android": { "buildType": "apk" },
+      "ios": { "simulator": true },
+      "env": {
+        "EXPO_PUBLIC_API_URL": "https://glottal-brigid-oversensibly.ngrok-free.dev/api",
+        "EXPO_PUBLIC_PUSHER_KEY": "your-dev-pusher-key",
+        "EXPO_PUBLIC_PUSHER_CLUSTER": "ap1"
+      }
+    },
+    "preview": {
+      "distribution": "internal",
+      "android": { "buildType": "apk" },
+      "env": {
+        "EXPO_PUBLIC_API_URL": "https://staging.aiyltaxi.kg/api",
+        "EXPO_PUBLIC_PUSHER_KEY": "your-staging-pusher-key",
+        "EXPO_PUBLIC_PUSHER_CLUSTER": "ap1"
+      },
+      "channel": "preview"
+    },
+    "production": {
+      "distribution": "store",
+      "android": { "buildType": "app-bundle" },
+      "ios": { "autoIncrement": true },
+      "env": {
+        "EXPO_PUBLIC_API_URL": "https://aiyltaxi.kg/api",
+        "EXPO_PUBLIC_PUSHER_KEY": "your-production-pusher-key",
+        "EXPO_PUBLIC_PUSHER_CLUSTER": "ap1"
+      },
+      "channel": "production"
+    }
+  }
+}

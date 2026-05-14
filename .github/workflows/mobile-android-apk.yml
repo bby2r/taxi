@@ -26,15 +26,16 @@ env:
   # Opt into Node.js 24 for JS-based actions ahead of the June 2026 default switch.
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
 
-defaults:
-  run:
-    working-directory: mobile
-
 jobs:
   build-apk:
-    name: Build Android APK
+    name: Build ${{ matrix.app }} APK
     runs-on: ubuntu-latest
     timeout-minutes: 60
+
+    strategy:
+      fail-fast: false
+      matrix:
+        app: [client, driver]
 
     env:
       EXPO_PUBLIC_API_URL: ${{ vars.EXPO_PUBLIC_API_URL || 'https://staging.aiyltaxi.kg/api' }}
@@ -69,15 +70,17 @@ jobs:
           path: |
             ~/.gradle/caches
             ~/.gradle/wrapper
-            mobile/android/.gradle
-          key: ${{ runner.os }}-gradle-${{ hashFiles('mobile/package-lock.json', 'mobile/app.json') }}
+            mobile/apps/${{ matrix.app }}/android/.gradle
+          key: ${{ runner.os }}-gradle-${{ matrix.app }}-${{ hashFiles('mobile/package-lock.json', format('mobile/apps/{0}/app.json', matrix.app)) }}
           restore-keys: |
-            ${{ runner.os }}-gradle-
+            ${{ runner.os }}-gradle-${{ matrix.app }}-
 
-      - name: Install npm dependencies
+      - name: Install npm dependencies (workspace root)
+        working-directory: mobile
         run: npm ci
 
       - name: Write google-services.json from secret
+        working-directory: mobile/apps/${{ matrix.app }}
         env:
           GOOGLE_SERVICES_JSON: ${{ secrets.GOOGLE_SERVICES_JSON }}
         run: |
@@ -89,9 +92,11 @@ jobs:
           echo "google-services.json written ($(wc -c < google-services.json) bytes)"
 
       - name: Expo prebuild (generate native android project)
+        working-directory: mobile/apps/${{ matrix.app }}
         run: npx expo prebuild --platform android --no-install --clean
 
       - name: Raise Gradle JVM memory
+        working-directory: mobile/apps/${{ matrix.app }}
         run: |
           {
             echo ""
@@ -103,10 +108,11 @@ jobs:
           } >> android/gradle.properties
 
       - name: Make gradlew executable
+        working-directory: mobile/apps/${{ matrix.app }}
         run: chmod +x android/gradlew
 
       - name: Build release APK
-        working-directory: mobile/android
+        working-directory: mobile/apps/${{ matrix.app }}/android
         env:
           GRADLE_OPTS: "-Xmx6g -XX:MaxMetaspaceSize=2g"
         run: |
@@ -120,6 +126,7 @@ jobs:
 
       - name: Locate and rename APK
         id: apk
+        working-directory: mobile/apps/${{ matrix.app }}
         run: |
           APK_PATH=$(find android/app/build/outputs/apk/release -name "*.apk" | head -n 1)
           if [ -z "$APK_PATH" ]; then
@@ -128,7 +135,7 @@ jobs:
           fi
           APP_VERSION=$(node -p "require('./app.json').expo.version")
           SHORT_SHA=$(echo "${{ github.sha }}" | cut -c1-7)
-          ARTIFACT_NAME="aiyl-taxi-v${APP_VERSION}-build${{ github.run_number }}-${SHORT_SHA}"
+          ARTIFACT_NAME="aiyl-taxi-${{ matrix.app }}-v${APP_VERSION}-build${{ github.run_number }}-${SHORT_SHA}"
           RENAMED_PATH="android/app/build/outputs/apk/release/${ARTIFACT_NAME}.apk"
           mv "$APK_PATH" "$RENAMED_PATH"
           echo "path=$RENAMED_PATH" >> "$GITHUB_OUTPUT"
@@ -138,6 +145,6 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: ${{ steps.apk.outputs.name }}
-          path: mobile/${{ steps.apk.outputs.path }}
+          path: mobile/apps/${{ matrix.app }}/${{ steps.apk.outputs.path }}
           if-no-files-found: error
           retention-days: 14
