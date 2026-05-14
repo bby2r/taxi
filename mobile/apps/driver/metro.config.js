@@ -11,7 +11,6 @@ config.resolver.nodeModulesPaths = [
   path.resolve(projectRoot, 'node_modules'),
   path.resolve(monorepoRoot, 'node_modules'),
 ];
-config.resolver.disableHierarchicalLookup = true;
 
 const webStubs = {
   'react-native-maps': path.resolve(
