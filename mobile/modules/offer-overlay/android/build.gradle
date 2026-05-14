@@ -8,7 +8,15 @@ def expoModulesCorePlugin = new File(project(":expo-modules-core").projectDir.ab
 apply from: expoModulesCorePlugin
 applyKotlinExpoModulesCorePlugin()
 useCoreDependencies()
-useExpoPublishing()
+// `useDefaultAndroidSdkVersions()` inherits compileSdk / minSdk / targetSdk
+// from the consuming Expo app's gradle properties — required for local
+// (non-published) modules. Previous build was missing this and failed
+// with "project does not specify compileSdk".
+useDefaultAndroidSdkVersions()
+// `useExpoPublishing()` is omitted on purpose — it's only needed when the
+// module is published to npm with Maven artifacts. For an in-app local
+// module it caused "Could not get unknown property 'release' for
+// SoftwareComponent container" during configure.
 
 android {
   namespace 'expo.modules.offeroverlay'
