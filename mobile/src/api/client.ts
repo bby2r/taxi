@@ -34,13 +34,18 @@ export function setOnUnauthorized(callback: () => void): void {
 }
 
 // Endpoints that, on 401, mean "this token is no longer valid; log out".
-// Anything not in this list (push-token registration, balance polling,
-// stale background hits from a previous session) is treated as a transient
-// failure — the caller already gets a rejected promise, but we don't
-// invalidate the whole session over it. Previously a single stray 401
-// from a background helper could log a freshly-authenticated user back
-// out to the login screen.
-const AUTH_VALIDATING_PATHS = ['/api/v1/auth/me'];
+// /auth/me is the canonical session-validity check on app launch, and
+// /auth/push-token registers the FCM token right after login — both
+// require a working Sanctum session and a 401 from either means the
+// stored token has been invalidated (different backend DB, server
+// reset, manual revocation). Other 401s (background polling, stale
+// in-flight requests from a previous session) stay non-fatal so a
+// transient blip doesn't bump a freshly-authenticated user back to
+// the login screen.
+const AUTH_VALIDATING_PATHS = [
+  '/api/v1/auth/me',
+  '/api/v1/auth/push-token',
+];
 
 function isSessionValidationCall(url: string | undefined): boolean {
   if (!url) return false;

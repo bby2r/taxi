@@ -256,7 +256,9 @@ export default function HomeScreen(): React.ReactNode {
             {pushStatus.kind === 'fetch-failed' &&
               'Не удалось получить токен от Expo: ' + pushStatus.error}
             {pushStatus.kind === 'register-failed' &&
-              'Токен получен, но не дошёл до сервера: ' + pushStatus.error}
+              (pushStatus.error.includes('401')
+                ? 'Сессия устарела. Выйдите из аккаунта и зайдите заново — после этого заказы начнут поступать.'
+                : 'Токен получен, но не дошёл до сервера: ' + pushStatus.error)}
           </Text>
           <View style={styles.pushBannerActions}>
             <TouchableOpacity
