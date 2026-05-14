@@ -118,7 +118,7 @@ jobs:
             --no-daemon \
             --stacktrace
 
-      - name: Locate APK
+      - name: Locate and rename APK
         id: apk
         run: |
           APK_PATH=$(find android/app/build/outputs/apk/release -name "*.apk" | head -n 1)
@@ -129,8 +129,10 @@ jobs:
           APP_VERSION=$(node -p "require('./app.json').expo.version")
           SHORT_SHA=$(echo "${{ github.sha }}" | cut -c1-7)
           ARTIFACT_NAME="aiyl-taxi-v${APP_VERSION}-build${{ github.run_number }}-${SHORT_SHA}"
-          echo "path=$APK_PATH" >> "$GITHUB_OUTPUT"
-          echo "name=${ARTIFACT_NAME}.apk" >> "$GITHUB_OUTPUT"
+          RENAMED_PATH="android/app/build/outputs/apk/release/${ARTIFACT_NAME}.apk"
+          mv "$APK_PATH" "$RENAMED_PATH"
+          echo "path=$RENAMED_PATH" >> "$GITHUB_OUTPUT"
+          echo "name=${ARTIFACT_NAME}" >> "$GITHUB_OUTPUT"
 
       - name: Upload APK artifact
         uses: actions/upload-artifact@v4

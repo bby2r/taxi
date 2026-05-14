@@ -1,7 +1,7 @@
 {
   "expo": {
     "name": "AIYL Taxi",
-    "slug": "aiyl-taxi",
+    "slug": "village-taxi",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
