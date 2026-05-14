@@ -233,8 +233,25 @@ function useDriverOrderState(): UseDriverOrderReturn {
     };
   }, []);
 
-  // Check for existing active order on mount
+  // Restore phase on cold start. Active order wins; otherwise a pending
+  // offer wins (server held it for us while we were closed); otherwise
+  // mirror the server-side is_online flag so an "I was online when I
+  // closed the app" driver doesn't silently slip into offline locally,
+  // miss Pusher subscription, and ghost any new offer until they manually
+  // toggle online again.
   useEffect(() => {
+    // If the previous process was killed while an overlay was on screen,
+    // the WindowManager view can survive past the JS bridge dying — the
+    // user then sees a ghost offer card whose Accept/Decline buttons go
+    // nowhere, and Android eventually shows an ANR ("Предложение не
+    // отвечает") on top. Tear down any leftover overlay first; the offer
+    // effect below will re-mount it if there really is a live offer.
+    try {
+      OfferOverlay?.hideOfferOverlay();
+    } catch {
+      // overlay module may not be available on this build
+    }
+
     let cancelled = false;
     (async () => {
       try {
@@ -250,13 +267,30 @@ function useDriverOrderState(): UseDriverOrderReturn {
           } else if (activeOrder.status === 'completed') {
             setState({ phase: 'completed', order: activeOrder });
           }
+          return;
         }
       } catch {
-        // No active order — stay offline
+        // No active order — fall through to offer / online checks.
+      }
+
+      try {
+        const pending = await getPendingOffer();
+        if (cancelled) return;
+        if (pending) {
+          setState({ phase: 'offer', order: pending });
+          return;
+        }
+      } catch {
+        // Network blip — fall through.
+      }
+
+      if (cancelled) return;
+      if (user?.is_online) {
+        setState({ phase: 'online_idle', order: null });
       }
     })();
     return () => { cancelled = true; };
-  }, []);
+  }, [user?.is_online]);
 
   // Pusher events
   const channelName = user && isOnline ? `private-driver.${user.id}` : null;

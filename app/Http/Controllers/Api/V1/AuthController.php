@@ -146,15 +146,24 @@ class AuthController extends Controller
     {
         $user = $request->user();
 
-        return response()->json([
-            'user' => [
-                'id' => $user->id,
-                'name' => $user->name,
-                'phone' => $user->phone,
-                'role' => $user->role,
-                'has_push_token' => ! empty($user->expo_push_token),
-            ],
-        ]);
+        $payload = [
+            'id' => $user->id,
+            'name' => $user->name,
+            'phone' => $user->phone,
+            'role' => $user->role,
+            'has_push_token' => ! empty($user->expo_push_token),
+        ];
+
+        // Surface is_online so the driver app can restore the "online" phase
+        // on cold start — without it the local state defaults to offline,
+        // the Pusher channel never resubscribes, and any offer that arrives
+        // before the user manually toggles online again ghosts in.
+        if ($user->isDriver()) {
+            $user->loadMissing('driverProfile');
+            $payload['is_online'] = (bool) ($user->driverProfile?->is_online ?? false);
+        }
+
+        return response()->json(['user' => $payload]);
     }
 
     /**

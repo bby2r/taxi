@@ -57,6 +57,10 @@ export interface User {
   phone: string;
   role: 'client' | 'driver';
   has_push_token?: boolean;
+  // Driver-only — server returns it from /auth/me when role is driver, so
+  // the driver app can restore its "online" state on cold start instead
+  // of waiting for the user to manually toggle the switch again.
+  is_online?: boolean;
 }
 
 export interface AuthResponse {
