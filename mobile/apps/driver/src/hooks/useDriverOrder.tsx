@@ -233,64 +233,94 @@ function useDriverOrderState(): UseDriverOrderReturn {
     };
   }, []);
 
-  // Restore phase on cold start. Active order wins; otherwise a pending
-  // offer wins (server held it for us while we were closed); otherwise
-  // mirror the server-side is_online flag so an "I was online when I
-  // closed the app" driver doesn't silently slip into offline locally,
-  // miss Pusher subscription, and ghost any new offer until they manually
-  // toggle online again.
+  // Single sync-from-server routine, used on cold start AND every time
+  // the app comes back to the foreground. Pusher gets put to sleep by
+  // Android when the driver app is backgrounded; the server falls back
+  // to FCM and tucks the offer into orders/pending-offer, but on resume
+  // the WS may not have re-delivered it. Without an explicit re-poll
+  // the driver returns to a stale local "offline" or "online_idle"
+  // screen with no offer card visible, even though tapping the push
+  // notification proved an offer is waiting.
+  //
+  // Skip the sync when we're already mid-flow (offer / active / arrived
+  // / in_progress / completed) — local state is the source of truth
+  // there and a poll could race against the user's own action.
+  const syncFromServer = useCallback(async (): Promise<void> => {
+    if (!user) return;
+    const phase = stateRef.current.phase;
+    if (
+      phase === 'offer' ||
+      phase === 'active' ||
+      phase === 'arrived' ||
+      phase === 'in_progress' ||
+      phase === 'completed'
+    ) {
+      return;
+    }
+
+    try {
+      const activeOrder = await getCurrentDriverOrder();
+      if (activeOrder) {
+        if (activeOrder.status === 'accepted') {
+          setState({ phase: 'active', order: activeOrder });
+        } else if (activeOrder.status === 'arrived') {
+          setState({ phase: 'arrived', order: activeOrder });
+        } else if (activeOrder.status === 'in_progress') {
+          setState({ phase: 'in_progress', order: activeOrder });
+        } else if (activeOrder.status === 'completed') {
+          setState({ phase: 'completed', order: activeOrder });
+        }
+        return;
+      }
+    } catch {
+      // fall through
+    }
+
+    try {
+      const pending = await getPendingOffer();
+      if (pending) {
+        setState({ phase: 'offer', order: pending });
+        return;
+      }
+    } catch {
+      // fall through
+    }
+
+    if (user.is_online) {
+      setState((prev) =>
+        prev.phase === 'offline' ? { phase: 'online_idle', order: null } : prev,
+      );
+    }
+  }, [user]);
+
+  // Cold start: clear ghost overlay first (a previously-killed process
+  // can leave its WindowManager view on screen with a dead JS bridge,
+  // producing the Android "Предложение не отвечает" ANR), then run the
+  // shared sync.
   useEffect(() => {
-    // If the previous process was killed while an overlay was on screen,
-    // the WindowManager view can survive past the JS bridge dying — the
-    // user then sees a ghost offer card whose Accept/Decline buttons go
-    // nowhere, and Android eventually shows an ANR ("Предложение не
-    // отвечает") on top. Tear down any leftover overlay first; the offer
-    // effect below will re-mount it if there really is a live offer.
     try {
       OfferOverlay?.hideOfferOverlay();
     } catch {
-      // overlay module may not be available on this build
+      // overlay module may not be available
     }
+    void syncFromServer();
+  }, [syncFromServer]);
 
-    let cancelled = false;
-    (async () => {
-      try {
-        const activeOrder = await getCurrentDriverOrder();
-        if (cancelled) return;
-        if (activeOrder) {
-          if (activeOrder.status === 'accepted') {
-            setState({ phase: 'active', order: activeOrder });
-          } else if (activeOrder.status === 'arrived') {
-            setState({ phase: 'arrived', order: activeOrder });
-          } else if (activeOrder.status === 'in_progress') {
-            setState({ phase: 'in_progress', order: activeOrder });
-          } else if (activeOrder.status === 'completed') {
-            setState({ phase: 'completed', order: activeOrder });
-          }
-          return;
-        }
-      } catch {
-        // No active order — fall through to offer / online checks.
+  // Resume: every time the app comes back to the foreground, re-poll.
+  // This is the case the user hits by minimising while online, getting
+  // an FCM offer push, and tapping the notification — without this the
+  // local state stays where it was when Pusher got suspended and the
+  // bottom-sheet OrderOfferCard never appears.
+  useEffect(() => {
+    const sub = RNAppState.addEventListener('change', (next) => {
+      if (next === 'active') {
+        void syncFromServer();
       }
-
-      try {
-        const pending = await getPendingOffer();
-        if (cancelled) return;
-        if (pending) {
-          setState({ phase: 'offer', order: pending });
-          return;
-        }
-      } catch {
-        // Network blip — fall through.
-      }
-
-      if (cancelled) return;
-      if (user?.is_online) {
-        setState({ phase: 'online_idle', order: null });
-      }
-    })();
-    return () => { cancelled = true; };
-  }, [user?.is_online]);
+    });
+    return () => {
+      sub.remove();
+    };
+  }, [syncFromServer]);
 
   // Pusher events
   const channelName = user && isOnline ? `private-driver.${user.id}` : null;
