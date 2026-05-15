@@ -293,6 +293,24 @@ function useDriverOrderState(): UseDriverOrderReturn {
     }
   }, [user]);
 
+  // Instant visual bump: useState defaults to phase='offline', so on a
+  // cold start with an online driver the UI flashes the yellow OFF
+  // button for the ~300-500ms it takes /orders/active and
+  // /orders/pending-offer to round-trip. The driver also reads it as
+  // "I'm not on shift" and assumes new offers won't come — and Pusher
+  // doesn't subscribe to private-driver.{id} until isOnline flips true,
+  // which means an offer arriving in that window really does ghost.
+  // Bump optimistically the moment we learn user.is_online from /me;
+  // syncFromServer will override to 'offer' / 'active' / etc. if those
+  // API calls return something more specific.
+  useEffect(() => {
+    if (user?.is_online) {
+      setState((prev) =>
+        prev.phase === 'offline' ? { phase: 'online_idle', order: null } : prev,
+      );
+    }
+  }, [user?.is_online]);
+
   // Cold start: clear ghost overlay first (a previously-killed process
   // can leave its WindowManager view on screen with a dead JS bridge,
   // producing the Android "Предложение не отвечает" ANR), then run the
