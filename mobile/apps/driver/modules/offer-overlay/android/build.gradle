@@ -28,4 +28,12 @@ android {
 
 dependencies {
   implementation project(':expo-modules-core')
+
+  // Bundles its own FirebaseMessagingService (OfferFirebaseMessagingService)
+  // so offer pushes can wake native code and surface the overlay /
+  // full-screen-intent ringing notification when JS is dead.
+  // Version pinned to the BoM expo-notifications uses on SDK 54 to avoid
+  // duplicate-class conflicts during Gradle merge.
+  implementation 'com.google.firebase:firebase-messaging:23.4.1'
+  implementation 'androidx.core:core-ktx:1.13.1'
 }

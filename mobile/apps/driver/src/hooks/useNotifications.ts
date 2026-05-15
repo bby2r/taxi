@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Alert, AppState, Platform } from 'react-native';
+import { Alert, AppState, Linking, Platform } from 'react-native';
 import { registerPushToken, useAuth, navigationRef } from '@taxi/shared';
 import { setPendingDriverAction } from '../utils/pendingNotificationAction';
 
@@ -295,9 +295,44 @@ export function useNotifications(): void {
         // ignore
       });
 
+    // OfferFirebaseMessagingService (the native FCM listener that owns
+    // offer pushes) opens the app via aiyltaxidriver://offer?action=...
+    // &order_id=... — both notification action buttons and overlay button
+    // taps route through that scheme. Parse here so the existing
+    // pendingDriverAction queue stays the single source of truth.
+    const handleDeepLink = (url: string | null): void => {
+      if (!url || !url.startsWith('aiyltaxidriver://offer')) return;
+      try {
+        const parsed = new URL(url);
+        const action = parsed.searchParams.get('action');
+        const orderIdRaw = parsed.searchParams.get('order_id');
+        const orderId = orderIdRaw ? parseInt(orderIdRaw, 10) : NaN;
+        if (
+          Number.isFinite(orderId) &&
+          (action === 'accept' || action === 'decline')
+        ) {
+          setPendingDriverAction({ orderId, kind: action });
+        }
+        if (navigationRef.isReady()) {
+          try {
+            navigationRef.navigate('DriverApp' as never);
+          } catch {
+            // navigation may not be mounted yet — useDriverOrder polls
+            // pendingDriverAction on mount anyway
+          }
+        }
+      } catch {
+        // malformed URL — ignore
+      }
+    };
+
+    const linkingSub = Linking.addEventListener('url', ({ url }) => handleDeepLink(url));
+    void Linking.getInitialURL().then(handleDeepLink).catch(() => undefined);
+
     return () => {
       responseSub?.remove();
       appStateSub?.remove();
+      linkingSub.remove();
     };
   }, [isAuthenticated, user?.role, refreshUser]);
 }

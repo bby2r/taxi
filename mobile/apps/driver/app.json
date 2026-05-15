@@ -3,6 +3,7 @@
     "name": "AIYL Taxi Driver",
     "slug": "aiyl-taxi-driver",
     "version": "1.0.0",
+    "scheme": "aiyltaxidriver",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "dark",
