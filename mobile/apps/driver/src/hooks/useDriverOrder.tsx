@@ -148,6 +148,15 @@ export type DriverOrderState =
   | InProgressState
   | CompletedState;
 
+type ActiveOrderPhase = 'active' | 'arrived' | 'in_progress' | 'completed';
+
+const ACTIVE_STATUS_TO_PHASE: Partial<Record<Order['status'], ActiveOrderPhase>> = {
+  accepted: 'active',
+  arrived: 'arrived',
+  in_progress: 'in_progress',
+  completed: 'completed',
+};
+
 interface UseDriverOrderReturn {
   state: DriverOrderState;
   isOnline: boolean;
@@ -261,14 +270,9 @@ function useDriverOrderState(): UseDriverOrderReturn {
     try {
       const activeOrder = await getCurrentDriverOrder();
       if (activeOrder) {
-        if (activeOrder.status === 'accepted') {
-          setState({ phase: 'active', order: activeOrder });
-        } else if (activeOrder.status === 'arrived') {
-          setState({ phase: 'arrived', order: activeOrder });
-        } else if (activeOrder.status === 'in_progress') {
-          setState({ phase: 'in_progress', order: activeOrder });
-        } else if (activeOrder.status === 'completed') {
-          setState({ phase: 'completed', order: activeOrder });
+        const phase = ACTIVE_STATUS_TO_PHASE[activeOrder.status];
+        if (phase) {
+          setState({ phase, order: activeOrder } as DriverOrderState);
         }
         return;
       }
@@ -280,18 +284,13 @@ function useDriverOrderState(): UseDriverOrderReturn {
       const pending = await getPendingOffer();
       if (pending) {
         setState({ phase: 'offer', order: pending });
-        return;
       }
     } catch {
-      // fall through
+      // fall through — the offline → online_idle bump effect handles
+      // the no-pending-offer case based purely on user.is_online, so
+      // there's nothing to do here.
     }
-
-    if (user.is_online) {
-      setState((prev) =>
-        prev.phase === 'offline' ? { phase: 'online_idle', order: null } : prev,
-      );
-    }
-  }, [user]);
+  }, [user?.id, user?.is_online]);
 
   // Instant visual bump: useState defaults to phase='offline', so on a
   // cold start with an online driver the UI flashes the yellow OFF

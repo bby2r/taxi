@@ -53,6 +53,15 @@ interface OfferData {
   expires_in?: number | string;
 }
 
+function toNumber(value: number | string | undefined, fallback: number): number {
+  if (typeof value === 'number') return Number.isFinite(value) ? value : fallback;
+  if (typeof value === 'string') {
+    const parsed = parseInt(value, 10);
+    return Number.isFinite(parsed) ? parsed : fallback;
+  }
+  return fallback;
+}
+
 let registered = false;
 
 export function registerBackgroundOfferTask(): void {
@@ -71,18 +80,8 @@ export function registerBackgroundOfferTask(): void {
 
     if (payload?.type !== 'new_order') return;
 
-    const orderIdRaw = payload.order_id;
-    const orderId =
-      typeof orderIdRaw === 'string' ? parseInt(orderIdRaw, 10) : orderIdRaw;
-    if (typeof orderId !== 'number' || !Number.isFinite(orderId)) return;
-
-    const priceRaw = payload.price;
-    const price =
-      typeof priceRaw === 'string' ? parseInt(priceRaw, 10) : (priceRaw ?? 0);
-
-    const expiresRaw = payload.expires_in;
-    const expires =
-      typeof expiresRaw === 'string' ? parseInt(expiresRaw, 10) : expiresRaw;
+    const orderId = toNumber(payload.order_id, NaN);
+    if (!Number.isFinite(orderId)) return;
 
     const address =
       typeof payload.pickup_address === 'string' && payload.pickup_address.trim().length > 0
@@ -93,12 +92,14 @@ export function registerBackgroundOfferTask(): void {
     if (!OfferOverlay.isOfferOverlayAvailable()) return;
     if (!OfferOverlay.hasOverlayPermission()) return;
 
+    const expires = toNumber(payload.expires_in, 0);
+
     try {
       OfferOverlay.showOfferOverlay({
         orderId,
         address,
-        price: typeof price === 'number' ? price : 0,
-        durationSeconds: typeof expires === 'number' && expires > 0 ? expires : 20,
+        price: toNumber(payload.price, 0),
+        durationSeconds: expires > 0 ? expires : 20,
       });
     } catch {
       // overlay throw is non-fatal — the system tray notification still

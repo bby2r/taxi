@@ -160,7 +160,7 @@ class AuthController extends Controller
         // before the user manually toggles online again ghosts in.
         if ($user->isDriver()) {
             $user->loadMissing('driverProfile');
-            $payload['is_online'] = (bool) ($user->driverProfile?->is_online ?? false);
+            $payload['is_online'] = $user->driverProfile?->is_online ?? false;
         }
 
         return response()->json(['user' => $payload]);
