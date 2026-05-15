@@ -1,9 +1,8 @@
-import { requireNativeModule, EventEmitter } from 'expo-modules-core';
+import { requireNativeModule } from 'expo-modules-core';
 import { Platform } from 'react-native';
 
 // Loaded lazily — on iOS and on builds made before this local module
-// landed, the require throws and the helpers degrade to no-ops. The
-// notifee fullScreenAction path remains the foreground fallback.
+// landed, the require throws and the helpers degrade to no-ops.
 let NativeModule: {
   hasOverlayPermission: () => boolean;
   openOverlaySettings: () => void;
@@ -23,23 +22,6 @@ if (Platform.OS === 'android') {
     NativeModule = null;
   }
 }
-
-export type OfferOverlayAction =
-  | 'accept'
-  | 'decline'
-  | 'timeout'
-  | 'permission_missing'
-  | 'show_failed';
-
-export interface OfferOverlayEvent {
-  action: OfferOverlayAction;
-  orderId: number;
-  error?: string;
-}
-
-const emitter = NativeModule
-  ? new EventEmitter(NativeModule as unknown as Parameters<typeof EventEmitter>[0])
-  : null;
 
 export function isOfferOverlayAvailable(): boolean {
   return NativeModule !== null;
@@ -70,16 +52,4 @@ export function showOfferOverlay(params: {
 
 export function hideOfferOverlay(): void {
   NativeModule?.hideOffer();
-}
-
-export function addOfferOverlayListener(
-  callback: (event: OfferOverlayEvent) => void,
-): { remove: () => void } {
-  if (!emitter) {
-    return { remove: () => undefined };
-  }
-  const sub = emitter.addListener<OfferOverlayEvent>('onOfferAction', callback);
-  return {
-    remove: () => sub.remove(),
-  };
 }

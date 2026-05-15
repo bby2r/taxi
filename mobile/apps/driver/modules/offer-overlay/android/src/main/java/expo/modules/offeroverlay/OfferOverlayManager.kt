@@ -21,39 +21,20 @@ import android.widget.TextView
  * Context-agnostic overlay singleton. Owns the WindowManager view used by
  * the Yandex-style bottom-sheet offer card. Both call sites use it:
  *
- *   - OfferOverlayModule: invoked from JS via the Expo module bridge while
- *     the app is alive in the foreground / background.
+ *   - OfferOverlayModule: invoked from JS via the Expo module bridge.
+ *   - OfferFirebaseMessagingService: invoked natively from the FCM
+ *     service when an offer push arrives while JS is dead.
  *
- *   - OfferFirebaseMessagingService: invoked natively from the FCM service
- *     when an offer push arrives while JS is dead — the overlay must
- *     surface without waking the React tree first.
- *
- * Use the application context — the overlay is a system-alert window, it
- * doesn't need an activity, and the application context survives even if
- * the originating process state is partial.
+ * Button presses (accept / decline / timeout) always launch the app via
+ * the aiyltaxidriver://offer deep link. The JS Linking handler picks
+ * that up and feeds the existing pendingDriverAction queue, so both
+ * notification action buttons and overlay buttons share one path into
+ * the in-app accept / decline flow.
  */
 object OfferOverlayManager {
     private var overlayView: View? = null
     private var windowManager: WindowManager? = null
     private var countdown: CountDownTimer? = null
-
-    /**
-     * Listener invoked when an overlay button is pressed or the timer
-     * expires. The JS module sets this so it can fan the action out into
-     * the React event emitter; the FCM service sets it so it can launch
-     * MainActivity with extras (queues the action via the existing
-     * pendingNotificationAction mechanism).
-     */
-    fun interface OfferActionListener {
-        fun onAction(action: String, orderId: Int)
-    }
-
-    @Volatile
-    private var listener: OfferActionListener? = null
-
-    fun setListener(listener: OfferActionListener?) {
-        this.listener = listener
-    }
 
     fun hasPermission(context: Context): Boolean {
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.M) {
@@ -93,7 +74,6 @@ object OfferOverlayManager {
 
     private fun showOverlayOnMain(context: Context, orderId: Int, address: String, price: Int, durationSeconds: Int) {
         if (!hasPermission(context)) {
-            listener?.onAction("permission_missing", orderId)
             return
         }
 
@@ -160,7 +140,6 @@ object OfferOverlayManager {
             overlayView = view
             windowManager = wm
         } catch (e: Exception) {
-            listener?.onAction("show_failed", orderId)
             return
         }
 
@@ -178,16 +157,10 @@ object OfferOverlayManager {
     }
 
     private fun dispatchAction(context: Context, action: String, orderId: Int) {
-        val target = listener
-        if (target != null) {
-            target.onAction(action, orderId)
-        } else {
-            // Cold-start path: no JS / module listener attached because the
-            // overlay was raised by the FCM service while the app was dead.
-            // Launch MainActivity with extras so the existing pending-action
-            // queue picks the choice up the moment React mounts.
-            launchAppWithAction(context, action, orderId)
-        }
+        // Always launch the app via the deep link — both notification action
+        // buttons and overlay buttons share one path so JS only has to
+        // handle Linking events, not a separate native listener bridge.
+        launchAppWithAction(context, action, orderId)
         removeOverlayOnMain()
     }
 

@@ -225,23 +225,6 @@ function useDriverOrderState(): UseDriverOrderReturn {
     };
   }, []);
 
-  // Overlay buttons fire *after* phase becomes 'offer', so a phase-only
-  // effect would miss them. The tick bumps on every tap to re-run the
-  // pending-action drainer below.
-  const [overlayActionTick, setOverlayActionTick] = useState(0);
-  useEffect(() => {
-    if (!OfferOverlay) return;
-    const sub = OfferOverlay.addOfferOverlayListener((event) => {
-      if (event.orderId < 0) return;
-      if (event.action !== 'accept' && event.action !== 'decline') return;
-      setPendingDriverAction({ orderId: event.orderId, kind: event.action });
-      setOverlayActionTick((t) => t + 1);
-    });
-    return () => {
-      sub.remove();
-    };
-  }, []);
-
   // Single sync-from-server routine, used on cold start AND every time
   // the app comes back to the foreground. Pusher gets put to sleep by
   // Android when the driver app is backgrounded; the server falls back
@@ -765,19 +748,32 @@ function useDriverOrderState(): UseDriverOrderReturn {
     }
   }, []);
 
-  // Drain a queued accept/decline from the notifee shade button or the
-  // system-alert-window overlay. Phase change covers shade taps that
-  // arrive before the offer Pusher event; overlayActionTick covers
-  // overlay taps that happen after phase is already 'offer'.
+  // Drain a queued accept/decline from the notification action buttons
+  // or the system-alert-window overlay. Both surfaces dispatch through
+  // the aiyltaxidriver://offer deep link → useNotifications.handleDeepLink
+  // → setPendingDriverAction. The drainer fires on phase change (shade
+  // tap arrived before the Pusher offer event) AND on every AppState
+  // 'active' transition (overlay tap that brought the app back to the
+  // foreground after the offer was already mid-flight locally).
   useEffect(() => {
-    if (state.phase !== 'offer') return;
-    const queued = consumePendingDriverAction(state.order.id);
-    if (queued === 'accept') {
-      void acceptOffer();
-    } else if (queued === 'decline') {
-      void declineOffer('personal');
-    }
-  }, [state.phase, overlayActionTick, acceptOffer, declineOffer]);
+    const drain = (): void => {
+      const cur = stateRef.current;
+      if (cur.phase !== 'offer') return;
+      const queued = consumePendingDriverAction(cur.order.id);
+      if (queued === 'accept') {
+        void acceptOffer();
+      } else if (queued === 'decline') {
+        void declineOffer('personal');
+      }
+    };
+    drain();
+    const sub = RNAppState.addEventListener('change', (next) => {
+      if (next === 'active') drain();
+    });
+    return () => {
+      sub.remove();
+    };
+  }, [state.phase, acceptOffer, declineOffer]);
 
   const markArrived = useCallback(async (): Promise<void> => {
     const current = stateRef.current;
