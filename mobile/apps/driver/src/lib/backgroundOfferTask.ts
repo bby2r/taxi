@@ -1,29 +1,31 @@
 import { Platform } from 'react-native';
 
-// Background notification handler — this is the missing piece that makes
-// the Yandex-style overlay actually fire when an offer arrives while
-// the app is minimised or killed. Without it, only the system tray push
-// shows up and the driver has to open the app, navigate to the home
-// screen, and *then* see the offer card.
+// Background notification handler. Two surfaces fire here when an FCM
+// offer push lands and the app is minimised or killed:
 //
-// Flow on incoming FCM:
-//   1. Expo push API delivers to the device.
-//   2. expo-notifications routes the data payload to the task below.
-//   3. Task checks data.type === 'new_order'.
-//   4. If overlay permission is granted, calls OfferOverlay native module
-//      to draw the bottom sheet over whatever app the driver is using.
+//   1. Notifee full-screen-intent notification — Yandex Pro / Bolt
+//      Driver "incoming call" UX. Shows a ringing-style screen even on
+//      the lock screen with Принять / Отказаться buttons. This is the
+//      reliable path: works on every Android version we ship to and
+//      doesn't depend on the SYSTEM_ALERT_WINDOW grant.
 //
-// The foreground service from foregroundService.ts keeps the JS process
-// alive between offers, so the WindowManager view we add here survives
-// past the brief task lifetime.
+//   2. SYSTEM_ALERT_WINDOW bottom-sheet via OfferOverlay — only if the
+//      driver granted "Display over other apps" AND the OS keeps our
+//      process alive enough for the WindowManager view to outlive the
+//      task. Best-effort, layered on top of Notifee.
+//
+// Without this task, only the system tray notification shows because
+// JS isn't running to call either surface.
 
 type ExpoNotifications = typeof import('expo-notifications');
 type ExpoTaskManager = typeof import('expo-task-manager');
 type OfferOverlayModule = typeof import('../../modules/offer-overlay/src');
+type NotifeeLib = typeof import('./notifee');
 
 let Notifications: ExpoNotifications | null = null;
 let TaskManager: ExpoTaskManager | null = null;
 let OfferOverlay: OfferOverlayModule | null = null;
+let Notifee: NotifeeLib | null = null;
 
 if (Platform.OS === 'android') {
   try {
@@ -40,6 +42,11 @@ if (Platform.OS === 'android') {
     OfferOverlay = require('../../modules/offer-overlay/src');
   } catch {
     OfferOverlay = null;
+  }
+  try {
+    Notifee = require('./notifee');
+  } catch {
+    Notifee = null;
   }
 }
 
@@ -66,7 +73,9 @@ let registered = false;
 
 export function registerBackgroundOfferTask(): void {
   if (registered) return;
-  if (!Notifications || !TaskManager || !OfferOverlay) return;
+  // Notifee is the must-have surface; OfferOverlay is the bonus. We keep
+  // running even if OfferOverlay isn't bundled.
+  if (!Notifications || !TaskManager) return;
   registered = true;
 
   TaskManager.defineTask(BACKGROUND_OFFER_TASK, async ({ data, error }) => {
@@ -83,27 +92,45 @@ export function registerBackgroundOfferTask(): void {
     const orderId = toNumber(payload.order_id, NaN);
     if (!Number.isFinite(orderId)) return;
 
+    const price = toNumber(payload.price, 0);
+    const expires = toNumber(payload.expires_in, 0);
+    const durationSeconds = expires > 0 ? expires : 20;
+
     const address =
       typeof payload.pickup_address === 'string' && payload.pickup_address.trim().length > 0
         ? payload.pickup_address
         : 'Геолокация клиента';
 
-    if (!OfferOverlay) return;
-    if (!OfferOverlay.isOfferOverlayAvailable()) return;
-    if (!OfferOverlay.hasOverlayPermission()) return;
+    const body = address ? `Подача: ${address} · ${price} сом` : `Новый заказ · ${price} сом`;
 
-    const expires = toNumber(payload.expires_in, 0);
+    // Notifee full-screen intent — Yandex Pro style ringing card, fires
+    // reliably even when OfferOverlay can't (no permission, OS killed
+    // the foreground service, etc.).
+    if (Notifee) {
+      try {
+        await Notifee.ensureNotifeeChannel();
+        await Notifee.displayOfferNotification({
+          orderId,
+          title: 'Новый заказ',
+          body,
+          expiresInSeconds: durationSeconds,
+        });
+      } catch {
+        // best effort — system tray still has the original push
+      }
+    }
 
-    try {
-      OfferOverlay.showOfferOverlay({
-        orderId,
-        address,
-        price: toNumber(payload.price, 0),
-        durationSeconds: expires > 0 ? expires : 20,
-      });
-    } catch {
-      // overlay throw is non-fatal — the system tray notification still
-      // shows so the driver isn't completely blind to the offer
+    // SYSTEM_ALERT_WINDOW overlay — best effort on top of Notifee.
+    if (
+      OfferOverlay &&
+      OfferOverlay.isOfferOverlayAvailable() &&
+      OfferOverlay.hasOverlayPermission()
+    ) {
+      try {
+        OfferOverlay.showOfferOverlay({ orderId, address, price, durationSeconds });
+      } catch {
+        // ignore — Notifee already covers the user-visible path
+      }
     }
   });
 
