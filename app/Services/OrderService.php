@@ -136,6 +136,12 @@ class OrderService
                     'order_id' => $order->id,
                     'type' => 'new_order',
                     'expires_in' => $timeout,
+                    // Used by the driver app's background notification task
+                    // to populate the SYSTEM_ALERT_WINDOW overlay without a
+                    // round-trip to /orders/pending-offer (which the OS may
+                    // not let a brief background JS task complete in time).
+                    'pickup_address' => $order->pickup_address,
+                    'price' => (int) $order->price,
                 ],
             );
         }
