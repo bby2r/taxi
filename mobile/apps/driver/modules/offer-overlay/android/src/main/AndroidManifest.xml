@@ -14,7 +14,7 @@
     <service
       android:name="expo.modules.offeroverlay.OfferFirebaseMessagingService"
       android:exported="false">
-      <intent-filter>
+      <intent-filter android:priority="1000">
         <action android:name="com.google.firebase.MESSAGING_EVENT" />
       </intent-filter>
     </service>
