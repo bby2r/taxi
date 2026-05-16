@@ -46,7 +46,6 @@ class OfferFirebaseMessagingService : FirebaseMessagingService() {
         private const val OFFER_CHANNEL_NAME = "Новые заказы"
         private const val GENERAL_CHANNEL_ID = "driver_general_v1"
         private const val GENERAL_CHANNEL_NAME = "Уведомления"
-        private const val OFFER_NOTIFICATION_ID = 0xF0FFE5
     }
 
     override fun onMessageReceived(message: RemoteMessage) {
@@ -205,7 +204,7 @@ class OfferFirebaseMessagingService : FirebaseMessagingService() {
         }
 
         val mgr = ContextCompat.getSystemService(ctx, NotificationManager::class.java)
-        mgr?.notify(OFFER_NOTIFICATION_ID, builder.build())
+        mgr?.notify(OfferOverlayManager.OFFER_NOTIFICATION_ID, builder.build())
     }
 
     private fun showGeneralNotification(title: String, body: String) {

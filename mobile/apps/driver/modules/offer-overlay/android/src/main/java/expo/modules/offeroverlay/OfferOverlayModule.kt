@@ -45,5 +45,9 @@ class OfferOverlayModule : Module() {
         Function("hideOffer") {
             OfferOverlayManager.hideOverlay()
         }
+
+        Function("dismissOffer") {
+            appContext.reactContext?.let { OfferOverlayManager.dismissOffer(it) }
+        }
     }
 }

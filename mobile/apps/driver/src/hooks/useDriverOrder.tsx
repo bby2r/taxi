@@ -25,13 +25,7 @@ import {
   consumePendingDriverAction,
   setPendingDriverAction,
 } from '../utils/pendingNotificationAction';
-import {
-  displayOfferNotification,
-  dismissOfferNotification,
-  ensureNotifeeChannel,
-  isNotifeeAvailable,
-  subscribeForegroundEvents,
-} from '../lib/notifee';
+import { subscribeForegroundEvents } from '../lib/notifee';
 import {
   raiseVolumeForOffer,
   restoreVolumeAfterOffer,
@@ -375,70 +369,17 @@ function useDriverOrderState(): UseDriverOrderReturn {
     enabled: isOnline,
   });
 
-  // When an offer enters state, fire the Yandex-style notifee notification:
-  // full-screen on lock screen, looping ringtone via the alarm stream,
-  // Принять / Отказаться buttons. Notifee handles the alarm bypass,
-  // looping sound, and timeout. We dismiss it the moment the offer leaves
-  // state so the loop stops immediately on accept / decline / cancel.
-  //
-  // If notifee isn't bundled (older APK), we fall back to the previous
-  // expo-notifications local schedule so the driver still gets *something*.
+  // OfferFirebaseMessagingService owns the visible notification surface
+  // for offer pushes — it builds the Yandex-style ringing card with
+  // full-screen intent + actions natively, on every FCM dispatch (alive,
+  // background, or killed). The only JS-side responsibility is to cancel
+  // that notification the moment the offer leaves state so it doesn't
+  // linger until its server-side 20-second timeoutAfter expires.
   useEffect(() => {
-    if (state.phase !== 'offer') return;
+    if (state.phase === 'offer') return;
     if (Platform.OS === 'web') return;
-
-    const orderId = state.order.id;
-    const body = state.order.pickup_address
-      ? `Подача: ${state.order.pickup_address} · ${state.order.price} сом`
-      : `Новый заказ · ${state.order.price} сом`;
-
-    // Clear any leftover entries before showing the fresh one.
+    OfferOverlay?.dismissOffer();
     LocalNotifications?.dismissAllNotificationsAsync().catch(() => {});
-
-    let notifeeId: string | null = null;
-
-    if (isNotifeeAvailable()) {
-      // Notifee path — full Yandex Pro UX.
-      (async () => {
-        await ensureNotifeeChannel();
-        notifeeId = await displayOfferNotification({
-          orderId,
-          title: 'Новый заказ',
-          body,
-          expiresInSeconds: 30,
-        });
-      })();
-    } else if (LocalNotifications) {
-      // Fallback path for APKs built before notifee landed.
-      LocalNotifications.scheduleNotificationAsync({
-        content: {
-          title: 'Новый заказ',
-          body,
-          data: { type: 'new_order_silent', order_id: orderId },
-        } as Parameters<typeof LocalNotifications.scheduleNotificationAsync>[0]['content'],
-        trigger:
-          Platform.OS === 'android'
-            ? ({ channelId: 'driver_offers_v3' } as unknown as Parameters<
-                typeof LocalNotifications.scheduleNotificationAsync
-              >[0]['trigger'])
-            : null,
-      })
-        .then((id) => {
-          notifeeId = id; // reused var, expo-notifications also returns string id
-        })
-        .catch(() => {
-          // vibration + in-app audio loop still alert
-        });
-    }
-
-    return () => {
-      if (isNotifeeAvailable()) {
-        dismissOfferNotification(notifeeId).catch(() => {});
-      } else if (notifeeId && LocalNotifications) {
-        LocalNotifications.cancelScheduledNotificationAsync(notifeeId).catch(() => {});
-      }
-      LocalNotifications?.dismissAllNotificationsAsync().catch(() => {});
-    };
   }, [state.phase]);
 
   // Loop the vibration the entire time an offer is on screen — stops the

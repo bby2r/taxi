@@ -1,5 +1,6 @@
 package expo.modules.offeroverlay
 
+import android.app.NotificationManager
 import android.app.PendingIntent
 import android.content.Context
 import android.content.Intent
@@ -32,6 +33,13 @@ import android.widget.TextView
  * the in-app accept / decline flow.
  */
 object OfferOverlayManager {
+    // Notification ID the FCM service uses for offer pushes. Exposed so
+    // dismissOffer(context) can cancel the ringing notification from JS
+    // the moment the driver accepts / declines and the in-app flow takes
+    // over — otherwise the full-screen-intent notification lingers until
+    // its timeoutAfter expires.
+    const val OFFER_NOTIFICATION_ID = 0xF0FFE5
+
     private var overlayView: View? = null
     private var windowManager: WindowManager? = null
     private var countdown: CountDownTimer? = null
@@ -69,6 +77,23 @@ object OfferOverlayManager {
     fun hideOverlay() {
         Handler(Looper.getMainLooper()).post {
             removeOverlayOnMain()
+        }
+    }
+
+    /**
+     * Tear down both surfaces of an offer: the WindowManager bottom-sheet
+     * AND the FCM-service-posted ringing notification. Called by JS when
+     * the driver accepts / declines and the in-app flow has taken over —
+     * without this the notification would linger until its 20-second
+     * timeoutAfter expires.
+     */
+    fun dismissOffer(context: Context) {
+        hideOverlay()
+        try {
+            val mgr = context.getSystemService(Context.NOTIFICATION_SERVICE) as? NotificationManager
+            mgr?.cancel(OFFER_NOTIFICATION_ID)
+        } catch (_: Exception) {
+            // best effort — notification will self-dismiss on timeoutAfter
         }
     }
 

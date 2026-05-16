@@ -13,6 +13,7 @@ let NativeModule: {
     durationSeconds: number;
   }) => void;
   hideOffer: () => void;
+  dismissOffer: () => void;
 } | null = null;
 
 if (Platform.OS === 'android') {
@@ -52,4 +53,14 @@ export function showOfferOverlay(params: {
 
 export function hideOfferOverlay(): void {
   NativeModule?.hideOffer();
+}
+
+/**
+ * Hide the overlay AND cancel the FCM service-posted ringing notification
+ * — call from JS the moment the driver accepts / declines / the offer
+ * leaves state so the lock-screen notification doesn't linger until its
+ * 20-second timeoutAfter expires.
+ */
+export function dismissOffer(): void {
+  NativeModule?.dismissOffer();
 }
