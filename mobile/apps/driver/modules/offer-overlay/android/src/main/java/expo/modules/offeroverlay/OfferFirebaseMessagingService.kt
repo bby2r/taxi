@@ -2,10 +2,6 @@ package expo.modules.offeroverlay
 
 import android.app.NotificationChannel
 import android.app.NotificationManager
-import android.content.Context
-import android.media.AudioAttributes
-import android.media.RingtoneManager
-import android.net.Uri
 import android.os.Build
 import androidx.core.app.NotificationCompat
 import androidx.core.content.ContextCompat
@@ -14,36 +10,26 @@ import com.google.firebase.messaging.RemoteMessage
 import org.json.JSONObject
 
 /**
- * Native FCM listener. Replaces the JS expo-notifications path for offer
- * pushes so the bottom-sheet overlay + ringing notification fire even
- * when JS is dead — the previous BackgroundNotificationTask attempt was
- * unreliable on killed-app Android because Firebase only invokes a JS
- * background task for data-only messages, and even then the dispatch
- * gets dropped on aggressive OEMs.
+ * Native FCM listener. Owns the MESSAGING_EVENT intent — expo-notifications'
+ * own service is removed from the merged manifest, so this is the sole
+ * receiver of incoming pushes. expo-notifications token retrieval still
+ * works because JS calls Firebase APIs directly.
  *
  * For offer pushes (data.type == 'new_order'):
- *   - Show a high-priority notification with full-screen intent +
- *     Принять / Отказаться actions on channel "driver_offers_v3" (matches
- *     the ID the server sends so the user's existing channel settings
- *     apply).
- *   - Call OfferOverlayManager.showOverlay so the SYSTEM_ALERT_WINDOW
- *     bottom sheet rises on top of whatever app the driver is using
- *     (best effort — needs the "Display over other apps" grant).
+ *   - Calls OfferOverlayManager.showOverlay so the SYSTEM_ALERT_WINDOW
+ *     bottom-sheet rises on top of whatever app the driver is using.
+ *   - No tray notification by product decision — drivers were dismissing
+ *     offers from the shade without realising it counted as a decline.
+ *     Trade-off: without the "Display over other apps" grant, the offer
+ *     is invisible.
  *
- * For other push types (trip completed, cancelled, admin broadcast, etc.):
- *   - Show a regular notification with the title/body the server sent so
- *     the driver still sees them — replaces the OS-handled tray entry
- *     that was lost when this service took over MESSAGING_EVENT.
- *
- * Note: this service intentionally does NOT call super, and it owns the
- * MESSAGING_EVENT intent filter. expo-notifications' own service is
- * shadowed. expo-notifications still handles token retrieval through
- * Firebase APIs directly, so push registration keeps working.
+ * For other push types (trip completed, cancelled, admin broadcast):
+ *   - Shows a regular tray notification with the server-supplied title /
+ *     body. Channel "driver_general_v1" — no sound bypass, no full-screen
+ *     intent.
  */
 class OfferFirebaseMessagingService : FirebaseMessagingService() {
     companion object {
-        private const val OFFER_CHANNEL_ID = "driver_offers_v3"
-        private const val OFFER_CHANNEL_NAME = "Новые заказы"
         private const val GENERAL_CHANNEL_ID = "driver_general_v1"
         private const val GENERAL_CHANNEL_NAME = "Уведомления"
     }
@@ -94,60 +80,16 @@ class OfferFirebaseMessagingService : FirebaseMessagingService() {
         val address = payload.optString("pickup_address").ifBlank { "Геолокация клиента" }
         val price = payload.optInt("price", 0)
         val expiresIn = payload.optInt("expires_in", 0).let { if (it > 0) it else 20 }
-        val title = payload.optString("title").ifBlank { "Новый заказ" }
-        val body = payload.optString("body").ifBlank { "Подача: $address · $price сом" }
 
-        ensureOfferChannel()
-        showOfferNotification(orderId, title, body, expiresIn)
-
-        // Best-effort overlay on top of whatever app the driver is in.
-        // Permission-gated, so silently skipped if the user hasn't granted
-        // "Display over other apps".
+        // Offers surface ONLY through the SYSTEM_ALERT_WINDOW bottom sheet
+        // — by product decision. The tray notification path was removed
+        // because drivers were dismissing offers from the shade without
+        // realising it counted as a decline. Trade-off: if the driver
+        // hasn't granted "Display over other apps" (or has it revoked by
+        // an OEM battery saver), the offer is invisible.
         if (OfferOverlayManager.hasPermission(applicationContext)) {
             OfferOverlayManager.showOverlay(applicationContext, orderId, address, price, expiresIn)
         }
-    }
-
-    private fun ensureOfferChannel() {
-        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) return
-        val mgr = getSystemService(NotificationManager::class.java) ?: return
-        if (mgr.getNotificationChannel(OFFER_CHANNEL_ID) != null) return
-
-        // order_arrived raw resource ships with the app under res/raw/. We
-        // route it through the alarm stream so it bypasses silent / DND.
-        // RingtoneManager.getDefaultUri returns nullable, so the field is
-        // typed Uri? — setSound accepts nullable anyway.
-        val soundUri: Uri? = try {
-            val rawId = resources.getIdentifier("order_arrived", "raw", packageName)
-            if (rawId != 0) {
-                Uri.parse("android.resource://$packageName/$rawId")
-            } else {
-                RingtoneManager.getDefaultUri(RingtoneManager.TYPE_RINGTONE)
-            }
-        } catch (_: Exception) {
-            RingtoneManager.getDefaultUri(RingtoneManager.TYPE_RINGTONE)
-        }
-
-        val attrs = AudioAttributes.Builder()
-            .setUsage(AudioAttributes.USAGE_ALARM)
-            .setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION)
-            .build()
-
-        val channel = NotificationChannel(
-            OFFER_CHANNEL_ID,
-            OFFER_CHANNEL_NAME,
-            NotificationManager.IMPORTANCE_HIGH,
-        ).apply {
-            description = "Срочные уведомления о новых заказах. Звучат даже на беззвучном режиме."
-            setSound(soundUri, attrs)
-            enableVibration(true)
-            vibrationPattern = longArrayOf(400, 250, 400, 250, 400)
-            enableLights(true)
-            lightColor = 0xFFFBBF24.toInt()
-            setBypassDnd(true)
-            lockscreenVisibility = NotificationCompat.VISIBILITY_PUBLIC
-        }
-        mgr.createNotificationChannel(channel)
     }
 
     private fun ensureGeneralChannel() {
@@ -165,46 +107,6 @@ class OfferFirebaseMessagingService : FirebaseMessagingService() {
             lockscreenVisibility = NotificationCompat.VISIBILITY_PUBLIC
         }
         mgr.createNotificationChannel(channel)
-    }
-
-    private fun showOfferNotification(orderId: Int, title: String, body: String, expiresInSeconds: Int) {
-        val ctx = applicationContext
-        val launchIntent = OfferOverlayManager.buildActionPendingIntent(ctx, "default", orderId)
-        val acceptIntent = OfferOverlayManager.buildActionPendingIntent(ctx, "accept", orderId)
-        val declineIntent = OfferOverlayManager.buildActionPendingIntent(ctx, "decline", orderId)
-
-        val builder = NotificationCompat.Builder(ctx, OFFER_CHANNEL_ID)
-            .setSmallIcon(ctx.applicationInfo.icon)
-            .setContentTitle(title)
-            .setContentText(body)
-            .setStyle(NotificationCompat.BigTextStyle().bigText(body))
-            .setPriority(NotificationCompat.PRIORITY_MAX)
-            .setCategory(NotificationCompat.CATEGORY_CALL)
-            .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
-            .setAutoCancel(false)
-            .setOngoing(false)
-            .setColor(0xFFFBBF24.toInt())
-            .setTimeoutAfter(expiresInSeconds * 1000L)
-
-        if (launchIntent != null) {
-            builder.setContentIntent(launchIntent)
-            // Full-screen intent fires the launchActivity over the lock
-            // screen — Yandex Pro "incoming call" UX. Requires the
-            // USE_FULL_SCREEN_INTENT permission and on Android 14+ the
-            // user must enable it under Settings → Apps → Full-screen
-            // notifications.
-            builder.setFullScreenIntent(launchIntent, true)
-        }
-
-        if (acceptIntent != null) {
-            builder.addAction(0, "Принять", acceptIntent)
-        }
-        if (declineIntent != null) {
-            builder.addAction(0, "Отказаться", declineIntent)
-        }
-
-        val mgr = ContextCompat.getSystemService(ctx, NotificationManager::class.java)
-        mgr?.notify(OfferOverlayManager.OFFER_NOTIFICATION_ID, builder.build())
     }
 
     private fun showGeneralNotification(title: String, body: String) {
