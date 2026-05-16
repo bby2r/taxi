@@ -117,24 +117,31 @@ jobs:
         env:
           GRADLE_OPTS: "-Xmx6g -XX:MaxMetaspaceSize=2g"
         run: |
+          set -o pipefail
           ./gradlew assembleRelease \
             -x lint \
             -x lintVitalRelease \
             -x lintVitalAnalyzeRelease \
             -x lintVitalReportRelease \
             --no-daemon \
-            --stacktrace \
-            --info
+            --stacktrace 2>&1 | tee /tmp/gradle.log
 
-      - name: Upload build reports on failure
+      - name: Surface Kotlin compile errors on failure
+        if: failure()
+        run: |
+          echo "::group::Kotlin compile errors"
+          grep -B1 -A3 -E "e: file://|error:|^[[:space:]]+\^" /tmp/gradle.log | head -200 || true
+          echo "::endgroup::"
+
+      - name: Upload gradle log + build reports on failure
         if: failure()
         uses: actions/upload-artifact@v4
         with:
-          name: gradle-reports-${{ matrix.app }}-${{ github.run_number }}
+          name: gradle-log-${{ matrix.app }}-${{ github.run_number }}
           path: |
+            /tmp/gradle.log
             mobile/apps/${{ matrix.app }}/android/build/reports
             mobile/apps/${{ matrix.app }}/android/app/build/reports
-            mobile/apps/${{ matrix.app }}/android/build/outputs/logs
           if-no-files-found: ignore
           retention-days: 7
 
