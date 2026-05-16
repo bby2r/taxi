@@ -5,11 +5,16 @@ import android.app.PendingIntent
 import android.content.Context
 import android.content.Intent
 import android.graphics.PixelFormat
+import android.media.AudioAttributes
+import android.media.MediaPlayer
 import android.net.Uri
 import android.os.Build
 import android.os.CountDownTimer
 import android.os.Handler
 import android.os.Looper
+import android.os.VibrationEffect
+import android.os.Vibrator
+import android.os.VibratorManager
 import android.provider.Settings
 import android.view.Gravity
 import android.view.LayoutInflater
@@ -43,6 +48,12 @@ object OfferOverlayManager {
     private var overlayView: View? = null
     private var windowManager: WindowManager? = null
     private var countdown: CountDownTimer? = null
+    private var mediaPlayer: MediaPlayer? = null
+    // Application context captured on showOverlay so the teardown path
+    // (removeOverlayOnMain) can stop the vibrator without needing one
+    // passed in — the JS module's hideOffer/dismissOffer signatures
+    // shouldn't have to thread context all the way down.
+    private var activeContext: Context? = null
 
     fun hasPermission(context: Context): Boolean {
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.M) {
@@ -179,6 +190,90 @@ object OfferOverlayManager {
                 dispatchAction(context, "timeout", orderId)
             }
         }.start()
+
+        // Sound + vibration are owned by the overlay since we no longer
+        // post a NotificationChannel ringing notification. Sound is routed
+        // through the alarm stream so it plays even when the phone is on
+        // silent / vibrate; vibration loops on the standard pattern.
+        activeContext = context
+        startOfferSound(context)
+        startOfferVibration(context)
+    }
+
+    private fun startOfferSound(context: Context) {
+        stopOfferSound()
+        try {
+            val rawId = context.resources.getIdentifier("order_arrived", "raw", context.packageName)
+            if (rawId == 0) return
+            val player = MediaPlayer().apply {
+                setAudioAttributes(
+                    AudioAttributes.Builder()
+                        .setUsage(AudioAttributes.USAGE_ALARM)
+                        .setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION)
+                        .build(),
+                )
+                val descriptor = context.resources.openRawResourceFd(rawId) ?: return
+                setDataSource(descriptor.fileDescriptor, descriptor.startOffset, descriptor.length)
+                descriptor.close()
+                isLooping = true
+                prepare()
+                start()
+            }
+            mediaPlayer = player
+        } catch (_: Exception) {
+            // Audio is best-effort — overlay UI + vibration still alert the driver.
+        }
+    }
+
+    private fun stopOfferSound() {
+        val player = mediaPlayer
+        mediaPlayer = null
+        if (player != null) {
+            try {
+                if (player.isPlaying) player.stop()
+            } catch (_: Exception) {
+                // ignore
+            }
+            try {
+                player.release()
+            } catch (_: Exception) {
+                // ignore
+            }
+        }
+    }
+
+    private fun startOfferVibration(context: Context) {
+        val vibrator = obtainVibrator(context) ?: return
+        try {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                val pattern = longArrayOf(0, 400, 250, 400, 250, 400)
+                val effect = VibrationEffect.createWaveform(pattern, 0)
+                vibrator.vibrate(effect)
+            } else {
+                @Suppress("DEPRECATION")
+                vibrator.vibrate(longArrayOf(0, 400, 250, 400, 250, 400), 0)
+            }
+        } catch (_: Exception) {
+            // ignore
+        }
+    }
+
+    private fun stopOfferVibration(context: Context) {
+        try {
+            obtainVibrator(context)?.cancel()
+        } catch (_: Exception) {
+            // ignore
+        }
+    }
+
+    private fun obtainVibrator(context: Context): Vibrator? {
+        return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            val vm = context.getSystemService(Context.VIBRATOR_MANAGER_SERVICE) as? VibratorManager
+            vm?.defaultVibrator
+        } else {
+            @Suppress("DEPRECATION")
+            context.getSystemService(Context.VIBRATOR_SERVICE) as? Vibrator
+        }
     }
 
     private fun dispatchAction(context: Context, action: String, orderId: Int) {
@@ -242,5 +337,9 @@ object OfferOverlayManager {
         }
         overlayView = null
         windowManager = null
+
+        stopOfferSound()
+        activeContext?.let { stopOfferVibration(it) }
+        activeContext = null
     }
 }
