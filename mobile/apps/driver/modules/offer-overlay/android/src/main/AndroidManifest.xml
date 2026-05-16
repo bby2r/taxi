@@ -1,4 +1,5 @@
-<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+  xmlns:tools="http://schemas.android.com/tools">
   <!-- Draw the offer overlay on top of any other app. User must grant this
        at runtime via Settings → Apps → AIYL Taxi → "Display over other
        apps". Module exposes hasOverlayPermission() + openOverlaySettings()
@@ -6,15 +7,22 @@
   <uses-permission android:name="android.permission.SYSTEM_ALERT_WINDOW" />
 
   <application>
-    <!-- Native FCM listener — owns the MESSAGING_EVENT intent so offer
-         pushes are handled in Kotlin (overlay + ringing notification fire
-         even when JS is dead). Shadows expo-notifications' own service for
-         this intent; expo-notifications token retrieval still works because
-         it talks to Firebase APIs directly. -->
+    <!-- Remove expo-notifications' FirebaseMessagingService from the
+         merged manifest. Without this, both services are registered for
+         MESSAGING_EVENT and FCM picks one non-deterministically — in
+         practice it tends to be Expo's, so our overlay-firing handler
+         never sees the offer push. With Expo's service stripped, ours
+         is the only one and FCM dispatches every message to it.
+         Token retrieval still works because JS calls Firebase APIs
+         directly via Notifications.getDevicePushTokenAsync. -->
+    <service
+      android:name="expo.modules.notifications.service.ExpoFirebaseMessagingService"
+      tools:node="remove" />
+
     <service
       android:name="expo.modules.offeroverlay.OfferFirebaseMessagingService"
       android:exported="false">
-      <intent-filter android:priority="1000">
+      <intent-filter>
         <action android:name="com.google.firebase.MESSAGING_EVENT" />
       </intent-filter>
     </service>

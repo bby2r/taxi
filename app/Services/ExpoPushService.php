@@ -26,36 +26,73 @@ class ExpoPushService
     }
 
     /**
-     * Send a high-priority offer push to a driver. Carries both a normal
-     * notification (title/body at the root, so the OS always shows a tray
-     * entry even when the app is killed and JS can't run) and the same
-     * data payload (so the in-app Pusher / background-task path can wake
-     * the SYSTEM_ALERT_WINDOW overlay + Notifee ringing card when JS is
-     * alive). The previous data-only attempt left killed-app drivers with
-     * zero visible signal whenever the BackgroundNotificationTask failed
-     * to fire — strictly worse than the current dual delivery.
+     * Send a high-priority offer push to a driver as a data-only message.
+     *
+     * On Android, FCM messages that include a notification block
+     * (title/body at the root) are handled directly by the OS when the
+     * app is killed — onMessageReceived isn't called and our native
+     * OfferFirebaseMessagingService never gets a chance to fire the
+     * SYSTEM_ALERT_WINDOW overlay + Notifee full-screen-intent ringing
+     * card. Data-only messages always wake the service regardless of
+     * app state.
+     *
+     * Title/body are tucked into data so the native service can build
+     * the visible notification itself with NotificationCompat — that
+     * lets it set CATEGORY_CALL + FullScreenIntent for the ringing UX
+     * we want, instead of the silenceable heads-up Android shows by
+     * default for notification-block messages.
      *
      * @param  array<string, mixed>  $data
      */
     public function sendOfferToDriver(User $driver, string $title, string $body, array $data = []): bool
     {
-        return $this->sendToUser($driver, $title, $body, $data, [
-            'sound' => 'order_arrived',
+        if (! $driver->expo_push_token) {
+            return false;
+        }
+
+        $payload = [
+            'to' => $driver->expo_push_token,
+            'data' => array_merge($data, [
+                'title' => $title,
+                'body' => $body,
+            ]),
             'priority' => 'high',
-            // Versioned channel id — must match DRIVER_OFFER_CHANNEL in the
-            // mobile hook. v3 added `audioAttributes.usage = ALARM` so the
-            // sound plays through the alarm stream and bypasses silent /
-            // vibrate mode. Android requires a new channel id whenever the
-            // sound or audio routing changes.
-            'channelId' => 'driver_offers_v3',
-            // Links the push to the locally-registered "ride_offer" category
-            // on the device, which has Принять / Отказаться action buttons.
-            // The driver can react straight from the notification shade
-            // without unlocking the phone.
-            'categoryId' => 'ride_offer',
             'ttl' => 30,
-            '_displayInForeground' => true,
-        ]);
+            // iOS: required so APNs delivers the data payload to a backgrounded app.
+            '_contentAvailable' => true,
+        ];
+
+        try {
+            $response = Http::acceptJson()->post(self::EXPO_PUSH_URL, [$payload]);
+
+            if ($response->failed()) {
+                Log::error('Expo offer push request failed.', [
+                    'status' => $response->status(),
+                    'body' => $response->body(),
+                ]);
+
+                return false;
+            }
+
+            $result = $response->json('data.0', []);
+
+            if (($result['status'] ?? '') !== 'ok') {
+                Log::warning('Expo offer push error.', [
+                    'error' => $result['message'] ?? 'Unknown error',
+                    'details' => $result['details'] ?? null,
+                ]);
+
+                return false;
+            }
+
+            return true;
+        } catch (\Throwable $e) {
+            Log::error('Expo offer push exception.', [
+                'message' => $e->getMessage(),
+            ]);
+
+            return false;
+        }
     }
 
     /**
