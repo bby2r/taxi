@@ -29,17 +29,17 @@ class OfferOverlayModule : Module() {
         }
 
         Function("openOverlaySettings") {
-            val context = appContext.reactContext ?: return@Function
-            OfferOverlayManager.openSettings(context)
+            appContext.reactContext?.let { OfferOverlayManager.openSettings(it) }
         }
 
         Function("showOffer") { params: Map<String, Any?> ->
-            val context = appContext.reactContext ?: return@Function
-            val orderId = (params["orderId"] as? Number)?.toInt() ?: -1
-            val address = (params["address"] as? String) ?: ""
-            val price = (params["price"] as? Number)?.toInt() ?: 0
-            val durationSeconds = (params["durationSeconds"] as? Number)?.toInt() ?: 20
-            OfferOverlayManager.showOverlay(context, orderId, address, price, durationSeconds)
+            appContext.reactContext?.let { context ->
+                val orderId = (params["orderId"] as? Number)?.toInt() ?: -1
+                val address = (params["address"] as? String) ?: ""
+                val price = (params["price"] as? Number)?.toInt() ?: 0
+                val durationSeconds = (params["durationSeconds"] as? Number)?.toInt() ?: 20
+                OfferOverlayManager.showOverlay(context, orderId, address, price, durationSeconds)
+            }
         }
 
         Function("hideOffer") {
