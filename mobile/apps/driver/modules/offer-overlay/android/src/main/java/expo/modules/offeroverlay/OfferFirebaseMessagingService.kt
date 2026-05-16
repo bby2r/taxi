@@ -116,10 +116,15 @@ class OfferFirebaseMessagingService : FirebaseMessagingService() {
 
         // order_arrived raw resource ships with the app under res/raw/. We
         // route it through the alarm stream so it bypasses silent / DND.
-        val soundUri: Uri = try {
+        // RingtoneManager.getDefaultUri returns nullable, so the field is
+        // typed Uri? — setSound accepts nullable anyway.
+        val soundUri: Uri? = try {
             val rawId = resources.getIdentifier("order_arrived", "raw", packageName)
-            if (rawId != 0) Uri.parse("android.resource://$packageName/$rawId")
-            else RingtoneManager.getDefaultUri(RingtoneManager.TYPE_RINGTONE)
+            if (rawId != 0) {
+                Uri.parse("android.resource://$packageName/$rawId")
+            } else {
+                RingtoneManager.getDefaultUri(RingtoneManager.TYPE_RINGTONE)
+            }
         } catch (_: Exception) {
             RingtoneManager.getDefaultUri(RingtoneManager.TYPE_RINGTONE)
         }

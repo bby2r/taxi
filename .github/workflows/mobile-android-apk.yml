@@ -123,7 +123,20 @@ jobs:
             -x lintVitalAnalyzeRelease \
             -x lintVitalReportRelease \
             --no-daemon \
-            --stacktrace
+            --stacktrace \
+            --info
+
+      - name: Upload build reports on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: gradle-reports-${{ matrix.app }}-${{ github.run_number }}
+          path: |
+            mobile/apps/${{ matrix.app }}/android/build/reports
+            mobile/apps/${{ matrix.app }}/android/app/build/reports
+            mobile/apps/${{ matrix.app }}/android/build/outputs/logs
+          if-no-files-found: ignore
+          retention-days: 7
 
       - name: Locate and rename APK
         id: apk
