@@ -148,7 +148,7 @@ export default function RegionSelector({
 const styles = StyleSheet.create({
   overlay: {
     flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.5)',
+    backgroundColor: 'rgba(30, 27, 46, 0.55)',
     justifyContent: 'flex-end',
   },
   sheet: {

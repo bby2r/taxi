@@ -383,7 +383,7 @@ const styles = StyleSheet.create({
   regionChipText: {
     fontSize: 15,
     fontWeight: '600' as const,
-    color: '#9A3412',
+    color: ClientColors.accent,
   },
   heroButton: {
     backgroundColor: ClientColors.primary,
@@ -420,8 +420,8 @@ const styles = StyleSheet.create({
   errorPill: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#FEF2F2',
-    borderColor: '#FECACA',
+    backgroundColor: '#FFF1F1',
+    borderColor: '#FFD4D4',
     borderWidth: 1,
     borderRadius: 12,
     paddingHorizontal: 12,
@@ -459,7 +459,7 @@ const styles = StyleSheet.create({
   },
   modalOverlay: {
     flex: 1,
-    backgroundColor: 'rgba(15,23,42,0.55)',
+    backgroundColor: 'rgba(30, 27, 46, 0.55)',
     justifyContent: 'center',
     alignItems: 'center',
     paddingHorizontal: 28,

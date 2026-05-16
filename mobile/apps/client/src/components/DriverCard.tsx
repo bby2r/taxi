@@ -24,14 +24,14 @@ function getStatusText(status: DriverCardProps['status']): {
     case 'arrived':
       return {
         label: 'Водитель ожидает',
-        color: ClientColors.success,
-        bg: '#D1FAE5',
+        color: ClientColors.secondaryDark,
+        bg: ClientColors.secondaryTint,
         emoji: '📍',
       };
     case 'in_progress':
       return {
         label: 'В поездке',
-        color: '#9A3412',
+        color: ClientColors.accent,
         bg: ClientColors.accentTint,
         emoji: '🚕',
       };
