@@ -54,6 +54,12 @@ if (Platform.OS === 'android') {
 // before they were added (require() throws → we just stay silent).
 let ExpoAudio: typeof import('expo-audio') | null = null;
 let LocalNotifications: typeof import('expo-notifications') | null = null;
+let Speech: typeof import('expo-speech') | null = null;
+try {
+  Speech = require('expo-speech');
+} catch {
+  Speech = null;
+}
 if (Platform.OS !== 'web') {
   try {
     ExpoAudio = require('expo-audio');
@@ -195,6 +201,14 @@ function useDriverOrderState(): UseDriverOrderReturn {
       return;
     }
     alertedCancelOrderRef.current = orderId;
+    try {
+      Speech?.speak(byClient ? 'Клиент отменил заказ' : 'Заказ отменён', {
+        language: 'ru-RU',
+        rate: 1.0,
+      });
+    } catch {
+      // best effort
+    }
     Alert.alert(
       'Заказ отменён',
       byClient ? 'Клиент отменил заказ' : 'Заказ отменён',
@@ -478,41 +492,32 @@ function useDriverOrderState(): UseDriverOrderReturn {
   // copies of the same offer. The overlay's own accept/decline button
   // presses route through the subscribeForegroundEvents above and end
   // up firing the existing acceptOffer / declineOffer flow.
+  // Overlay creation is OWNED by OfferFirebaseMessagingService (native).
+  // The JS side used to also call showOfferOverlay when phase='offer'
+  // and AppState=background, but that meant on the alive-in-background
+  // path both code paths competed to mount a view — the Manager dedup
+  // caught most but not all races, and any leftover ghost view showed
+  // as a second card. JS now ONLY tears overlays down (foreground
+  // resume + phase-leave cleanup); creation is single-sourced.
   useEffect(() => {
     if (state.phase !== 'offer' || !OfferOverlay) return;
-    if (!OfferOverlay.isOfferOverlayAvailable()) return;
 
-    let active = true;
-
-    const showIfNeeded = (appState: string): void => {
-      if (!active) return;
-      if (!OfferOverlay!.hasOverlayPermission()) return;
+    const hideIfForeground = (appState: string): void => {
       if (appState === 'active') {
-        OfferOverlay!.hideOfferOverlay();
-        return;
+        OfferOverlay?.hideOfferOverlay();
       }
-      OfferOverlay!.showOfferOverlay({
-        orderId: state.order.id,
-        address: state.order.pickup_address ?? 'Геолокация клиента',
-        price: state.order.price,
-        // Keep aligned with OrderOfferCard's in-app countdown so the
-        // driver doesn't see two different timers when both surfaces
-        // briefly overlap during a foreground transition.
-        durationSeconds: 30,
-      });
     };
 
-    showIfNeeded(RNAppState.currentState);
+    hideIfForeground(RNAppState.currentState);
     const sub = RNAppState.addEventListener('change', (next) => {
-      showIfNeeded(next);
+      hideIfForeground(next);
     });
 
     return () => {
-      active = false;
       sub.remove();
       OfferOverlay?.hideOfferOverlay();
     };
-  }, [state.phase, state.phase === 'offer' ? state.order.id : null]);
+  }, [state.phase]);
 
   // Yandex-style aggressive volume management: when an offer lands we
   // snapshot the driver's current volume, raise it to ~95%, and listen
@@ -543,8 +548,18 @@ function useDriverOrderState(): UseDriverOrderReturn {
   // The cleanup runs the moment phase leaves 'offer' (accept, decline,
   // 20-second auto-timeout, server-side cancel). Degrades gracefully to
   // vibration-only if expo-audio isn't bundled (older APK).
+  // Sound is now SINGLE-SOURCED — when the driver is in background the
+  // native OfferOverlayManager plays the alarm-stream MediaPlayer; when
+  // the driver is in foreground (in-app OrderOfferCard visible) this
+  // expo-audio loop plays. The two used to fire in parallel during the
+  // background-alive scenario and the driver heard two stacked loops.
   useEffect(() => {
     if (state.phase !== 'offer' || !ExpoAudio) {
+      return;
+    }
+    if (RNAppState.currentState !== 'active') {
+      // In background: native MediaPlayer (inside OfferOverlayManager)
+      // owns the alarm sound. Don't start a competing JS loop.
       return;
     }
     let player: ReturnType<typeof ExpoAudio.createAudioPlayer> | null = null;
