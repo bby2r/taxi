@@ -479,7 +479,10 @@ function useDriverOrderState(): UseDriverOrderReturn {
         orderId: state.order.id,
         address: state.order.pickup_address ?? 'Геолокация клиента',
         price: state.order.price,
-        durationSeconds: 20,
+        // Keep aligned with OrderOfferCard's in-app countdown so the
+        // driver doesn't see two different timers when both surfaces
+        // briefly overlap during a foreground transition.
+        durationSeconds: 30,
       });
     };
 

@@ -5,18 +5,37 @@ import {
   TouchableOpacity,
   Animated,
   Modal,
+  Platform,
   StyleSheet,
 } from 'react-native';
 import { Order, DeclineReason, DriverColors, Typography } from '@taxi/shared';
+
+// Tear down any lingering SYSTEM_ALERT_WINDOW overlay the moment the
+// in-app card mounts. The Activity lifecycle hook in OfferOverlayModule
+// already hides the overlay on foreground entry, but its timing isn't
+// always quick enough — drivers were reporting a brief window where the
+// native overlay (30 s countdown) and the in-app card (was 20 s, now
+// also 30) showed at the same time. Calling hideOfferOverlay here
+// guarantees the card owns the surface as soon as it renders.
+let OfferOverlay: typeof import('../../modules/offer-overlay/src') | null = null;
+if (Platform.OS === 'android') {
+  try {
+    OfferOverlay = require('../../modules/offer-overlay/src');
+  } catch {
+    OfferOverlay = null;
+  }
+}
 
 interface OrderOfferCardProps {
   order: Order;
   onAccept: () => void;
   onDecline: (reason: DeclineReason) => void;
-  // Length of the on-card countdown before auto-decline. 20 s gives the
-  // driver enough breathing room to glance at price + address; the
-  // server-side OfferTimeoutJob still fires at 30 s (intra) / 45 s
-  // (inter-district), so this stays under the server limit.
+  // Match the server-side OfferTimeoutJob window (30 s intra-district,
+  // 45 s inter-district). Older default was 20 s, but that meant the
+  // native SYSTEM_ALERT_WINDOW overlay (which reads server expires_in
+  // and shows 30 s) and the in-app card displayed two different
+  // countdowns side-by-side — drivers saw "20 / 30" simultaneously
+  // and didn't trust either.
   countdownSeconds?: number;
 }
 
@@ -31,12 +50,16 @@ export default function OrderOfferCard({
   order,
   onAccept,
   onDecline,
-  countdownSeconds = 20,
+  countdownSeconds = 30,
 }: OrderOfferCardProps): React.ReactNode {
   const [remaining, setRemaining] = useState(countdownSeconds);
   const [reasonSheetOpen, setReasonSheetOpen] = useState(false);
   const opacityAnim = useRef(new Animated.Value(1)).current;
   const declineCalledRef = useRef(false);
+
+  useEffect(() => {
+    OfferOverlay?.hideOfferOverlay();
+  }, []);
 
   useEffect(() => {
     const interval = setInterval(() => {
