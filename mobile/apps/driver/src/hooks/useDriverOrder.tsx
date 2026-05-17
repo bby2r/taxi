@@ -24,6 +24,7 @@ import {
 import {
   consumePendingDriverAction,
   ensureLaunchActionConsumed,
+  peekAnyPendingDriverAction,
   peekPendingDriverAction,
   setPendingDriverAction,
 } from '../utils/pendingNotificationAction';
@@ -256,6 +257,31 @@ function useDriverOrderState(): UseDriverOrderReturn {
     // duration of the acceptOrder round-trip that lands a beat later.
     await ensureLaunchActionConsumed();
 
+    // Deep-link Accept / Decline takes absolute priority — if the queue
+    // has something, dispatch it BEFORE anything else. Used to defer to
+    // getCurrentDriverOrder + getPendingOffer ordering, and a stale
+    // active-order response could swallow the queued accept entirely
+    // (silent failure: driver app stays on online_idle while the offer
+    // sits unaccepted on the server until OfferTimeoutJob fires).
+    const launchAction = peekAnyPendingDriverAction();
+    if (launchAction) {
+      consumePendingDriverAction(launchAction.orderId);
+      try {
+        if (launchAction.kind === 'accept') {
+          const accepted = await acceptOrder(launchAction.orderId);
+          setState({ phase: 'active', order: accepted });
+          return;
+        }
+        await declineOrder(launchAction.orderId, 'personal');
+        return;
+      } catch {
+        // Server rejected (offer expired, taken by another driver,
+        // network failure). Fall through to the standard restore so we
+        // still land in the correct phase based on what the server
+        // actually says.
+      }
+    }
+
     const phase = stateRef.current.phase;
     if (
       phase === 'offer' ||
@@ -273,8 +299,11 @@ function useDriverOrderState(): UseDriverOrderReturn {
         const phase = ACTIVE_STATUS_TO_PHASE[activeOrder.status];
         if (phase) {
           setState({ phase, order: activeOrder } as DriverOrderState);
+          return;
         }
-        return;
+        // status is something we don't have a phase for (e.g. server
+        // legacy 'searching'). Fall through to pending-offer path
+        // instead of silently returning.
       }
     } catch {
       // fall through

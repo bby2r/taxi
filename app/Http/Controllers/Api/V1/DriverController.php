@@ -222,14 +222,18 @@ class DriverController extends Controller
     {
         $userId = $request->user()->id;
 
-        $order = Order::where(function ($q) use ($userId) {
-            $q->where('driver_id', $userId)
-                ->orWhere(function ($q2) use ($userId) {
-                    $q2->where('offered_driver_id', $userId)
-                        ->where('status', OrderStatus::Searching);
-                });
-        })
-            ->active()
+        // ACTIVE means truly assigned-to-driver (accepted / arrived / in_progress).
+        // Offers (status=searching, offered_driver_id=me) live behind
+        // /orders/pending-offer — mixing them in here breaks the driver
+        // app's cold-start restore because the client maps 'searching' to
+        // no phase and silently returns before consuming the queued
+        // deep-link accept action.
+        $order = Order::where('driver_id', $userId)
+            ->whereIn('status', [
+                OrderStatus::Accepted,
+                OrderStatus::Arrived,
+                OrderStatus::InProgress,
+            ])
             ->with(['client', 'driver.driverProfile'])
             ->first();
 

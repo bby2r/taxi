@@ -92,3 +92,13 @@ export function peekPendingDriverAction(orderId: number): 'accept' | 'decline' |
   if (pending.orderId !== orderId) return null;
   return pending.kind;
 }
+
+/**
+ * Returns the entire queued action regardless of orderId. Used by
+ * syncFromServer at cold-start so a deep-link Accept tap is executed
+ * before we get distracted by whatever getCurrentDriverOrder returns
+ * (which has been known to return stale or unrelated orders).
+ */
+export function peekAnyPendingDriverAction(): PendingDriverAction | null {
+  return pending;
+}
