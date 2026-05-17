@@ -55,6 +55,15 @@ object OfferOverlayManager {
     // shouldn't have to thread context all the way down.
     private var activeContext: Context? = null
 
+    // Whether the driver activity is currently in foreground. Maintained
+    // by OfferOverlayModule via OnActivityEntersForeground / Background
+    // lifecycle hooks. The FCM service reads this to skip the
+    // SYSTEM_ALERT_WINDOW overlay when the in-app OrderOfferCard is
+    // already on screen — otherwise both surfaces show together and
+    // their sounds layer.
+    @Volatile
+    var isAppForeground: Boolean = false
+
     fun hasPermission(context: Context): Boolean {
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.M) {
             return true

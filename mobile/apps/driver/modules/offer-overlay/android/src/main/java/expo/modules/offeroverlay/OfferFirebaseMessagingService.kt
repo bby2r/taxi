@@ -87,6 +87,14 @@ class OfferFirebaseMessagingService : FirebaseMessagingService() {
         // realising it counted as a decline. Trade-off: if the driver
         // hasn't granted "Display over other apps" (or has it revoked by
         // an OEM battery saver), the offer is invisible.
+        //
+        // Skip the overlay entirely when the driver is already in the
+        // app — the in-app OrderOfferCard renders + plays the alert
+        // sound itself, and stacking the native overlay on top would
+        // double both the card and the looping audio.
+        if (OfferOverlayManager.isAppForeground) {
+            return
+        }
         if (OfferOverlayManager.hasPermission(applicationContext)) {
             OfferOverlayManager.showOverlay(applicationContext, orderId, address, price, expiresIn)
         }

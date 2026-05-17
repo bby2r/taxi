@@ -699,18 +699,50 @@ function useDriverOrderState(): UseDriverOrderReturn {
       const order = await acceptOrder(current.order.id);
       setState({ phase: 'active', order });
     } catch (err: unknown) {
+      const status = (err as { response?: { status?: number } })?.response?.status;
+
       // 422 = order is no longer offered to us (server-side timeout fired,
       // another driver took it, or the client cancelled while we were
-      // tapping). Drop back to online_idle and tell the driver, instead
-      // of leaving them stuck on a stale offer card.
-      const status = (err as { response?: { status?: number } })?.response?.status;
+      // tapping). Drop back to online_idle and tell the driver.
       if (status === 422) {
         setState({ phase: 'online_idle', order: null });
         Alert.alert('Заказ уже недоступен', 'Заказ уже принял другой водитель или истекло время.');
-      } else {
-        const message = err instanceof Error ? err.message : 'Ошибка при принятии заказа';
-        setError(message);
+        setLoading(false);
+        return;
       }
+
+      // Network flake: request hung, axios eventually threw a timeout,
+      // but the server may have actually finished the transaction
+      // (driver_id set, status=accepted) before the response packet got
+      // lost. The driver sees an error, the client already sees them as
+      // their driver. Recheck the server's view of "what order am I on"
+      // before surfacing the error — if it says we own the order, jump
+      // straight into the active flow.
+      try {
+        const actual = await getCurrentDriverOrder();
+        if (actual && actual.id === current.order.id) {
+          if (actual.status === 'accepted') {
+            setState({ phase: 'active', order: actual });
+            setLoading(false);
+            return;
+          }
+          if (actual.status === 'arrived') {
+            setState({ phase: 'arrived', order: actual });
+            setLoading(false);
+            return;
+          }
+          if (actual.status === 'in_progress') {
+            setState({ phase: 'in_progress', order: actual });
+            setLoading(false);
+            return;
+          }
+        }
+      } catch {
+        // recheck itself failed — fall through to the generic error
+      }
+
+      const message = err instanceof Error ? err.message : 'Ошибка при принятии заказа';
+      setError(message);
     } finally {
       setLoading(false);
     }

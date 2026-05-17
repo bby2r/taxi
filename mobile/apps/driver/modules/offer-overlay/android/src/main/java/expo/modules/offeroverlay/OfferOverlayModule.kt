@@ -23,6 +23,19 @@ class OfferOverlayModule : Module() {
     override fun definition() = ModuleDefinition {
         Name("OfferOverlay")
 
+        // Track foreground state so the FCM service can suppress the
+        // SYSTEM_ALERT_WINDOW overlay when the driver is already looking
+        // at the in-app OrderOfferCard — without this both surfaces
+        // (and their two looping sounds) layer on top of each other.
+        OnActivityEntersForeground {
+            OfferOverlayManager.isAppForeground = true
+            OfferOverlayManager.hideOverlay()
+        }
+
+        OnActivityEntersBackground {
+            OfferOverlayManager.isAppForeground = false
+        }
+
         Function("hasOverlayPermission") {
             val context = appContext.reactContext ?: return@Function false
             OfferOverlayManager.hasPermission(context)
