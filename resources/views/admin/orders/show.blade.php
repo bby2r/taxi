@@ -19,40 +19,64 @@
 
     {{-- Client & Driver Cards --}}
     <div class="mb-6 grid grid-cols-1 gap-6 md:grid-cols-2">
+        @php
+            // Live relation wins (current accurate data), falls back to
+            // the snapshot taken at order creation / accept so history
+            // survives a user delete or a driver editing their profile.
+            $clientName = $order->client?->name ?? ($order->client_snapshot['name'] ?? null);
+            $clientPhone = $order->client?->phone ?? ($order->client_snapshot['phone'] ?? null);
+            $driverName = $order->driver?->name ?? ($order->driver_snapshot['name'] ?? null);
+            $driverPhone = $order->driver?->phone ?? ($order->driver_snapshot['phone'] ?? null);
+            $driverCar = $order->driver?->driverProfile?->car_model ?? ($order->driver_snapshot['car_model'] ?? null);
+            $driverPlate = $order->driver?->driverProfile?->car_number ?? ($order->driver_snapshot['car_number'] ?? null);
+            $clientDeleted = $order->client === null && $order->client_snapshot !== null;
+            $driverDeleted = $order->driver === null && $order->driver_snapshot !== null;
+        @endphp
+
         {{-- Client Card --}}
         <div class="rounded-xl border border-gray-200 bg-white p-6 shadow-sm">
-            <h3 class="mb-4 text-sm font-semibold uppercase tracking-wider text-gray-500">Client</h3>
+            <h3 class="mb-4 flex items-center gap-2 text-sm font-semibold uppercase tracking-wider text-gray-500">
+                Client
+                @if ($clientDeleted)
+                    <span class="rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-medium normal-case text-amber-700">deleted — snapshot</span>
+                @endif
+            </h3>
             <dl class="space-y-3">
                 <div>
                     <dt class="text-xs text-gray-500">Name</dt>
-                    <dd class="text-sm font-medium text-gray-900">{{ $order->client?->name ?? '—' }}</dd>
+                    <dd class="text-sm font-medium text-gray-900">{{ $clientName ?? '—' }}</dd>
                 </div>
                 <div>
                     <dt class="text-xs text-gray-500">Phone</dt>
-                    <dd class="text-sm text-gray-700">{{ $order->client?->phone ?? '—' }}</dd>
+                    <dd class="text-sm text-gray-700">{{ $clientPhone ?? '—' }}</dd>
                 </div>
             </dl>
         </div>
 
         {{-- Driver Card --}}
         <div class="rounded-xl border border-gray-200 bg-white p-6 shadow-sm">
-            <h3 class="mb-4 text-sm font-semibold uppercase tracking-wider text-gray-500">Driver</h3>
+            <h3 class="mb-4 flex items-center gap-2 text-sm font-semibold uppercase tracking-wider text-gray-500">
+                Driver
+                @if ($driverDeleted)
+                    <span class="rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-medium normal-case text-amber-700">deleted — snapshot</span>
+                @endif
+            </h3>
             <dl class="space-y-3">
                 <div>
                     <dt class="text-xs text-gray-500">Name</dt>
-                    <dd class="text-sm font-medium text-gray-900">{{ $order->driver?->name ?? '—' }}</dd>
+                    <dd class="text-sm font-medium text-gray-900">{{ $driverName ?? '—' }}</dd>
                 </div>
                 <div>
                     <dt class="text-xs text-gray-500">Phone</dt>
-                    <dd class="text-sm text-gray-700">{{ $order->driver?->phone ?? '—' }}</dd>
+                    <dd class="text-sm text-gray-700">{{ $driverPhone ?? '—' }}</dd>
                 </div>
                 <div>
                     <dt class="text-xs text-gray-500">Car</dt>
-                    <dd class="text-sm text-gray-700">{{ $order->driver?->driverProfile?->car_model ?? '—' }}</dd>
+                    <dd class="text-sm text-gray-700">{{ $driverCar ?? '—' }}</dd>
                 </div>
                 <div>
                     <dt class="text-xs text-gray-500">Plate</dt>
-                    <dd class="text-sm text-gray-700">{{ $order->driver?->driverProfile?->car_number ?? '—' }}</dd>
+                    <dd class="text-sm text-gray-700">{{ $driverPlate ?? '—' }}</dd>
                 </div>
             </dl>
         </div>

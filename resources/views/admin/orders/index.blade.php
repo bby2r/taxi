@@ -59,8 +59,8 @@
                         <tr class="hover:bg-gray-50">
                             <td class="whitespace-nowrap px-6 py-4 font-medium text-gray-900">#{{ $order->id }}</td>
                             <td class="whitespace-nowrap px-6 py-4 text-gray-500">{{ $order->created_at->format('M d, Y H:i') }}</td>
-                            <td class="whitespace-nowrap px-6 py-4 text-gray-700">{{ $order->client?->name ?? '—' }}</td>
-                            <td class="whitespace-nowrap px-6 py-4 text-gray-700">{{ $order->driver?->name ?? '—' }}</td>
+                            <td class="whitespace-nowrap px-6 py-4 text-gray-700">{{ $order->client?->name ?? $order->client_snapshot['name'] ?? '—' }}</td>
+                            <td class="whitespace-nowrap px-6 py-4 text-gray-700">{{ $order->driver?->name ?? $order->driver_snapshot['name'] ?? '—' }}</td>
                             <td class="whitespace-nowrap px-6 py-4">
                                 @include('admin.partials.order-status-badge', ['status' => $order->status])
                             </td>

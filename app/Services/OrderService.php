@@ -51,6 +51,10 @@ class OrderService
 
         $order = Order::create([
             'client_id' => $client->id,
+            'client_snapshot' => [
+                'name' => $client->name,
+                'phone' => $client->phone,
+            ],
             'status' => OrderStatus::Searching,
             'pickup_latitude' => $pickupLat,
             'pickup_longitude' => $pickupLon,
@@ -163,9 +167,17 @@ class OrderService
                 throw new \RuntimeException('Order was not offered to this driver.');
             }
 
+            $driver->loadMissing('driverProfile');
+
             $order->update([
                 'status' => OrderStatus::Accepted,
                 'driver_id' => $driver->id,
+                'driver_snapshot' => [
+                    'name' => $driver->name,
+                    'phone' => $driver->phone,
+                    'car_model' => $driver->driverProfile?->car_model,
+                    'car_number' => $driver->driverProfile?->car_number,
+                ],
                 'accepted_at' => now(),
                 'offered_driver_id' => null,
                 'offered_at' => null,

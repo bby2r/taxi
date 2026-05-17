@@ -42,6 +42,44 @@ class Order extends Model
     use HasFactory;
 
     /**
+     * Explicit mass-assignment whitelist. The migration-added snapshot
+     * columns were silently discarded by Eloquent's default behaviour
+     * until they were listed here — the rest mirrors the orders table
+     * schema so the explicit list documents what create()/update() may
+     * write in one place.
+     *
+     * @var array<int, string>
+     */
+    protected $fillable = [
+        'client_id',
+        'client_snapshot',
+        'driver_id',
+        'driver_snapshot',
+        'status',
+        'pickup_latitude',
+        'pickup_longitude',
+        'pickup_address',
+        'dropoff_latitude',
+        'dropoff_longitude',
+        'dropoff_address',
+        'price',
+        'offered_driver_id',
+        'offered_at',
+        'declined_drivers',
+        'search_attempts',
+        'region_id',
+        'cancellation_fee',
+        'cancelled_by',
+        'cancellation_reason',
+        'commission_amount',
+        'accepted_at',
+        'arrived_at',
+        'in_progress_at',
+        'completed_at',
+        'cancelled_at',
+    ];
+
+    /**
      * Get the attributes that should be cast.
      *
      * @return array<string, string>
@@ -58,6 +96,8 @@ class Order extends Model
             'cancellation_fee' => 'integer',
             'commission_amount' => 'integer',
             'declined_drivers' => 'array',
+            'client_snapshot' => 'array',
+            'driver_snapshot' => 'array',
             'offered_at' => 'datetime',
             'accepted_at' => 'datetime',
             'arrived_at' => 'datetime',

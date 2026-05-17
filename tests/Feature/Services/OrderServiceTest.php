@@ -148,6 +148,47 @@ class OrderServiceTest extends TestCase
         $this->assertNotNull($order->accepted_at);
     }
 
+    public function test_create_order_snapshots_client_identity(): void
+    {
+        $this->createNearbyDriver();
+
+        $order = $this->service->createOrder($this->client, $this->pickupLat, $this->pickupLon);
+
+        $this->assertIsArray($order->client_snapshot);
+        $this->assertSame($this->client->name, $order->client_snapshot['name']);
+        $this->assertSame($this->client->phone, $order->client_snapshot['phone']);
+    }
+
+    public function test_accept_order_snapshots_driver_identity(): void
+    {
+        [$order, $driverUser] = $this->createOrderOfferedToDriver();
+        $driverUser->loadMissing('driverProfile');
+
+        $order = $this->service->acceptOrder($order, $driverUser);
+
+        $this->assertIsArray($order->driver_snapshot);
+        $this->assertSame($driverUser->name, $order->driver_snapshot['name']);
+        $this->assertSame($driverUser->phone, $order->driver_snapshot['phone']);
+        $this->assertSame($driverUser->driverProfile?->car_model, $order->driver_snapshot['car_model']);
+        $this->assertSame($driverUser->driverProfile?->car_number, $order->driver_snapshot['car_number']);
+    }
+
+    public function test_snapshots_survive_driver_deletion(): void
+    {
+        [$order, $driverUser] = $this->createOrderOfferedToDriver();
+        $order = $this->service->acceptOrder($order, $driverUser);
+
+        $expectedName = $driverUser->name;
+        $expectedPhone = $driverUser->phone;
+        $driverUser->delete();
+
+        $order->refresh();
+
+        $this->assertNull($order->driver_id, 'FK set null preserves order row');
+        $this->assertSame($expectedName, $order->driver_snapshot['name']);
+        $this->assertSame($expectedPhone, $order->driver_snapshot['phone']);
+    }
+
     public function test_accept_order_throws_if_not_offered_to_driver(): void
     {
         [$order] = $this->createOrderOfferedToDriver();

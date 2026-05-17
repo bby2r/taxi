@@ -23,6 +23,7 @@ import {
 } from '../api/driver';
 import {
   consumePendingDriverAction,
+  ensureLaunchActionConsumed,
   peekPendingDriverAction,
   setPendingDriverAction,
 } from '../utils/pendingNotificationAction';
@@ -234,6 +235,13 @@ function useDriverOrderState(): UseDriverOrderReturn {
   // there and a poll could race against the user's own action.
   const syncFromServer = useCallback(async (): Promise<void> => {
     if (!user) return;
+    // Hydrate pendingDriverAction from a cold-start deep link BEFORE we
+    // query the server — otherwise getPendingOffer can resolve faster
+    // than Linking.getInitialURL, the peek check sees no queued action,
+    // we set phase='offer', and the OrderOfferCard flashes for the
+    // duration of the acceptOrder round-trip that lands a beat later.
+    await ensureLaunchActionConsumed();
+
     const phase = stateRef.current.phase;
     if (
       phase === 'offer' ||
