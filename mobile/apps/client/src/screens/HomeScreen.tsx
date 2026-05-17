@@ -11,11 +11,12 @@ import {
   StatusBar,
   TouchableOpacity,
 } from 'react-native';
-import MapView, { Marker, Region } from 'react-native-maps';
+import MapView, { Region } from 'react-native-maps';
 import { useLocation, ActionButton, ClientColors, Typography, reverseGeocode } from '@taxi/shared';
 import { useOrder } from '../hooks/useOrder';
 import DriverCard from '../components/DriverCard';
 import RegionSelector from '../components/RegionSelector';
+import AnimatedDriverMarker from '../components/AnimatedDriverMarker';
 import { getCurrentPrice } from '../api/regions';
 
 function PulsingDot(): React.ReactNode {
@@ -140,11 +141,7 @@ export default function HomeScreen(): React.ReactNode {
         }}
       >
         {driverCoords && (
-          <Marker coordinate={driverCoords} title="Водитель">
-            <View style={styles.carBadge}>
-              <Text style={styles.carEmoji}>🚗</Text>
-            </View>
-          </Marker>
+          <AnimatedDriverMarker coordinate={driverCoords} title="Водитель" />
         )}
       </MapView>
 
@@ -298,19 +295,6 @@ export default function HomeScreen(): React.ReactNode {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-  },
-  carBadge: {
-    backgroundColor: ClientColors.white,
-    borderRadius: 18,
-    padding: 4,
-    shadowColor: '#000',
-    shadowOpacity: 0.2,
-    shadowRadius: 4,
-    shadowOffset: { width: 0, height: 2 },
-    elevation: 4,
-  },
-  carEmoji: {
-    fontSize: 28,
   },
   bottomCard: {
     position: 'absolute',
