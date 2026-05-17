@@ -369,7 +369,7 @@ const styles = StyleSheet.create({
   },
   regionChip: {
     flex: 1,
-    backgroundColor: ClientColors.accentTint,
+    backgroundColor: ClientColors.secondaryTint,
     borderRadius: 16,
     paddingHorizontal: 14,
     paddingVertical: 12,
@@ -383,7 +383,7 @@ const styles = StyleSheet.create({
   regionChipText: {
     fontSize: 15,
     fontWeight: '600' as const,
-    color: ClientColors.accent,
+    color: ClientColors.secondaryDark,
   },
   heroButton: {
     backgroundColor: ClientColors.primary,

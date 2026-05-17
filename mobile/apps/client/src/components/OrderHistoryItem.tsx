@@ -19,11 +19,11 @@ interface StatusBadgeConfig {
 function getStatusBadge(status: OrderStatus): StatusBadgeConfig {
   switch (status) {
     case 'completed':
-      return { label: 'Завершён', backgroundColor: ClientColors.secondaryTint, color: ClientColors.secondaryDark };
+      return { label: 'Завершён', backgroundColor: ClientColors.primaryTint, color: ClientColors.primaryDark };
     case 'cancelled':
       return { label: 'Отменён', backgroundColor: '#FFE6E6', color: '#B91C1C' };
     default:
-      return { label: 'В процессе', backgroundColor: ClientColors.accentTint, color: ClientColors.accent };
+      return { label: 'В процессе', backgroundColor: ClientColors.secondaryTint, color: ClientColors.secondaryDark };
   }
 }
 

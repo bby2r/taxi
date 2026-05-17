@@ -9,7 +9,7 @@
     "splash": {
       "image": "./assets/splash-icon.png",
       "resizeMode": "contain",
-      "backgroundColor": "#FAF7FF"
+      "backgroundColor": "#F4FBFA"
     },
     "ios": {
       "supportsTablet": false,
@@ -21,7 +21,7 @@
     "android": {
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
-        "backgroundColor": "#FAF7FF"
+        "backgroundColor": "#F4FBFA"
       },
       "package": "kg.aiyltaxi.client",
       "config": {
