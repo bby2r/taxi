@@ -323,4 +323,46 @@ class GeoServiceTest extends TestCase
 
         $this->assertCount(0, $result);
     }
+
+    #[Test]
+    public function test_fairness_tie_break_prefers_driver_with_fewer_rides_today(): void
+    {
+        $pickup = [42.8746, 74.5698];
+
+        // Two drivers at essentially the same spot (both within the default
+        // 0.5km fairness radius of each other). The "busy" one already has
+        // a completed ride today — the fresh one should win the offer.
+        // (atLocation alone sets is_online=true; calling ->online() after
+        // would re-roll the coordinates back to random.)
+        $busy = DriverProfile::factory()->atLocation(42.8748, 74.5700)->create();
+        $fresh = DriverProfile::factory()->atLocation(42.8746, 74.5702)->create();
+
+        Order::factory()->completed($busy->user)->create();
+
+        $result = $this->service->findNearestDrivers($pickup[0], $pickup[1], [], 1);
+
+        $this->assertCount(1, $result);
+        $this->assertSame($fresh->user_id, $result->first()->user_id);
+    }
+
+    #[Test]
+    public function test_meaningfully_closer_driver_wins_even_with_more_rides(): void
+    {
+        $pickup = [42.8746, 74.5698];
+
+        // The "loaded" driver is right at the pickup; the "fresh" driver is
+        // well outside the fairness bucket (~2.8km away). Distance should
+        // override the ride-count balance — otherwise the client gets a
+        // far-away driver just for fairness.
+        $loadedNearby = DriverProfile::factory()->atLocation(42.8746, 74.5700)->create();
+        DriverProfile::factory()->atLocation(42.8747, 74.6042)->create();
+
+        Order::factory()->completed($loadedNearby->user)->create();
+        Order::factory()->completed($loadedNearby->user)->create();
+
+        $result = $this->service->findNearestDrivers($pickup[0], $pickup[1], [], 1);
+
+        $this->assertCount(1, $result);
+        $this->assertSame($loadedNearby->user_id, $result->first()->user_id);
+    }
 }

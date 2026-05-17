@@ -57,6 +57,12 @@ class GeoService
     ): Collection {
         $maxRadiusKm ??= (float) Setting::getValue('max_search_radius_km', 10);
         $preAssignKm = (float) Setting::getValue('pre_assign_distance_km', 1.5);
+        // Drivers whose distance to pickup differs from the nearest one by
+        // less than this radius are treated as equally close — within that
+        // bucket the dispatcher prefers the driver with the fewest
+        // completed rides today so income spreads instead of pooling on a
+        // single driver who happens to be camping near the busy spots.
+        $fairnessRadiusKm = (float) Setting::getValue('fairness_radius_km', 0.5);
 
         $drivers = DriverProfile::online()
             ->withCoordinates()
@@ -68,12 +74,18 @@ class GeoService
                         OrderStatus::Arrived,
                         OrderStatus::InProgress,
                     ]);
-                }]);
+                }])
+                    // Count completed rides today per driver so the
+                    // tie-break sort doesn't need a second query per row.
+                    ->withCount(['driverOrders as completed_today_count' => function ($q2) {
+                        $q2->where('status', OrderStatus::Completed)
+                            ->whereDate('completed_at', today());
+                    }]);
             }])
             ->when(count($excludeIds) > 0, fn ($q) => $q->whereNotIn('user_id', $excludeIds))
             ->get();
 
-        return $drivers
+        $byDistance = $drivers
             ->filter(fn (DriverProfile $profile) => $this->isEligible($profile, $preAssignKm))
             ->map(function (DriverProfile $profile) use ($pickupLat, $pickupLon) {
                 $profile->distance_km = $this->distanceKm(
@@ -87,6 +99,39 @@ class GeoService
             })
             ->filter(fn (DriverProfile $profile) => $profile->distance_km <= $maxRadiusKm)
             ->sortBy('distance_km')
+            ->values();
+
+        if ($byDistance->isEmpty()) {
+            return $byDistance;
+        }
+
+        // Tie-break the front of the list by today's ride count. The
+        // nearest driver still wins outright when they're meaningfully
+        // closer than the runners-up; otherwise the least-loaded of the
+        // bucket gets the offer first. Drivers outside the bucket keep
+        // their distance ranking — preserves "nearest first" for the
+        // client whenever the distances meaningfully diverge.
+        $nearestDistance = (float) $byDistance->first()->distance_km;
+        $bucketThreshold = $nearestDistance + $fairnessRadiusKm;
+
+        [$bucket, $rest] = $byDistance->partition(
+            fn (DriverProfile $profile) => $profile->distance_km <= $bucketThreshold,
+        );
+
+        // Combine "fewer rides wins" (primary) with "closer wins"
+        // (tie-break inside bucket). max_search_radius_km caps distance
+        // at single digits, so multiplying ride count by 1000 guarantees
+        // the lexicographic order even with floating-point distance.
+        $bucket = $bucket
+            ->sortBy(function (DriverProfile $profile) {
+                $ridesToday = (int) ($profile->user?->completed_today_count ?? 0);
+
+                return $ridesToday * 1000 + (float) $profile->distance_km;
+            })
+            ->values();
+
+        return $bucket
+            ->concat($rest)
             ->take($limit)
             ->values();
     }
