@@ -49,6 +49,14 @@ export interface Order {
   created_at: string;
   accepted_at: string | null;
   cancelled_by: string | null;
+  // Populated only on the freshly-offered order: ISO timestamp when the
+  // server set offered_driver_id, ETA in minutes from offered driver to
+  // pickup, and the distance used to compute it. Driver app uses these
+  // to sync its in-card countdown with the server-side OfferTimeoutJob
+  // and to show "~N мин до клиента" on the offer card.
+  offered_at?: string | null;
+  eta_minutes?: number;
+  distance_km?: number;
 }
 
 export interface User {

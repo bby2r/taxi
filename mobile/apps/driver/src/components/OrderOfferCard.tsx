@@ -10,13 +10,7 @@ import {
 } from 'react-native';
 import { Order, DeclineReason, DriverColors, Typography } from '@taxi/shared';
 
-// Tear down any lingering SYSTEM_ALERT_WINDOW overlay the moment the
-// in-app card mounts. The Activity lifecycle hook in OfferOverlayModule
-// already hides the overlay on foreground entry, but its timing isn't
-// always quick enough — drivers were reporting a brief window where the
-// native overlay (30 s countdown) and the in-app card (was 20 s, now
-// also 30) showed at the same time. Calling hideOfferOverlay here
-// guarantees the card owns the surface as soon as it renders.
+// Lazy-required so iOS / older builds without these modules still render.
 let OfferOverlay: typeof import('../../modules/offer-overlay/src') | null = null;
 if (Platform.OS === 'android') {
   try {
@@ -26,17 +20,28 @@ if (Platform.OS === 'android') {
   }
 }
 
+let Speech: typeof import('expo-speech') | null = null;
+try {
+  Speech = require('expo-speech');
+} catch {
+  Speech = null;
+}
+
 interface OrderOfferCardProps {
   order: Order;
   onAccept: () => void;
   onDecline: (reason: DeclineReason) => void;
-  // Match the server-side OfferTimeoutJob window (30 s intra-district,
-  // 45 s inter-district). Older default was 20 s, but that meant the
-  // native SYSTEM_ALERT_WINDOW overlay (which reads server expires_in
-  // and shows 30 s) and the in-app card displayed two different
-  // countdowns side-by-side — drivers saw "20 / 30" simultaneously
-  // and didn't trust either.
+  // Defaults to 30 s to match the server-side OfferTimeoutJob (45 s for
+  // inter-district orders). Caller can override; the actual countdown
+  // is also adjusted down by the elapsed time since order.offered_at so
+  // the in-card timer never goes longer than what the server still
+  // accepts.
   countdownSeconds?: number;
+  // Optimistic UI: parent passes true between tap and API resolution so
+  // the buttons render disabled with "Принимаю..." / "Отказываю..."
+  // instead of a spinner. Removes the awkward "did my tap register"
+  // pause on flaky networks.
+  loading?: boolean;
 }
 
 const REASON_OPTIONS: { value: DeclineReason; label: string }[] = [
@@ -51,15 +56,54 @@ export default function OrderOfferCard({
   onAccept,
   onDecline,
   countdownSeconds = 30,
+  loading = false,
 }: OrderOfferCardProps): React.ReactNode {
-  const [remaining, setRemaining] = useState(countdownSeconds);
+  // Compute the initial countdown from the server's offered_at — if a
+  // few seconds elapsed in flight (push delivery, app cold-start), the
+  // in-card timer starts at the actual remaining window instead of a
+  // fresh 30 s. Without this the driver could accept at "5 s left" on
+  // their card while the server already cancelled the offer 5 s ago.
+  const initialRemaining = React.useMemo(() => {
+    if (!order.offered_at) return countdownSeconds;
+    const offeredMs = new Date(order.offered_at).getTime();
+    if (!Number.isFinite(offeredMs)) return countdownSeconds;
+    const elapsed = Math.max(0, Math.floor((Date.now() - offeredMs) / 1000));
+    return Math.max(1, countdownSeconds - elapsed);
+  }, [order.offered_at, countdownSeconds]);
+
+  const [remaining, setRemaining] = useState(initialRemaining);
   const [reasonSheetOpen, setReasonSheetOpen] = useState(false);
   const opacityAnim = useRef(new Animated.Value(1)).current;
   const declineCalledRef = useRef(false);
 
+  // Hide any lingering SYSTEM_ALERT_WINDOW overlay the moment the in-app
+  // card mounts — the Activity lifecycle hook does this too but its
+  // timing isn't always quick enough.
   useEffect(() => {
     OfferOverlay?.hideOfferOverlay();
   }, []);
+
+  // Voice TTS for handsfree review on the road. Speaks the address +
+  // price + ETA once when the offer arrives. Silent fail when the
+  // speech module isn't bundled.
+  useEffect(() => {
+    if (!Speech) return;
+    const address = order.pickup_address ?? 'неизвестный адрес';
+    const eta = order.eta_minutes ? `, ${order.eta_minutes} минут до клиента` : '';
+    const announcement = `Новый заказ. Подача: ${address}. ${order.price} сом${eta}.`;
+    try {
+      Speech.speak(announcement, { language: 'ru-RU', rate: 1.0 });
+    } catch {
+      // best effort
+    }
+    return () => {
+      try {
+        Speech?.stop();
+      } catch {
+        // ignore
+      }
+    };
+  }, [order.id, order.pickup_address, order.price, order.eta_minutes]);
 
   useEffect(() => {
     const interval = setInterval(() => {
@@ -86,16 +130,15 @@ export default function OrderOfferCard({
   }, [remaining, countdownSeconds, opacityAnim]);
 
   const handlePickReason = (reason: DeclineReason): void => {
-    if (declineCalledRef.current) {
-      return;
-    }
-    declineCalledRef.current = true;
     setReasonSheetOpen(false);
-    onDecline(reason);
+    if (!declineCalledRef.current) {
+      declineCalledRef.current = true;
+      onDecline(reason);
+    }
   };
 
   return (
-    <View style={styles.card}>
+    <View style={styles.container}>
       <Animated.View style={[styles.countdownCircle, { opacity: opacityAnim }]}>
         <Text style={[Typography.h2, { color: DriverColors.primary }]}>{remaining}</Text>
       </Animated.View>
@@ -113,6 +156,13 @@ export default function OrderOfferCard({
               : 'В селе'}
           </Text>
         </View>
+        {typeof order.eta_minutes === 'number' && (
+          <View style={[styles.badge, styles.badgeEta]}>
+            <Text style={[Typography.caption, styles.badgeText]}>
+              ~{order.eta_minutes} мин до клиента
+            </Text>
+          </View>
+        )}
       </View>
 
       <Text style={[Typography.caption, { color: DriverColors.textMuted, marginBottom: 4 }]}>
@@ -139,15 +189,19 @@ export default function OrderOfferCard({
 
       <View style={styles.buttonRow}>
         <TouchableOpacity
-          style={[styles.button, styles.acceptButton]}
+          style={[styles.button, styles.acceptButton, loading && styles.buttonLoading]}
           onPress={onAccept}
+          disabled={loading}
           activeOpacity={0.8}
         >
-          <Text style={[Typography.button, { color: DriverColors.white }]}>Принять</Text>
+          <Text style={[Typography.button, { color: DriverColors.white }]}>
+            {loading ? 'Принимаю...' : 'Принять'}
+          </Text>
         </TouchableOpacity>
         <TouchableOpacity
-          style={[styles.button, styles.declineButton]}
+          style={[styles.button, styles.declineButton, loading && styles.buttonLoading]}
           onPress={() => setReasonSheetOpen(true)}
+          disabled={loading}
           activeOpacity={0.8}
         >
           <Text style={[Typography.button, { color: DriverColors.textSecondary }]}>
@@ -163,33 +217,25 @@ export default function OrderOfferCard({
         onRequestClose={() => setReasonSheetOpen(false)}
       >
         <TouchableOpacity
-          style={styles.sheetBackdrop}
           activeOpacity={1}
+          style={styles.sheetBackdrop}
           onPress={() => setReasonSheetOpen(false)}
         >
           <TouchableOpacity activeOpacity={1} style={styles.sheet}>
-            <Text style={[Typography.h3, styles.sheetTitle]}>Причина отказа</Text>
+            <Text style={[Typography.h3, { marginBottom: 16, color: DriverColors.textPrimary }]}>
+              Причина отказа
+            </Text>
             {REASON_OPTIONS.map((opt) => (
               <TouchableOpacity
                 key={opt.value}
-                style={styles.sheetItem}
+                style={styles.reasonOption}
                 onPress={() => handlePickReason(opt.value)}
-                activeOpacity={0.7}
               >
                 <Text style={[Typography.body, { color: DriverColors.textPrimary }]}>
                   {opt.label}
                 </Text>
               </TouchableOpacity>
             ))}
-            <TouchableOpacity
-              style={styles.sheetCancel}
-              onPress={() => setReasonSheetOpen(false)}
-              activeOpacity={0.7}
-            >
-              <Text style={[Typography.button, { color: DriverColors.textMuted }]}>
-                Отмена
-              </Text>
-            </TouchableOpacity>
           </TouchableOpacity>
         </TouchableOpacity>
       </Modal>
@@ -198,87 +244,88 @@ export default function OrderOfferCard({
 }
 
 const styles = StyleSheet.create({
-  card: {
+  container: {
     backgroundColor: DriverColors.cardBackground,
     borderRadius: 20,
     padding: 20,
-    position: 'relative',
+    marginHorizontal: 16,
   },
   countdownCircle: {
-    position: 'absolute',
-    top: 16,
-    right: 16,
-    width: 48,
-    height: 48,
-    borderRadius: 24,
-    borderWidth: 3,
-    borderColor: DriverColors.primary,
-    justifyContent: 'center',
+    width: 60,
+    height: 60,
+    borderRadius: 30,
+    backgroundColor: DriverColors.background,
     alignItems: 'center',
+    justifyContent: 'center',
+    alignSelf: 'flex-end',
+    marginBottom: 8,
   },
   badgeRow: {
     flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
     marginBottom: 12,
   },
   badge: {
+    alignSelf: 'flex-start',
     paddingHorizontal: 10,
     paddingVertical: 4,
-    borderRadius: 8,
+    borderRadius: 12,
   },
   badgeVillage: {
-    backgroundColor: `${DriverColors.primary}22`,
+    backgroundColor: DriverColors.primary,
   },
   badgeRegional: {
-    backgroundColor: `${DriverColors.success}22`,
-  },
-  badgeText: {
-    color: DriverColors.textPrimary,
-    fontWeight: '600',
-  },
-  buttonRow: {
-    flexDirection: 'row',
-    gap: 10,
-  },
-  button: {
-    paddingVertical: 14,
-    borderRadius: 12,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  acceptButton: {
-    flex: 2,
     backgroundColor: DriverColors.success,
   },
-  declineButton: {
-    flex: 1,
+  badgeEta: {
+    backgroundColor: DriverColors.cardBackground,
     borderWidth: 1,
     borderColor: DriverColors.border,
   },
+  badgeText: {
+    color: DriverColors.textPrimary,
+    fontSize: 11,
+    fontWeight: '700' as const,
+  },
+  buttonRow: {
+    flexDirection: 'row',
+    gap: 12,
+    marginTop: 12,
+  },
+  button: {
+    flex: 1,
+    paddingVertical: 16,
+    borderRadius: 12,
+    alignItems: 'center',
+  },
+  acceptButton: {
+    backgroundColor: DriverColors.primary,
+  },
+  declineButton: {
+    backgroundColor: DriverColors.cardBackground,
+    borderWidth: 1,
+    borderColor: DriverColors.border,
+  },
+  buttonLoading: {
+    opacity: 0.6,
+  },
   sheetBackdrop: {
     flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.45)',
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
     justifyContent: 'flex-end',
   },
   sheet: {
-    backgroundColor: DriverColors.background,
-    borderTopLeftRadius: 24,
-    borderTopRightRadius: 24,
-    paddingHorizontal: 20,
+    backgroundColor: DriverColors.cardBackground,
+    borderTopLeftRadius: 20,
+    borderTopRightRadius: 20,
+    padding: 20,
     paddingTop: 20,
-    paddingBottom: 34,
+    paddingBottom: 32,
   },
-  sheetTitle: {
-    color: DriverColors.textPrimary,
-    marginBottom: 12,
-  },
-  sheetItem: {
-    paddingVertical: 14,
+  reasonOption: {
+    paddingVertical: 16,
     borderBottomWidth: 1,
     borderBottomColor: DriverColors.border,
-  },
-  sheetCancel: {
-    marginTop: 16,
-    alignItems: 'center',
-    paddingVertical: 12,
   },
 });

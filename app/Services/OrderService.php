@@ -113,10 +113,11 @@ class OrderService
         }
 
         $driver = $drivers->first();
+        $offeredAt = now();
 
         $order->update([
             'offered_driver_id' => $driver->user_id,
-            'offered_at' => now(),
+            'offered_at' => $offeredAt,
         ]);
 
         $timeout = $order->region_id ? 45 : 30;
@@ -124,13 +125,17 @@ class OrderService
         OfferTimeoutJob::dispatch($order->id, $driver->user_id)
             ->delay(now()->addSeconds($timeout));
 
+        // ETA driver → pickup at typical 30 km/h city speed. distance_km
+        // is appended by GeoService.findNearestDrivers so no extra query.
+        $etaMinutes = (int) max(1, round(((float) ($driver->distance_km ?? 0)) / 30 * 60));
+
         event(new OrderOfferedToDriver($order, $driver->user_id));
 
         $driverUser = User::find($driver->user_id);
         if ($driverUser) {
             $body = $order->pickup_address
-                ? "Подача: {$order->pickup_address} · {$order->price} сом"
-                : "Новый заказ · {$order->price} сом";
+                ? "Подача: {$order->pickup_address} · {$order->price} сом · ~{$etaMinutes} мин"
+                : "Новый заказ · {$order->price} сом · ~{$etaMinutes} мин";
 
             $this->pushService->sendOfferToDriver(
                 $driverUser,
@@ -140,12 +145,20 @@ class OrderService
                     'order_id' => $order->id,
                     'type' => 'new_order',
                     'expires_in' => $timeout,
+                    // ISO timestamp the offer was made — driver app
+                    // computes remaining = expires_in − (now − offered_at)
+                    // so its countdown stays in sync with the server's
+                    // OfferTimeoutJob (no longer "30 s on the card while
+                    // 24 s left on the server").
+                    'offered_at' => $offeredAt->toIso8601String(),
                     // Used by the driver app's background notification task
                     // to populate the SYSTEM_ALERT_WINDOW overlay without a
                     // round-trip to /orders/pending-offer (which the OS may
                     // not let a brief background JS task complete in time).
                     'pickup_address' => $order->pickup_address,
                     'price' => (int) $order->price,
+                    'eta_minutes' => $etaMinutes,
+                    'distance_km' => (float) ($driver->distance_km ?? 0),
                 ],
             );
         }

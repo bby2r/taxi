@@ -720,10 +720,14 @@ function useDriverOrderState(): UseDriverOrderReturn {
 
       // 422 = order is no longer offered to us (server-side timeout fired,
       // another driver took it, or the client cancelled while we were
-      // tapping). Drop back to online_idle and tell the driver.
+      // tapping). Drop back to online_idle and surface a top-of-screen
+      // toast instead of a modal Alert — Alert blocks the entire UI
+      // and felt punitive for a race the driver didn't lose by their
+      // own fault. setError lights up the existing inline danger
+      // banner in HomeScreen.
       if (status === 422) {
         setState({ phase: 'online_idle', order: null });
-        Alert.alert('Заказ уже недоступен', 'Заказ уже принял другой водитель или истекло время.');
+        setError('Заказ уже принял другой водитель');
         setLoading(false);
         return;
       }

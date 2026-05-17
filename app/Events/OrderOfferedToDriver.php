@@ -54,6 +54,10 @@ class OrderOfferedToDriver implements ShouldBroadcast
             'pickup_longitude' => $this->order->pickup_longitude,
             'pickup_address' => $this->order->pickup_address,
             'price' => $this->order->price,
+            // Mirror the FCM payload so the driver app's countdown stays
+            // in sync with the server-side OfferTimeoutJob regardless of
+            // whether the offer event arrives via Pusher or via FCM.
+            'offered_at' => $this->order->offered_at?->toIso8601String(),
         ];
     }
 }

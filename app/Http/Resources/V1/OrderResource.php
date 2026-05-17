@@ -59,6 +59,11 @@ class OrderResource extends JsonResource
             'completed_at' => $this->completed_at?->toISOString(),
             'cancelled_at' => $this->cancelled_at?->toISOString(),
             'created_at' => $this->created_at->toISOString(),
+            // Only meaningful while the order is being offered — driver
+            // app uses this to sync its countdown with the server-side
+            // OfferTimeoutJob (so the in-card timer doesn't get out of
+            // sync with what the server is actually waiting for).
+            'offered_at' => $this->offered_at?->toISOString(),
         ];
     }
 }

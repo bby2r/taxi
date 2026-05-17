@@ -390,6 +390,7 @@ export default function HomeScreen(): React.ReactNode {
             order={state.order}
             onAccept={acceptOffer}
             onDecline={declineOffer}
+            loading={loading}
           />
         </View>
       )}

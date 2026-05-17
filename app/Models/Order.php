@@ -9,6 +9,7 @@ use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\HasMany;
 
 #[Fillable([
     'client_id',
@@ -137,6 +138,14 @@ class Order extends Model
     public function offeredDriver(): BelongsTo
     {
         return $this->belongsTo(User::class, 'offered_driver_id');
+    }
+
+    /**
+     * @return HasMany<OrderDecline, $this>
+     */
+    public function declines(): HasMany
+    {
+        return $this->hasMany(OrderDecline::class)->latest('created_at');
     }
 
     /**

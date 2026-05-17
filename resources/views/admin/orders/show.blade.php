@@ -145,4 +145,33 @@
             </div>
         </dl>
     </div>
+
+    {{-- Decline history — why drivers passed on this order. Useful for
+         spotting mismatched offers (too_far on every driver = dispatch
+         radius too wide, etc.). --}}
+    @if ($order->declines->isNotEmpty())
+        <div class="mb-6 rounded-xl border border-gray-200 bg-white p-6 shadow-sm">
+            <h3 class="mb-4 text-sm font-semibold uppercase tracking-wider text-gray-500">
+                Declines ({{ $order->declines->count() }})
+            </h3>
+            <table class="min-w-full text-sm">
+                <thead>
+                    <tr class="text-left text-xs uppercase tracking-wider text-gray-500">
+                        <th class="py-2 pr-4">Driver</th>
+                        <th class="py-2 pr-4">Reason</th>
+                        <th class="py-2 pr-4">When</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach ($order->declines as $decline)
+                        <tr class="border-t border-gray-100">
+                            <td class="py-2 pr-4 text-gray-900">{{ $decline->driver?->name ?? '—' }}</td>
+                            <td class="py-2 pr-4 text-gray-700">{{ $decline->reason ?? '—' }}</td>
+                            <td class="py-2 pr-4 text-gray-500">{{ $decline->created_at?->format('M d, H:i:s') ?? '—' }}</td>
+                        </tr>
+                    @endforeach
+                </tbody>
+            </table>
+        </div>
+    @endif
 @endsection

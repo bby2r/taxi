@@ -37,8 +37,12 @@ export function useDriverLocation({ enabled }: UseDriverLocationOptions): Locati
       subscription = await Location.watchPositionAsync(
         {
           accuracy: Location.Accuracy.High,
-          distanceInterval: 5,
-          timeInterval: 5000,
+          // Tightened from 5/5000ms — at city speed (~50 km/h ≈ 14 m/s)
+          // the old setting only updated every ~70 m, which made the
+          // client's animated marker visibly skip. 3 m / 2 s keeps the
+          // tween smooth without hammering GPS.
+          distanceInterval: 3,
+          timeInterval: 2000,
         },
         (loc) => {
           coordsRef.current = {
@@ -49,7 +53,10 @@ export function useDriverLocation({ enabled }: UseDriverLocationOptions): Locati
         }
       );
 
-      // Send to server every 10s
+      // Upload every 3 s. Old value was 10 s; with the client side now
+      // tweening between fixes over 1.2 s, the marker would freeze for
+      // ~8 s out of every 10. 3 s leaves enough headroom for the tween
+      // animation to finish before the next position lands.
       intervalRef.current = setInterval(async () => {
         if (coordsRef.current) {
           try {
@@ -62,7 +69,7 @@ export function useDriverLocation({ enabled }: UseDriverLocationOptions): Locati
             // Silent — next interval retries
           }
         }
-      }, 10000);
+      }, 3000);
     })();
 
     return () => {

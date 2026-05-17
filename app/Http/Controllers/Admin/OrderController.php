@@ -36,7 +36,7 @@ class OrderController extends Controller
      */
     public function show(Order $order): View
     {
-        $order->load(['client', 'driver.driverProfile']);
+        $order->load(['client', 'driver.driverProfile', 'declines.driver']);
 
         return view('admin.orders.show', compact('order'));
     }
