@@ -45,6 +45,15 @@ class OfferOverlayModule : Module() {
             appContext.reactContext?.let { OfferOverlayManager.openSettings(it) }
         }
 
+        Function("isIgnoringBatteryOptimizations") {
+            val context = appContext.reactContext ?: return@Function true
+            OfferOverlayManager.isIgnoringBatteryOptimizations(context)
+        }
+
+        Function("requestIgnoreBatteryOptimizations") {
+            appContext.reactContext?.let { OfferOverlayManager.requestIgnoreBatteryOptimizations(it) }
+        }
+
         Function("showOffer") { params: Map<String, Any?> ->
             appContext.reactContext?.let { context ->
                 val orderId = (params["orderId"] as? Number)?.toInt() ?: -1

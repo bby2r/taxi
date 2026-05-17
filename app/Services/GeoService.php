@@ -122,11 +122,18 @@ class GeoService
         // (tie-break inside bucket). max_search_radius_km caps distance
         // at single digits, so multiplying ride count by 1000 guarantees
         // the lexicographic order even with floating-point distance.
+        // Per-shift declines add a small weight so drivers cherry-picking
+        // offers get deprioritised within their bucket — kinder than
+        // the old hard-block-after-5-declines penalty (which sent
+        // drivers offline for 2 h).
         $bucket = $bucket
             ->sortBy(function (DriverProfile $profile) {
                 $ridesToday = (int) ($profile->user?->completed_today_count ?? 0);
+                $shiftDeclines = (int) ($profile->shift_declines_count ?? 0);
 
-                return $ridesToday * 1000 + (float) $profile->distance_km;
+                return $ridesToday * 1000
+                    + $shiftDeclines * 100
+                    + (float) $profile->distance_km;
             })
             ->values();
 

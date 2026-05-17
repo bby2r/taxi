@@ -384,6 +384,16 @@ function useDriverOrderState(): UseDriverOrderReturn {
       // Same-offer Pusher echo while already on the card — no-op.
       if (cur.phase === 'offer' && cur.order.id === order.id) return;
 
+      // Stacked-offers guard: a DIFFERENT offer arrived while the driver
+      // is still looking at the active one. Replacing the card would
+      // mean the driver might tap Принять thinking they're accepting
+      // the offer they were reading, and actually accept the new one.
+      // Drop the new offer — server will re-offer to next driver after
+      // its OfferTimeoutJob fires (30 s); if our driver eventually
+      // declines/times-out the current card, syncFromServer picks the
+      // fresh one up on the next pull.
+      if (cur.phase === 'offer' && cur.order.id !== order.id) return;
+
       // Driver already tapped Принять / Отказаться on the overlay; the
       // queued action will be picked up by the drainer on the next
       // AppState 'active' transition. Skip the visible card mount.

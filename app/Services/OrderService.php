@@ -261,8 +261,18 @@ class OrderService
     }
 
     /**
-     * Increment the driver's shift decline counter and block them
-     * once they hit the configured threshold. Timeouts do not count.
+     * Increment the driver's shift decline counter. Timeouts don't count
+     * — they happen when the driver was unable to react in time, not
+     * when they actively rejected a ride.
+     *
+     * Used to be a hard block at 5 declines (off-line for 2 h) but that
+     * was punitive and shipped drivers home for a slow afternoon. The
+     * counter is now strictly a ranking signal — GeoService.findNearestDrivers
+     * deprioritises drivers with high recent declines within the same
+     * fairness bucket, but they stay online and can still pick up the
+     * next round of offers. The decline_block_threshold setting is kept
+     * but only used as a soft sort weight by GeoService now; the
+     * blocked_until hard cutoff is left for admin-imposed bans.
      */
     private function applyDeclinePenalty(User $driver, string $reason): void
     {
@@ -275,17 +285,9 @@ class OrderService
             return;
         }
 
-        $threshold = (int) Setting::getValue('decline_block_threshold', 5);
-        $blockHours = (int) Setting::getValue('decline_block_hours', 2);
-        $newCount = $profile->shift_declines_count + 1;
-
-        $update = ['shift_declines_count' => $newCount];
-        if ($newCount >= $threshold) {
-            $update['blocked_until'] = now()->addHours($blockHours);
-            $update['is_online'] = false;
-        }
-
-        $profile->update($update);
+        $profile->update([
+            'shift_declines_count' => $profile->shift_declines_count + 1,
+        ]);
     }
 
     /**

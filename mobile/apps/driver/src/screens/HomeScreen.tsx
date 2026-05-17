@@ -30,8 +30,10 @@ import {
   isOfferOverlayAvailable,
   hasOverlayPermission,
   openOverlaySettings,
+  isIgnoringBatteryOptimizations,
 } from '../../modules/offer-overlay/src';
 import OrderOfferCard from '../components/OrderOfferCard';
+import PermissionGate from '../components/PermissionGate';
 
 type NavigationProp = CompositeNavigationProp<
   BottomTabNavigationProp<DriverTabParamList, 'DriverHome'>,
@@ -57,6 +59,7 @@ export default function HomeScreen(): React.ReactNode {
   const pushStatus = usePushStatus();
   const [fsiStatus, setFsiStatus] = useState<FullScreenIntentStatus>('unknown');
   const [overlayGranted, setOverlayGranted] = useState<boolean>(true);
+  const [permissionGateVisible, setPermissionGateVisible] = useState(false);
 
   // Android 14+ requires a separate manual grant for full-screen
   // notifications. Without it the offer notification falls back to a
@@ -129,7 +132,7 @@ export default function HomeScreen(): React.ReactNode {
     driverLocation.longitude,
   ]);
 
-  const handleToggle = async (): Promise<void> => {
+  const performToggle = async (): Promise<void> => {
     const { status } = await Location.requestForegroundPermissionsAsync();
     if (status !== 'granted') {
       Alert.alert('Ошибка', 'Необходим доступ к геолокации');
@@ -139,6 +142,26 @@ export default function HomeScreen(): React.ReactNode {
       accuracy: Location.Accuracy.Balanced,
     });
     await toggleOnline(loc.coords.latitude, loc.coords.longitude);
+  };
+
+  const handleToggle = async (): Promise<void> => {
+    // Going OFFLINE — skip the permission gate; revoking shift doesn't
+    // need overlay/notification grants.
+    if (isOnline) {
+      await performToggle();
+      return;
+    }
+    // Going ONLINE — block until critical permissions are in place,
+    // otherwise the driver sits on shift with offers silently dropping.
+    if (Platform.OS === 'android') {
+      const overlayOk = isOfferOverlayAvailable() ? hasOverlayPermission() : true;
+      const batteryOk = isIgnoringBatteryOptimizations();
+      if (!overlayOk || !batteryOk) {
+        setPermissionGateVisible(true);
+        return;
+      }
+    }
+    await performToggle();
   };
 
   const handleRecenter = (): void => {
@@ -394,6 +417,15 @@ export default function HomeScreen(): React.ReactNode {
           />
         </View>
       )}
+
+      <PermissionGate
+        visible={permissionGateVisible}
+        onResolved={() => {
+          setPermissionGateVisible(false);
+          void performToggle();
+        }}
+        onDismiss={() => setPermissionGateVisible(false)}
+      />
     </View>
   );
 }

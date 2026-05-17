@@ -6,6 +6,8 @@ import { Platform } from 'react-native';
 let NativeModule: {
   hasOverlayPermission: () => boolean;
   openOverlaySettings: () => void;
+  isIgnoringBatteryOptimizations: () => boolean;
+  requestIgnoreBatteryOptimizations: () => void;
   showOffer: (params: {
     orderId: number;
     address: string;
@@ -34,6 +36,14 @@ export function hasOverlayPermission(): boolean {
 
 export function openOverlaySettings(): void {
   NativeModule?.openOverlaySettings();
+}
+
+export function isIgnoringBatteryOptimizations(): boolean {
+  return NativeModule ? NativeModule.isIgnoringBatteryOptimizations() : true;
+}
+
+export function requestIgnoreBatteryOptimizations(): void {
+  NativeModule?.requestIgnoreBatteryOptimizations();
 }
 
 export function showOfferOverlay(params: {

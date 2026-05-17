@@ -12,6 +12,7 @@ import android.os.Build
 import android.os.CountDownTimer
 import android.os.Handler
 import android.os.Looper
+import android.os.PowerManager
 import android.os.VibrationEffect
 import android.os.Vibrator
 import android.os.VibratorManager
@@ -91,6 +92,42 @@ object OfferOverlayManager {
     }
 
     /**
+     * Battery optimization: returns true if the app is on the OS's
+     * "don't optimise" list. On aggressive OEMs (Xiaomi, Samsung,
+     * Huawei) being optimized means the foreground service can get
+     * killed and offer pushes / Pusher events stop arriving while
+     * the driver thinks they're still on shift.
+     */
+    fun isIgnoringBatteryOptimizations(context: Context): Boolean {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.M) return true
+        val pm = context.getSystemService(Context.POWER_SERVICE) as? PowerManager ?: return true
+        return pm.isIgnoringBatteryOptimizations(context.packageName)
+    }
+
+    /**
+     * Opens the "Battery optimization" allow-list dialog so the driver
+     * can flip the toggle in one tap. Falls back to the general battery
+     * settings if the request intent is rejected (some MIUI builds).
+     */
+    fun requestIgnoreBatteryOptimizations(context: Context) {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.M) return
+        try {
+            val intent = Intent(Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS)
+                .setData(Uri.parse("package:${context.packageName}"))
+                .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            context.startActivity(intent)
+        } catch (_: Exception) {
+            try {
+                val intent = Intent(Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS)
+                    .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                context.startActivity(intent)
+            } catch (_: Exception) {
+                // ignore
+            }
+        }
+    }
+
+    /**
      * Show the bottom-sheet overlay. Always posts to the main looper so
      * it's safe to call from a service / background thread / JS bridge.
      */
@@ -135,6 +172,15 @@ object OfferOverlayManager {
         // second view on top of the first — the user-visible "double
         // card" bug).
         if (currentOrderId == orderId && overlayView != null) {
+            return
+        }
+
+        // Stacked-offers guard: a different offer is already on screen.
+        // Don't preempt — the driver is reading or about to tap on the
+        // active one, and replacing it under their finger would convert
+        // their next tap into an accept for an offer they hadn't read.
+        // Server re-offers to the next driver after OfferTimeoutJob.
+        if (currentOrderId > 0 && overlayView != null) {
             return
         }
 

@@ -477,8 +477,14 @@ class OrderServiceTest extends TestCase
         $this->assertSame(0, $driverUser->driverProfile->fresh()->shift_declines_count);
     }
 
-    public function test_fifth_decline_blocks_driver_for_two_hours(): void
+    public function test_declines_increment_counter_without_hard_block(): void
     {
+        // Used to assert a 2h block at the 5th decline; that hard cutoff
+        // was punitive (offline for a slow afternoon) and got replaced
+        // with a soft ranking signal in GeoService. The counter still
+        // increments — admins can use it for thresholded actions and
+        // dispatch uses it as a tie-break weight inside the fairness
+        // bucket.
         [$driverUser] = $this->createNearbyDriver();
         $driverUser->driverProfile->update(['shift_declines_count' => 4]);
 
@@ -486,10 +492,9 @@ class OrderServiceTest extends TestCase
         $this->service->declineOrder($order, $driverUser, 'too_far');
 
         $profile = $driverUser->driverProfile->fresh();
-        $this->assertNotNull($profile->blocked_until);
-        $this->assertTrue($profile->blocked_until->greaterThan(now()->addMinutes(115)));
-        $this->assertTrue($profile->blocked_until->lessThan(now()->addMinutes(125)));
-        $this->assertFalse($profile->is_online);
+        $this->assertSame(5, $profile->shift_declines_count);
+        $this->assertNull($profile->blocked_until, 'soft penalty model: no auto-block on decline');
+        $this->assertTrue($profile->is_online, 'driver stays online — declines are a ranking signal');
     }
 
     public function test_blocked_driver_is_excluded_from_offers(): void
