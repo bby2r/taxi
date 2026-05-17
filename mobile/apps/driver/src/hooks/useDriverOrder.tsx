@@ -23,6 +23,7 @@ import {
 } from '../api/driver';
 import {
   consumePendingDriverAction,
+  peekPendingDriverAction,
   setPendingDriverAction,
 } from '../utils/pendingNotificationAction';
 import { subscribeForegroundEvents } from '../lib/notifee';
@@ -260,6 +261,34 @@ function useDriverOrderState(): UseDriverOrderReturn {
     try {
       const pending = await getPendingOffer();
       if (pending) {
+        // Driver already tapped Принять / Отказаться on the overlay or
+        // the notification action button — the action is queued via the
+        // deep-link path. Dispatch the API call directly here and skip
+        // showing the card altogether (which would otherwise flash in
+        // for the duration of the round-trip). The regular drainer
+        // can't help because it only fires on phase='offer', and we
+        // don't want to enter that phase if the choice is already made.
+        const queued = peekPendingDriverAction(pending.id);
+        if (queued === 'accept') {
+          consumePendingDriverAction(pending.id);
+          try {
+            const accepted = await acceptOrder(pending.id);
+            setState({ phase: 'active', order: accepted });
+          } catch {
+            // server rejected — surface the card so the driver can retry
+            setState({ phase: 'offer', order: pending });
+          }
+          return;
+        }
+        if (queued === 'decline') {
+          consumePendingDriverAction(pending.id);
+          try {
+            await declineOrder(pending.id, 'personal');
+          } catch {
+            // best effort
+          }
+          return;
+        }
         setState({ phase: 'offer', order: pending });
       }
     } catch {
@@ -322,13 +351,35 @@ function useDriverOrderState(): UseDriverOrderReturn {
   const handleDriverOffered = useCallback((data: unknown) => {
     const orderData = data as { order: Order } | Order;
     const order = 'order' in orderData ? orderData.order : orderData;
+    const cur = stateRef.current;
+
+    // Drop stale offer events that arrive after we've already moved past
+    // the offer phase for this very order. Pusher reconnects (e.g. when
+    // the app foregrounds from the deep-link tap on a notification Accept
+    // button) replay buffered events — including the original
+    // order.offered — which would otherwise re-fire phase='offer' for
+    // an order we just accepted. The visible symptom was the OrderOfferCard
+    // flashing in for ~1s on the active-ride screen.
+    if (
+      cur.phase === 'active' ||
+      cur.phase === 'arrived' ||
+      cur.phase === 'in_progress' ||
+      cur.phase === 'completed'
+    ) {
+      if (cur.order?.id === order.id) return;
+    }
+    // Same-offer Pusher echo while already on the card — no-op.
+    if (cur.phase === 'offer' && cur.order.id === order.id) return;
+
+    // Driver already tapped Принять / Отказаться on the overlay; the
+    // queued action will be picked up by the drainer on the next
+    // AppState 'active' transition. Skip the visible card mount.
+    if (peekPendingDriverAction(order.id) !== null) return;
+
     setState({ phase: 'offer', order });
-    // Sound + vibration are now driven by phase-tied effects below — they
-    // start when phase becomes 'offer' and stop the moment it leaves.
-    // No more local notification: the OrderOfferCard is the in-app surface,
-    // and the server-side Expo push covers the case when the app is in
-    // the background. That removes the duplicate notification the driver
-    // saw when the app was already foregrounded.
+    // Sound + vibration + bottom-sheet overlay are driven by phase-tied
+    // effects below — they start when phase becomes 'offer' and stop the
+    // moment it leaves.
   }, []);
 
   const handleOrderCancelled = useCallback((data: unknown) => {

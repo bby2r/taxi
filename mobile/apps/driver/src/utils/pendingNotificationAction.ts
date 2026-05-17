@@ -37,3 +37,15 @@ export function consumePendingDriverAction(orderId: number): 'accept' | 'decline
 export function clearPendingDriverAction(): void {
   pending = null;
 }
+
+/**
+ * Non-destructive variant. Returns the queued kind for an order without
+ * clearing the queue — useful when sync code wants to short-circuit
+ * showing the offer card (since the driver already chose) but lets the
+ * regular drainer actually consume + dispatch.
+ */
+export function peekPendingDriverAction(orderId: number): 'accept' | 'decline' | null {
+  if (!pending) return null;
+  if (pending.orderId !== orderId) return null;
+  return pending.kind;
+}
