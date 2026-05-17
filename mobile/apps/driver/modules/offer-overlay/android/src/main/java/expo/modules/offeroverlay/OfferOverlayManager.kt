@@ -49,6 +49,12 @@ object OfferOverlayManager {
     private var windowManager: WindowManager? = null
     private var countdown: CountDownTimer? = null
     private var mediaPlayer: MediaPlayer? = null
+    // Tracks the orderId currently displayed so a second showOverlay call
+    // for the same offer (e.g. native FCM fires first, then the JS Pusher
+    // handler tries to re-render the same offer in background) is a no-op
+    // instead of tearing down + remounting and risking two views on
+    // screen when the underlying WindowManager removeView call fails.
+    private var currentOrderId: Int = -1
     // Application context captured on showOverlay so the teardown path
     // (removeOverlayOnMain) can stop the vibrator without needing one
     // passed in — the JS module's hideOffer/dismissOffer signatures
@@ -122,6 +128,16 @@ object OfferOverlayManager {
             return
         }
 
+        // De-dup: this same offer is already on screen. The FCM service
+        // and the Pusher-driven JS path both call showOverlay for the
+        // same orderId; without this guard the second call removes and
+        // re-adds the view (or, if removeView silently fails, lands a
+        // second view on top of the first — the user-visible "double
+        // card" bug).
+        if (currentOrderId == orderId && overlayView != null) {
+            return
+        }
+
         // Tear down any previous overlay before mounting a new one (rapid
         // second offer, stale view from a killed JS process).
         removeOverlayOnMain()
@@ -184,6 +200,7 @@ object OfferOverlayManager {
             wm.addView(view, params)
             overlayView = view
             windowManager = wm
+            currentOrderId = orderId
         } catch (e: Exception) {
             return
         }
@@ -346,6 +363,7 @@ object OfferOverlayManager {
         }
         overlayView = null
         windowManager = null
+        currentOrderId = -1
 
         stopOfferSound()
         activeContext?.let { stopOfferVibration(it) }

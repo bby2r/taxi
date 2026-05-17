@@ -359,32 +359,38 @@ function useDriverOrderState(): UseDriverOrderReturn {
   const handleDriverOffered = useCallback((data: unknown) => {
     const orderData = data as { order: Order } | Order;
     const order = 'order' in orderData ? orderData.order : orderData;
-    const cur = stateRef.current;
 
-    // Drop stale offer events that arrive after we've already moved past
-    // the offer phase for this very order. Pusher reconnects (e.g. when
-    // the app foregrounds from the deep-link tap on a notification Accept
-    // button) replay buffered events — including the original
-    // order.offered — which would otherwise re-fire phase='offer' for
-    // an order we just accepted. The visible symptom was the OrderOfferCard
-    // flashing in for ~1s on the active-ride screen.
-    if (
-      cur.phase === 'active' ||
-      cur.phase === 'arrived' ||
-      cur.phase === 'in_progress' ||
-      cur.phase === 'completed'
-    ) {
-      if (cur.order?.id === order.id) return;
-    }
-    // Same-offer Pusher echo while already on the card — no-op.
-    if (cur.phase === 'offer' && cur.order.id === order.id) return;
+    // Wait for the cold-start deep-link parse so peekPendingDriverAction
+    // sees the queued accept/decline. Without this await, a fast Pusher
+    // event can race ahead of Linking.getInitialURL on cold start and
+    // briefly drop us into phase='offer' even though the driver already
+    // tapped Принять on the overlay — the in-app OrderOfferCard then
+    // flashes in for ~1s before acceptOffer resolves to 'active'.
+    void ensureLaunchActionConsumed().then(() => {
+      const cur = stateRef.current;
 
-    // Driver already tapped Принять / Отказаться on the overlay; the
-    // queued action will be picked up by the drainer on the next
-    // AppState 'active' transition. Skip the visible card mount.
-    if (peekPendingDriverAction(order.id) !== null) return;
+      // Drop stale offer events that arrive after we've already moved past
+      // the offer phase for this very order. Pusher reconnects (e.g. when
+      // the app foregrounds from the deep-link tap on a notification Accept
+      // button) replay buffered events.
+      if (
+        cur.phase === 'active' ||
+        cur.phase === 'arrived' ||
+        cur.phase === 'in_progress' ||
+        cur.phase === 'completed'
+      ) {
+        if (cur.order?.id === order.id) return;
+      }
+      // Same-offer Pusher echo while already on the card — no-op.
+      if (cur.phase === 'offer' && cur.order.id === order.id) return;
 
-    setState({ phase: 'offer', order });
+      // Driver already tapped Принять / Отказаться on the overlay; the
+      // queued action will be picked up by the drainer on the next
+      // AppState 'active' transition. Skip the visible card mount.
+      if (peekPendingDriverAction(order.id) !== null) return;
+
+      setState({ phase: 'offer', order });
+    });
     // Sound + vibration + bottom-sheet overlay are driven by phase-tied
     // effects below — they start when phase becomes 'offer' and stop the
     // moment it leaves.
