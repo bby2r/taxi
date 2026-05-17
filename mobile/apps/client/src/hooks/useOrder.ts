@@ -2,6 +2,15 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 import { Order, OrderStatus, usePusher, useAuth } from '@taxi/shared';
 import * as ordersApi from '../api/orders';
 
+// Lazy-required so a build without expo-speech still works (it just
+// stays silent instead of failing to render).
+let Speech: typeof import('expo-speech') | null = null;
+try {
+  Speech = require('expo-speech');
+} catch {
+  Speech = null;
+}
+
 type ClientOrderState =
   | { phase: 'idle' }
   | { phase: 'searching'; order: Order }
@@ -89,6 +98,14 @@ export function useOrder(): UseOrderReturn {
   }, [refreshAndSetPhase]);
 
   const handleDriverArrived = useCallback(() => {
+    // Voice announcement so the client knows to head outside without
+    // having to glance at the phone — especially useful when they're
+    // not actively watching the map (in a meeting, putting on a coat).
+    try {
+      Speech?.speak('Ваш водитель прибыл', { language: 'ru-RU', rate: 1.0 });
+    } catch {
+      // best effort
+    }
     refreshAndSetPhase('arrived');
   }, [refreshAndSetPhase]);
 
