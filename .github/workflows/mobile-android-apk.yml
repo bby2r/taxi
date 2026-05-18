@@ -112,13 +112,22 @@ jobs:
         working-directory: mobile/apps/${{ matrix.app }}
         run: chmod +x android/gradlew
 
-      - name: Build release APK
+      - name: Build release APK (+ AAB for client → Play Console)
         working-directory: mobile/apps/${{ matrix.app }}/android
         env:
           GRADLE_OPTS: "-Xmx6g -XX:MaxMetaspaceSize=2g"
         run: |
           set -o pipefail
-          ./gradlew assembleRelease \
+          # Driver app is distributed directly to drivers as APK — no
+          # Play Console route, no AAB needed. Client app needs both:
+          # APK for direct preview install, AAB for Play Console upload
+          # (Google stopped accepting APKs for new submissions in 2021).
+          if [ "${{ matrix.app }}" = "client" ]; then
+            GRADLE_TASKS="assembleRelease bundleRelease"
+          else
+            GRADLE_TASKS="assembleRelease"
+          fi
+          ./gradlew $GRADLE_TASKS \
             -x lint \
             -x lintVitalRelease \
             -x lintVitalAnalyzeRelease \
@@ -169,3 +178,30 @@ jobs:
           path: mobile/apps/${{ matrix.app }}/${{ steps.apk.outputs.path }}
           if-no-files-found: error
           retention-days: 14
+
+      - name: Locate and rename AAB (client only)
+        if: matrix.app == 'client'
+        id: aab
+        working-directory: mobile/apps/${{ matrix.app }}
+        run: |
+          AAB_PATH=$(find android/app/build/outputs/bundle/release -name "*.aab" | head -n 1)
+          if [ -z "$AAB_PATH" ]; then
+            echo "No AAB produced" >&2
+            exit 1
+          fi
+          APP_VERSION=$(node -p "require('./app.json').expo.version")
+          SHORT_SHA=$(echo "${{ github.sha }}" | cut -c1-7)
+          ARTIFACT_NAME="aiyl-taxi-${{ matrix.app }}-v${APP_VERSION}-build${{ github.run_number }}-${SHORT_SHA}"
+          RENAMED_PATH="android/app/build/outputs/bundle/release/${ARTIFACT_NAME}.aab"
+          mv "$AAB_PATH" "$RENAMED_PATH"
+          echo "path=$RENAMED_PATH" >> "$GITHUB_OUTPUT"
+          echo "name=${ARTIFACT_NAME}-aab" >> "$GITHUB_OUTPUT"
+
+      - name: Upload AAB artifact (client only — Play Console upload)
+        if: matrix.app == 'client'
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ steps.aab.outputs.name }}
+          path: mobile/apps/${{ matrix.app }}/${{ steps.aab.outputs.path }}
+          if-no-files-found: error
+          retention-days: 30
