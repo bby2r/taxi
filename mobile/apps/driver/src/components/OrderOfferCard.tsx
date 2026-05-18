@@ -82,28 +82,23 @@ export default function OrderOfferCard({
   // the voice would play). Cancellation and arrival announcements
   // stay because they fire in isolation, no competing surfaces.
 
+  // The countdown is purely informational now — when it hits 0 we
+  // freeze at "0" and let the driver still tap Принять / Отказаться
+  // manually. Server-side OfferTimeoutJob will reassign the offer to
+  // the next driver after its own 30-second window; if the driver
+  // taps Принять after that, acceptOrder throws 422 and the inline
+  // "Заказ уже принял другой водитель" banner kicks in. Auto-declining
+  // on the client was disorienting — the card would disappear under
+  // their finger if they paused to think.
   useEffect(() => {
     const interval = setInterval(() => {
-      setRemaining((prev) => {
-        if (prev <= 1) {
-          clearInterval(interval);
-          if (!declineCalledRef.current) {
-            declineCalledRef.current = true;
-            // Auto-timeout uses a personal reason on the client;
-            // server-side timeouts are handled separately and excluded from penalty.
-            onDecline('personal');
-          }
-          return 0;
-        }
-        return prev - 1;
-      });
+      setRemaining((prev) => (prev <= 0 ? 0 : prev - 1));
     }, 1000);
-
     return () => clearInterval(interval);
-  }, [onDecline]);
+  }, []);
 
   useEffect(() => {
-    opacityAnim.setValue(remaining / countdownSeconds);
+    opacityAnim.setValue(remaining > 0 ? remaining / countdownSeconds : 0.3);
   }, [remaining, countdownSeconds, opacityAnim]);
 
   const handlePickReason = (reason: DeclineReason): void => {
