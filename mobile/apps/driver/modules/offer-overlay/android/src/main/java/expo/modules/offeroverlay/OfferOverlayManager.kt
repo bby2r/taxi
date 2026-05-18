@@ -6,6 +6,7 @@ import android.content.Context
 import android.content.Intent
 import android.graphics.PixelFormat
 import android.media.AudioAttributes
+import android.media.AudioManager
 import android.media.MediaPlayer
 import android.net.Uri
 import android.os.Build
@@ -50,6 +51,11 @@ object OfferOverlayManager {
     private var windowManager: WindowManager? = null
     private var countdown: CountDownTimer? = null
     private var mediaPlayer: MediaPlayer? = null
+    // Saved alarm-stream volume captured the moment we raise it for an
+    // offer, so restore can put it back exactly where the driver had it
+    // (someone listening to a podcast at half-volume shouldn't have it
+    // pegged at max forever after a single offer).
+    private var savedAlarmVolume: Int? = null
     // Tracks the orderId currently displayed so a second showOverlay call
     // for the same offer (e.g. native FCM fires first, then the JS Pusher
     // handler tries to re-render the same offer in background) is a no-op
@@ -279,6 +285,22 @@ object OfferOverlayManager {
 
     private fun startOfferSound(context: Context) {
         stopOfferSound()
+        // Yandex-style: pin the alarm stream to max for the duration of
+        // the offer so a driver tapping the volume rocker doesn't mute
+        // the alert mid-ring. Snapshot the current value so restore can
+        // put it back. Wrapped in try/catch — some OEMs deny volume
+        // changes for permission-less apps; we degrade to "play at
+        // whatever the user has set".
+        try {
+            val am = context.getSystemService(Context.AUDIO_SERVICE) as? AudioManager
+            if (am != null) {
+                savedAlarmVolume = am.getStreamVolume(AudioManager.STREAM_ALARM)
+                val max = am.getStreamMaxVolume(AudioManager.STREAM_ALARM)
+                am.setStreamVolume(AudioManager.STREAM_ALARM, max, 0)
+            }
+        } catch (_: Exception) {
+            // best effort
+        }
         try {
             val rawId = context.resources.getIdentifier("order_arrived", "raw", context.packageName)
             if (rawId == 0) return
@@ -313,6 +335,19 @@ object OfferOverlayManager {
             }
             try {
                 player.release()
+            } catch (_: Exception) {
+                // ignore
+            }
+        }
+        // Restore the pre-offer alarm volume so the driver doesn't end
+        // up with max-loud podcasts after the offer window closes.
+        val ctx = activeContext
+        val saved = savedAlarmVolume
+        savedAlarmVolume = null
+        if (ctx != null && saved != null) {
+            try {
+                val am = ctx.getSystemService(Context.AUDIO_SERVICE) as? AudioManager
+                am?.setStreamVolume(AudioManager.STREAM_ALARM, saved, 0)
             } catch (_: Exception) {
                 // ignore
             }
