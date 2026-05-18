@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
+import { Platform, Vibration } from 'react-native';
 import { Order, OrderStatus, usePusher, useAuth } from '@taxi/shared';
 import * as ordersApi from '../api/orders';
 
@@ -9,6 +10,13 @@ try {
   Speech = require('expo-speech');
 } catch {
   Speech = null;
+}
+
+let ExpoAudio: typeof import('expo-audio') | null = null;
+try {
+  ExpoAudio = require('expo-audio');
+} catch {
+  ExpoAudio = null;
 }
 
 type ClientOrderState =
@@ -98,14 +106,40 @@ export function useOrder(): UseOrderReturn {
   }, [refreshAndSetPhase]);
 
   const handleDriverArrived = useCallback(() => {
-    // Voice announcement so the client knows to head outside without
-    // having to glance at the phone — especially useful when they're
-    // not actively watching the map (in a meeting, putting on a coat).
-    try {
-      Speech?.speak('Ваш водитель прибыл', { language: 'ru-RU', rate: 1.0 });
-    } catch {
-      // best effort
-    }
+    // Three-layer alert so the client can't miss the arrival, even when
+    // the phone is on silent or the TTS engine is mute / has no Russian
+    // voice installed:
+    //
+    //   1. Vibration — works in every audio mode, no permissions needed.
+    //   2. Audio mode bumped to play-in-silent + TTS through it. The
+    //      previous version called Speech.speak directly, which routes
+    //      through the media stream and is muted by ringer-silent mode.
+    //   3. TTS itself — Russian if available, fallback to default voice.
+    Vibration.vibrate([0, 400, 200, 400, 200, 400]);
+
+    (async () => {
+      try {
+        await ExpoAudio?.setAudioModeAsync({
+          playsInSilentMode: true,
+          shouldPlayInBackground: false,
+          interruptionMode: 'duckOthers',
+          interruptionModeAndroid: 'duckOthers',
+          allowsRecording: false,
+        });
+      } catch {
+        // not critical
+      }
+      try {
+        Speech?.speak('Ваш водитель прибыл', {
+          language: Platform.OS === 'android' ? 'ru-RU' : 'ru',
+          rate: 1.0,
+          pitch: 1.0,
+        });
+      } catch {
+        // TTS engine missing the locale — vibration already alerted
+      }
+    })();
+
     refreshAndSetPhase('arrived');
   }, [refreshAndSetPhase]);
 
