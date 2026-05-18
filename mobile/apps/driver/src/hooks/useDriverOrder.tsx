@@ -367,16 +367,14 @@ function useDriverOrderState(): UseDriverOrderReturn {
     }
   }, [user?.is_online]);
 
-  // Cold start: clear ghost overlay first (a previously-killed process
-  // can leave its WindowManager view on screen with a dead JS bridge,
-  // producing the Android "Предложение не отвечает" ANR), then run the
-  // shared sync.
+  // Cold start sync. Used to also unconditionally hideOfferOverlay
+  // here as a "ghost overlay from a previously-killed JS bridge"
+  // cleanup, but that fired during the very FCM-triggered cold start
+  // it was supposed to recover from — killing the freshly-shown
+  // overlay before the driver could react. The ANR-ghost case it was
+  // aimed at is rare; the false-positive overlay murder was the
+  // every-other-offer "card disappears immediately" symptom.
   useEffect(() => {
-    try {
-      OfferOverlay?.hideOfferOverlay();
-    } catch {
-      // overlay module may not be available
-    }
     void syncFromServer();
   }, [syncFromServer]);
 
@@ -493,11 +491,27 @@ function useDriverOrderState(): UseDriverOrderReturn {
   // background, or killed). The only JS-side responsibility is to cancel
   // that notification the moment the offer leaves state so it doesn't
   // linger until its server-side 20-second timeoutAfter expires.
+  //
+  // CRITICAL: this must run on phase EXIT only, NOT on initial mount
+  // with a non-offer phase. On a cold start triggered by an FCM offer
+  // push, the native service shows the overlay BEFORE the JS hydrates
+  // — if this effect fires its body on first render (state.phase
+  // starts at 'offline'), it kills that freshly-shown overlay before
+  // the driver can react. The "every other order disappears
+  // immediately" pattern was the OS killing our process between
+  // offers, turning each cancel→reorder into a fresh cold start that
+  // tripped this dismiss.
+  //
+  // Using the cleanup-on-leave pattern: the body fires only when we
+  // ENTERED the 'offer' phase; the returned cleanup fires when we
+  // LEAVE it.
   useEffect(() => {
-    if (state.phase === 'offer') return;
+    if (state.phase !== 'offer') return;
     if (Platform.OS === 'web') return;
-    OfferOverlay?.dismissOffer();
-    LocalNotifications?.dismissAllNotificationsAsync().catch(() => {});
+    return () => {
+      OfferOverlay?.dismissOffer();
+      LocalNotifications?.dismissAllNotificationsAsync().catch(() => {});
+    };
   }, [state.phase]);
 
   // Loop the vibration the entire time an offer is on screen — stops the
