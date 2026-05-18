@@ -31,6 +31,7 @@
         <div class="mx-auto max-w-4xl px-6 py-4 text-center">
             <p class="text-xs text-gray-400">
                 &copy; {{ date('Y') }} AIYL Taxi &middot;
+                <a href="{{ route('privacy') }}" class="text-gray-400 hover:text-gray-500">Privacy</a> &middot;
                 <a href="{{ route('admin.login') }}" class="text-gray-400 hover:text-gray-500">Admin</a>
             </p>
         </div>

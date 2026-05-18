@@ -5,10 +5,12 @@ namespace App\Http\Controllers\Admin;
 use App\Enums\OrderStatus;
 use App\Enums\UserRole;
 use App\Http\Controllers\Controller;
+use App\Models\DriverSettlement;
 use App\Models\Order;
 use App\Models\OrderDecline;
 use App\Models\Setting;
 use App\Models\User;
+use Illuminate\Support\Carbon;
 use Illuminate\View\View;
 
 class DashboardController extends Controller
@@ -94,6 +96,33 @@ class DashboardController extends Controller
             ->take(5)
             ->get();
 
+        // Billing roll-up — surfaces what /admin/billing shows in detail.
+        // Commission rate is for the header label; actual numbers come from
+        // commission_amount that was locked onto orders at completion time.
+        $commissionRate = (int) Setting::getValue('commission_rate', 7);
+        $weekStart = Carbon::now()->startOfWeek();
+        $commissionThisWeek = (int) Order::where('status', OrderStatus::Completed)
+            ->where('completed_at', '>=', $weekStart)
+            ->sum('commission_amount');
+        $totalCommissionAccrued = (int) Order::where('status', OrderStatus::Completed)
+            ->sum('commission_amount');
+        $totalSettled = (int) DriverSettlement::sum('amount');
+        $pendingBalance = max(0, $totalCommissionAccrued - $totalSettled);
+        // Drivers-with-debt — two grouped queries instead of N per-driver
+        // ones. Joined in PHP so we don't have to model commission_amount
+        // and settlements in a single SQL union.
+        $accruedByDriver = Order::where('status', OrderStatus::Completed)
+            ->whereNotNull('driver_id')
+            ->groupBy('driver_id')
+            ->selectRaw('driver_id, sum(commission_amount) as total')
+            ->pluck('total', 'driver_id');
+        $settledByDriver = DriverSettlement::groupBy('driver_id')
+            ->selectRaw('driver_id, sum(amount) as total')
+            ->pluck('total', 'driver_id');
+        $driversWithDebt = $accruedByDriver
+            ->filter(fn ($accrued, $driverId) => ((int) $accrued - (int) ($settledByDriver[$driverId] ?? 0)) > 0)
+            ->count();
+
         $recentOrders = Order::with(['client', 'driver'])
             ->latest()
             ->take(10)
@@ -112,6 +141,10 @@ class DashboardController extends Controller
             'declinesToday',
             'declineRateToday',
             'totalRides',
+            'commissionRate',
+            'commissionThisWeek',
+            'pendingBalance',
+            'driversWithDebt',
             'hourly',
             'hourlyMax',
             'topDecliners',

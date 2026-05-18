@@ -128,6 +128,32 @@
         </div>
     </div>
 
+    {{-- Billing (commission roll-up) --}}
+    <h2 class="mb-3 mt-8 text-sm font-semibold uppercase tracking-wider text-gray-500">
+        Биллинг ({{ $commissionRate }}% с заказа)
+    </h2>
+    <div class="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3">
+        <div class="rounded-xl border border-gray-200 bg-white p-6 shadow-sm">
+            <p class="text-sm text-gray-500">Комиссия за неделю</p>
+            <p class="mt-1 text-3xl font-bold text-gray-900">{{ number_format($commissionThisWeek) }} сом</p>
+            <p class="mt-1 text-xs text-gray-500">с понедельника по сегодня</p>
+        </div>
+        <div class="rounded-xl border @if ($pendingBalance > 0) border-blue-200 bg-blue-50 @else border-gray-200 bg-white @endif p-6 shadow-sm">
+            <p class="text-sm @if ($pendingBalance > 0) text-blue-700 @else text-gray-500 @endif">Задолжали водители</p>
+            <p class="mt-1 text-3xl font-bold @if ($pendingBalance > 0) text-blue-700 @else text-gray-900 @endif">{{ number_format($pendingBalance) }} сом</p>
+            <p class="mt-1 text-xs @if ($pendingBalance > 0) text-blue-600 @else text-gray-500 @endif">сумма к получению</p>
+        </div>
+        <div class="rounded-xl border border-gray-200 bg-white p-6 shadow-sm">
+            <div class="flex items-start justify-between">
+                <div>
+                    <p class="text-sm text-gray-500">Водителей с долгом</p>
+                    <p class="mt-1 text-3xl font-bold text-gray-900">{{ $driversWithDebt }}</p>
+                </div>
+                <a href="{{ route('admin.billing.index') }}" class="text-sm font-medium text-amber-600 hover:text-amber-700">Открыть →</a>
+            </div>
+        </div>
+    </div>
+
     {{-- All-time --}}
     <h2 class="mb-3 mt-8 text-sm font-semibold uppercase tracking-wider text-gray-500">За всё время</h2>
     <div class="grid grid-cols-1 gap-6 sm:grid-cols-2">

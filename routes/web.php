@@ -26,6 +26,9 @@ Route::get('login', function (Request $request) {
     return redirect()->route('admin.login');
 })->name('login');
 
+// Public legal page — URL must be stable so Play Console listing keeps working.
+Route::view('privacy', 'legal.privacy')->name('privacy');
+
 Route::prefix('admin')->name('admin.')->group(function () {
     Route::middleware('guest')->group(function () {
         Route::get('login', [AuthController::class, 'showLogin'])->name('login');
