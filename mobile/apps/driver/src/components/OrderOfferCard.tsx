@@ -20,13 +20,6 @@ if (Platform.OS === 'android') {
   }
 }
 
-let Speech: typeof import('expo-speech') | null = null;
-try {
-  Speech = require('expo-speech');
-} catch {
-  Speech = null;
-}
-
 interface OrderOfferCardProps {
   order: Order;
   onAccept: () => void;
@@ -83,27 +76,11 @@ export default function OrderOfferCard({
     OfferOverlay?.hideOfferOverlay();
   }, []);
 
-  // Voice TTS for handsfree review on the road. Speaks the address +
-  // price + ETA once when the offer arrives. Silent fail when the
-  // speech module isn't bundled.
-  useEffect(() => {
-    if (!Speech) return;
-    const address = order.pickup_address ?? 'неизвестный адрес';
-    const eta = order.eta_minutes ? `, ${order.eta_minutes} минут до клиента` : '';
-    const announcement = `Новый заказ. Подача: ${address}. ${order.price} сом${eta}.`;
-    try {
-      Speech.speak(announcement, { language: 'ru-RU', rate: 1.0 });
-    } catch {
-      // best effort
-    }
-    return () => {
-      try {
-        Speech?.stop();
-      } catch {
-        // ignore
-      }
-    };
-  }, [order.id, order.pickup_address, order.price, order.eta_minutes]);
+  // Note: TTS announcement for new offers was removed — it competed
+  // with the alarm sound + visual card in a way that intermittently
+  // suppressed both (every-other-offer the card would skip and only
+  // the voice would play). Cancellation and arrival announcements
+  // stay because they fire in isolation, no competing surfaces.
 
   useEffect(() => {
     const interval = setInterval(() => {
