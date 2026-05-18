@@ -55,8 +55,26 @@
                             <td class="whitespace-nowrap px-6 py-4 text-gray-700">{{ $driver->driverProfile?->car_model ?? '—' }}</td>
                             <td class="whitespace-nowrap px-6 py-4 text-gray-700">{{ $driver->driverProfile?->car_number ?? '—' }}</td>
                             <td class="whitespace-nowrap px-6 py-4">
-                                @if ($driver->driverProfile?->is_online)
+                                @php
+                                    $profile = $driver->driverProfile;
+                                    $lastSeen = $profile?->location_updated_at;
+                                    // Live = is_online + recent ping. Stale = is_online flag is on but no
+                                    // ping in the last 30 s (OEM killed the process / phone died) — these
+                                    // drivers are excluded from dispatch by GeoService until the ping returns.
+                                    $isLive = $profile?->is_online
+                                        && $lastSeen
+                                        && $lastSeen->greaterThan(now()->subSeconds(30));
+                                    $isStaleOnline = $profile?->is_online && ! $isLive;
+                                @endphp
+                                @if ($isLive)
                                     <span class="inline-flex items-center rounded-full bg-green-100 px-2.5 py-0.5 text-xs font-medium text-green-700">Online</span>
+                                @elseif ($isStaleOnline)
+                                    <span
+                                        class="inline-flex items-center rounded-full bg-amber-100 px-2.5 py-0.5 text-xs font-medium text-amber-700"
+                                        title="Last ping: {{ $lastSeen?->diffForHumans() ?? '—' }}"
+                                    >
+                                        Stale ({{ $lastSeen?->diffForHumans(syntax: \Carbon\CarbonInterface::DIFF_ABSOLUTE) ?? '?' }})
+                                    </span>
                                 @else
                                     <span class="inline-flex items-center rounded-full bg-gray-100 px-2.5 py-0.5 text-xs font-medium text-gray-600">Offline</span>
                                 @endif

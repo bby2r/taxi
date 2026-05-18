@@ -63,10 +63,19 @@ class GeoService
         // completed rides today so income spreads instead of pooling on a
         // single driver who happens to be camping near the busy spots.
         $fairnessRadiusKm = (float) Setting::getValue('fairness_radius_km', 0.5);
+        // Liveness heartbeat — a driver whose location_updated_at hasn't
+        // been bumped in this many seconds is treated as offline for
+        // dispatch even if their is_online flag is still true. The
+        // driver app pings every ~3 s, so 30 s gives 10× margin for
+        // network blips while still catching OEM-killed processes
+        // (Xiaomi / Vivo) that leave the flag stuck.
+        $liveHeartbeatSeconds = (int) Setting::getValue('live_heartbeat_seconds', 30);
+        $liveCutoff = now()->subSeconds($liveHeartbeatSeconds);
 
         $drivers = DriverProfile::online()
             ->withCoordinates()
             ->notBlocked()
+            ->where('location_updated_at', '>=', $liveCutoff)
             ->with(['user' => function ($q) {
                 $q->with(['driverOrders' => function ($q2) {
                     $q2->whereIn('status', [

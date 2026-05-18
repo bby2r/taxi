@@ -365,4 +365,58 @@ class GeoServiceTest extends TestCase
         $this->assertCount(1, $result);
         $this->assertSame($loadedNearby->user_id, $result->first()->user_id);
     }
+
+    // ──────────────────────────────────────────────────────────────
+    // Liveness heartbeat — protects against OEM-killed driver apps
+    // that leave is_online stuck true even after the process dies.
+    // ──────────────────────────────────────────────────────────────
+
+    #[Test]
+    public function test_find_nearest_drivers_excludes_driver_with_stale_heartbeat(): void
+    {
+        $pickup = [42.8746, 74.5698];
+
+        // is_online=true but the last location ping is 2 minutes old — the
+        // app was killed by the OEM battery saver and the flag never got
+        // turned off. Must not receive dispatch.
+        DriverProfile::factory()
+            ->atLocation(42.8746, 74.5750)
+            ->create(['location_updated_at' => now()->subMinutes(2)]);
+
+        $result = $this->service->findNearestDrivers($pickup[0], $pickup[1], [], 10, 999.0);
+
+        $this->assertCount(0, $result);
+    }
+
+    #[Test]
+    public function test_find_nearest_drivers_includes_driver_with_fresh_heartbeat(): void
+    {
+        $pickup = [42.8746, 74.5698];
+
+        // Ping is well within the 30s window — driver counts as live.
+        DriverProfile::factory()
+            ->atLocation(42.8746, 74.5750)
+            ->create(['location_updated_at' => now()->subSeconds(5)]);
+
+        $result = $this->service->findNearestDrivers($pickup[0], $pickup[1], [], 10, 999.0);
+
+        $this->assertCount(1, $result);
+    }
+
+    #[Test]
+    public function test_find_nearest_drivers_heartbeat_window_is_configurable(): void
+    {
+        // Shorter window — 10 s. Driver pinged 20 s ago, so they fall out.
+        Setting::create(['key' => 'live_heartbeat_seconds', 'value' => '10']);
+
+        $pickup = [42.8746, 74.5698];
+
+        DriverProfile::factory()
+            ->atLocation(42.8746, 74.5750)
+            ->create(['location_updated_at' => now()->subSeconds(20)]);
+
+        $result = $this->service->findNearestDrivers($pickup[0], $pickup[1], [], 10, 999.0);
+
+        $this->assertCount(0, $result);
+    }
 }
