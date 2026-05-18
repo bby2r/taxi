@@ -51,7 +51,7 @@ export default function OrderOfferCard({
   order,
   onAccept,
   onDecline,
-  countdownSeconds = 45,
+  countdownSeconds = 30,
   loading = false,
 }: OrderOfferCardProps): React.ReactNode {
   // Compute the initial countdown from the server's offered_at — if a

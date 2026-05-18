@@ -120,12 +120,10 @@ class OrderService
             'offered_at' => $offeredAt,
         ]);
 
-        // 45 s both intra and inter-district so the driver has breathing
-        // room to glance at the price + address and the in-card pulse
-        // warning of the "last 5 s" range fires while there's still
-        // meaningful time to act. Used to be 30 s intra; the shorter
-        // window pushed drivers into reflex-accept territory.
-        $timeout = 45;
+        // 30 s offer window — back from a brief 45 s experiment.
+        // Driver-side feedback was that 45 felt sluggish; 30 keeps the
+        // dispatcher rotating offers fast enough for live traffic.
+        $timeout = 30;
 
         OfferTimeoutJob::dispatch($order->id, $driver->user_id)
             ->delay(now()->addSeconds($timeout));

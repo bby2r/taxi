@@ -304,21 +304,54 @@ object OfferOverlayManager {
         try {
             val rawId = context.resources.getIdentifier("order_arrived", "raw", context.packageName)
             if (rawId == 0) return
-            val player = MediaPlayer().apply {
-                setAudioAttributes(
-                    AudioAttributes.Builder()
-                        .setUsage(AudioAttributes.USAGE_ALARM)
-                        .setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION)
-                        .build(),
-                )
-                val descriptor = context.resources.openRawResourceFd(rawId) ?: return
-                setDataSource(descriptor.fileDescriptor, descriptor.startOffset, descriptor.length)
-                descriptor.close()
-                isLooping = true
-                prepare()
-                start()
+            val descriptor = context.resources.openRawResourceFd(rawId) ?: return
+            val player = MediaPlayer()
+            player.setAudioAttributes(
+                AudioAttributes.Builder()
+                    .setUsage(AudioAttributes.USAGE_ALARM)
+                    .setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION)
+                    .build(),
+            )
+            player.setDataSource(descriptor.fileDescriptor, descriptor.startOffset, descriptor.length)
+            descriptor.close()
+            player.isLooping = true
+            // Some OEM ROMs (notably MIUI) ignore isLooping for short
+            // alarm-stream WAVs played in background; restart on
+            // completion as a fallback so the alert keeps ringing for
+            // the full offer window.
+            player.setOnCompletionListener { mp ->
+                if (mp === mediaPlayer) {
+                    try {
+                        mp.seekTo(0)
+                        mp.start()
+                    } catch (_: Exception) {
+                        // ignore — overlay UI still alerts
+                    }
+                }
+            }
+            player.setOnErrorListener { mp, _, _ ->
+                // Reset and try once more; if it still fails the listener
+                // returns true and the player gets released by stopOfferSound.
+                try {
+                    mp.reset()
+                } catch (_: Exception) {
+                    // ignore
+                }
+                true
+            }
+            // prepareAsync avoids blocking the main looper for the
+            // ~50-200 ms wav decode; OnPreparedListener fires start().
+            player.setOnPreparedListener { mp ->
+                try {
+                    mp.isLooping = true
+                    mp.setVolume(1.0f, 1.0f)
+                    mp.start()
+                } catch (_: Exception) {
+                    // ignore
+                }
             }
             mediaPlayer = player
+            player.prepareAsync()
         } catch (_: Exception) {
             // Audio is best-effort — overlay UI + vibration still alert the driver.
         }
