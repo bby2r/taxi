@@ -44,11 +44,14 @@ const REASON_OPTIONS: { value: DeclineReason; label: string }[] = [
   { value: 'personal', label: 'Личная причина' },
 ];
 
+// Window at which the "hurry up" red pulse kicks in.
+const WARNING_THRESHOLD = 5;
+
 export default function OrderOfferCard({
   order,
   onAccept,
   onDecline,
-  countdownSeconds = 30,
+  countdownSeconds = 45,
   loading = false,
 }: OrderOfferCardProps): React.ReactNode {
   // Compute the initial countdown from the server's offered_at — if a
@@ -67,6 +70,7 @@ export default function OrderOfferCard({
   const [remaining, setRemaining] = useState(initialRemaining);
   const [reasonSheetOpen, setReasonSheetOpen] = useState(false);
   const opacityAnim = useRef(new Animated.Value(1)).current;
+  const pulseAnim = useRef(new Animated.Value(0)).current;
   const declineCalledRef = useRef(false);
 
   // Hide any lingering SYSTEM_ALERT_WINDOW overlay the moment the in-app
@@ -82,24 +86,59 @@ export default function OrderOfferCard({
   // the voice would play). Cancellation and arrival announcements
   // stay because they fire in isolation, no competing surfaces.
 
-  // The countdown is purely informational now — when it hits 0 we
-  // freeze at "0" and let the driver still tap Принять / Отказаться
-  // manually. Server-side OfferTimeoutJob will reassign the offer to
-  // the next driver after its own 30-second window; if the driver
-  // taps Принять after that, acceptOrder throws 422 and the inline
-  // "Заказ уже принял другой водитель" banner kicks in. Auto-declining
-  // on the client was disorienting — the card would disappear under
-  // their finger if they paused to think.
+  // Auto-decline at 0 with a "last 5 s" red-pulse warning so the
+  // driver can see the deadline closing and react instead of having
+  // the card vanish silently. Matches Yandex/Bolt UX: predictable
+  // expiry, not a phantom offer left dangling.
   useEffect(() => {
     const interval = setInterval(() => {
-      setRemaining((prev) => (prev <= 0 ? 0 : prev - 1));
+      setRemaining((prev) => {
+        if (prev <= 1) {
+          clearInterval(interval);
+          if (!declineCalledRef.current) {
+            declineCalledRef.current = true;
+            // Auto-timeout uses 'personal' on the client; server-side
+            // timeouts (OfferTimeoutJob) are excluded from penalty.
+            onDecline('personal');
+          }
+          return 0;
+        }
+        return prev - 1;
+      });
     }, 1000);
     return () => clearInterval(interval);
-  }, []);
+  }, [onDecline]);
 
   useEffect(() => {
-    opacityAnim.setValue(remaining > 0 ? remaining / countdownSeconds : 0.3);
+    opacityAnim.setValue(remaining > 0 ? remaining / countdownSeconds : 0);
   }, [remaining, countdownSeconds, opacityAnim]);
+
+  // "Hurry up" red border pulse in the final 5 seconds.
+  useEffect(() => {
+    if (remaining > WARNING_THRESHOLD || remaining <= 0) {
+      pulseAnim.setValue(0);
+      return;
+    }
+    const loop = Animated.loop(
+      Animated.sequence([
+        Animated.timing(pulseAnim, {
+          toValue: 1,
+          duration: 400,
+          useNativeDriver: false,
+        }),
+        Animated.timing(pulseAnim, {
+          toValue: 0,
+          duration: 400,
+          useNativeDriver: false,
+        }),
+      ]),
+    );
+    loop.start();
+    return () => loop.stop();
+  }, [remaining, pulseAnim]);
+
+  const warningOpacity = pulseAnim;
+  const inWarning = remaining > 0 && remaining <= WARNING_THRESHOLD;
 
   const handlePickReason = (reason: DeclineReason): void => {
     setReasonSheetOpen(false);
@@ -111,8 +150,27 @@ export default function OrderOfferCard({
 
   return (
     <View style={styles.container}>
-      <Animated.View style={[styles.countdownCircle, { opacity: opacityAnim }]}>
-        <Text style={[Typography.h2, { color: DriverColors.primary }]}>{remaining}</Text>
+      {inWarning && (
+        <Animated.View
+          pointerEvents="none"
+          style={[styles.warningOutline, { opacity: warningOpacity }]}
+        />
+      )}
+      <Animated.View
+        style={[
+          styles.countdownCircle,
+          { opacity: opacityAnim },
+          inWarning && styles.countdownCircleWarning,
+        ]}
+      >
+        <Text
+          style={[
+            Typography.h2,
+            { color: inWarning ? DriverColors.danger : DriverColors.primary },
+          ]}
+        >
+          {remaining}
+        </Text>
       </Animated.View>
 
       <View style={styles.badgeRow}>
@@ -222,6 +280,18 @@ const styles = StyleSheet.create({
     padding: 20,
     marginHorizontal: 16,
   },
+  // Absolute, positioned over the whole card; pointerEvents="none" on
+  // the Animated.View so taps still reach the buttons underneath.
+  warningOutline: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    borderRadius: 20,
+    borderWidth: 3,
+    borderColor: DriverColors.danger,
+  },
   countdownCircle: {
     width: 60,
     height: 60,
@@ -231,6 +301,10 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignSelf: 'flex-end',
     marginBottom: 8,
+  },
+  countdownCircleWarning: {
+    borderWidth: 2,
+    borderColor: DriverColors.danger,
   },
   badgeRow: {
     flexDirection: 'row',

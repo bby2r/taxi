@@ -120,7 +120,12 @@ class OrderService
             'offered_at' => $offeredAt,
         ]);
 
-        $timeout = $order->region_id ? 45 : 30;
+        // 45 s both intra and inter-district so the driver has breathing
+        // room to glance at the price + address and the in-card pulse
+        // warning of the "last 5 s" range fires while there's still
+        // meaningful time to act. Used to be 30 s intra; the shorter
+        // window pushed drivers into reflex-accept territory.
+        $timeout = 45;
 
         OfferTimeoutJob::dispatch($order->id, $driver->user_id)
             ->delay(now()->addSeconds($timeout));

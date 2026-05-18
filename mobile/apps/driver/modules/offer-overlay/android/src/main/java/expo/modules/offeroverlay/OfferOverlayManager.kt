@@ -251,13 +251,11 @@ object OfferOverlayManager {
             return
         }
 
-        // Countdown is purely informational — when it hits 0 we show "0"
-        // and keep the overlay on screen until the driver taps Принять /
-        // Отказаться themselves. Auto-dismissing on timer-zero was
-        // disorienting: drivers paused to think and the card vanished
-        // mid-decision. Server-side OfferTimeoutJob will reassign after
-        // its own 30 s window; a late Accept tap then 422s and the JS
-        // side surfaces "Заказ уже принял другой водитель".
+        // Auto-dismiss with a server-aligned timeout so the overlay
+        // doesn't outlive the offer's server-side OfferTimeoutJob and
+        // leave a phantom Accept button that 422s when tapped. The
+        // in-app card carries a "last 5 s" red pulse warning before
+        // expiring — the overlay just dismisses cleanly at 0.
         countdown = object : CountDownTimer((durationSeconds * 1000).toLong(), 1000) {
             override fun onTick(remaining: Long) {
                 val secs = (remaining / 1000).toInt()
@@ -266,9 +264,7 @@ object OfferOverlayManager {
                 }
             }
             override fun onFinish() {
-                Handler(Looper.getMainLooper()).post {
-                    timerView?.text = "0"
-                }
+                dispatchAction(context, "timeout", orderId)
             }
         }.start()
 
