@@ -7,6 +7,7 @@ import {
   Modal,
   Platform,
   StyleSheet,
+  AppState,
 } from 'react-native';
 import { Order, DeclineReason, DriverColors, Typography } from '@taxi/shared';
 
@@ -73,11 +74,16 @@ export default function OrderOfferCard({
   const pulseAnim = useRef(new Animated.Value(0)).current;
   const declineCalledRef = useRef(false);
 
-  // Hide any lingering SYSTEM_ALERT_WINDOW overlay the moment the in-app
-  // card mounts — the Activity lifecycle hook does this too but its
-  // timing isn't always quick enough.
+  // Hide the SYSTEM_ALERT_WINDOW overlay ONLY if the driver is actively
+  // looking at this in-app card (foreground). React keeps the in-app
+  // card mounted in the tree even when the app is in background, so an
+  // unconditional hide here was killing the freshly-shown overlay every
+  // time a new offer arrived while the driver was in social media —
+  // the user-visible "every other order disappears immediately" bug.
   useEffect(() => {
-    OfferOverlay?.hideOfferOverlay();
+    if (AppState.currentState === 'active') {
+      OfferOverlay?.hideOfferOverlay();
+    }
   }, []);
 
   // Note: TTS announcement for new offers was removed — it competed
