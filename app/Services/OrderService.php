@@ -136,8 +136,23 @@ class OrderService
 
         $driverUser = User::find($driver->user_id);
         if ($driverUser) {
-            $body = $order->pickup_address
-                ? "Подача: {$order->pickup_address} · {$order->price} сом · ~{$etaMinutes} мин"
+            // For inter-district orders include the destination in the
+            // address line — the SYSTEM_ALERT_WINDOW overlay only has
+            // room for one address field, so a bare pickup leaves the
+            // driver guessing whether the trip is across the village or
+            // 4 hours to Bishkek (very different decisions). The in-app
+            // OrderOfferCard renders dropoff separately under "Куда" so
+            // it's not affected by this composition.
+            $destinationName = $order->is_inter_district
+                ? ($order->dropoff_address ?: $order->region?->name)
+                : null;
+            $displayPickup = $order->pickup_address ?: ($destinationName ? 'Геолокация клиента' : null);
+            $displayAddress = $destinationName
+                ? ($displayPickup ? "{$displayPickup} → {$destinationName}" : "→ {$destinationName}")
+                : $displayPickup;
+
+            $body = $displayAddress
+                ? "Подача: {$displayAddress} · {$order->price} сом · ~{$etaMinutes} мин"
                 : "Новый заказ · {$order->price} сом · ~{$etaMinutes} мин";
 
             $this->pushService->sendOfferToDriver(
@@ -158,7 +173,7 @@ class OrderService
                     // to populate the SYSTEM_ALERT_WINDOW overlay without a
                     // round-trip to /orders/pending-offer (which the OS may
                     // not let a brief background JS task complete in time).
-                    'pickup_address' => $order->pickup_address,
+                    'pickup_address' => $displayAddress,
                     'price' => (int) $order->price,
                     'eta_minutes' => $etaMinutes,
                     'distance_km' => (float) ($driver->distance_km ?? 0),
