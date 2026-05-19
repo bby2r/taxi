@@ -30,13 +30,13 @@ class AuthController extends Controller
         ]);
 
         if (! Auth::attempt(['phone' => $request->phone, 'password' => $request->password])) {
-            return back()->withErrors(['phone' => 'Invalid credentials.']);
+            return back()->withErrors(['phone' => 'Неверный телефон или пароль.']);
         }
 
         if (Auth::user()->role !== UserRole::Admin) {
             Auth::logout();
 
-            return back()->withErrors(['phone' => 'Access denied.']);
+            return back()->withErrors(['phone' => 'Доступ запрещён.']);
         }
 
         $request->session()->regenerate();

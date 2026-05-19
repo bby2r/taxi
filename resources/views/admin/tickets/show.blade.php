@@ -1,7 +1,7 @@
 @extends('layouts.admin')
 
-@section('title', 'Ticket #' . $ticket->id)
-@section('heading', 'Ticket #' . $ticket->id)
+@section('title', 'Заявка #' . $ticket->id)
+@section('heading', 'Заявка #' . $ticket->id)
 
 @section('content')
     {{-- Flash Message --}}
@@ -14,7 +14,7 @@
     {{-- Back Link --}}
     <div class="mb-6">
         <a href="{{ route('admin.tickets.index') }}" class="text-sm font-medium text-gray-500 hover:text-gray-700">
-            &larr; Back to Tickets
+            &larr; Назад к заявкам
         </a>
     </div>
 
@@ -25,22 +25,22 @@
 
     {{-- Driver Info Card --}}
     <div class="mb-6 rounded-xl border border-gray-200 bg-white p-6 shadow-sm">
-        <h3 class="mb-4 text-sm font-semibold uppercase tracking-wider text-gray-500">Driver</h3>
+        <h3 class="mb-4 text-sm font-semibold uppercase tracking-wider text-gray-500">Водитель</h3>
         <dl class="grid grid-cols-1 gap-4 md:grid-cols-2">
             <div>
-                <dt class="text-xs text-gray-500">Name</dt>
+                <dt class="text-xs text-gray-500">Имя</dt>
                 <dd class="text-sm font-medium text-gray-900">{{ $ticket->user?->name ?? '—' }}</dd>
             </div>
             <div>
-                <dt class="text-xs text-gray-500">Phone</dt>
+                <dt class="text-xs text-gray-500">Телефон</dt>
                 <dd class="text-sm text-gray-700">{{ $ticket->user?->phone ?? '—' }}</dd>
             </div>
             <div>
-                <dt class="text-xs text-gray-500">Car Model</dt>
+                <dt class="text-xs text-gray-500">Марка автомобиля</dt>
                 <dd class="text-sm text-gray-700">{{ $ticket->user?->driverProfile?->car_model ?? '—' }}</dd>
             </div>
             <div>
-                <dt class="text-xs text-gray-500">Car Number</dt>
+                <dt class="text-xs text-gray-500">Номер автомобиля</dt>
                 <dd class="text-sm text-gray-700">{{ $ticket->user?->driverProfile?->car_number ?? '—' }}</dd>
             </div>
         </dl>
@@ -48,23 +48,23 @@
 
     {{-- Change Details Card --}}
     <div class="mb-6 rounded-xl border border-gray-200 bg-white p-6 shadow-sm">
-        <h3 class="mb-4 text-sm font-semibold uppercase tracking-wider text-gray-500">Change Details</h3>
+        <h3 class="mb-4 text-sm font-semibold uppercase tracking-wider text-gray-500">Детали изменения</h3>
         <dl class="space-y-3">
             <div>
-                <dt class="text-xs text-gray-500">Field</dt>
+                <dt class="text-xs text-gray-500">Поле</dt>
                 <dd class="text-sm font-medium text-gray-900">{{ ucfirst(str_replace('_', ' ', $ticket->field)) }}</dd>
             </div>
             <div>
-                <dt class="text-xs text-gray-500">Old Value</dt>
+                <dt class="text-xs text-gray-500">Старое значение</dt>
                 <dd class="text-sm text-red-600">{{ $ticket->old_value ?? '—' }}</dd>
             </div>
             <div>
-                <dt class="text-xs text-gray-500">New Value</dt>
+                <dt class="text-xs text-gray-500">Новое значение</dt>
                 <dd class="text-sm text-emerald-600">{{ $ticket->new_value }}</dd>
             </div>
             <div>
-                <dt class="text-xs text-gray-500">Submitted</dt>
-                <dd class="text-sm text-gray-700">{{ $ticket->created_at->format('M d, Y H:i:s') }}</dd>
+                <dt class="text-xs text-gray-500">Отправлено</dt>
+                <dd class="text-sm text-gray-700">{{ $ticket->created_at->format('d.m.Y H:i:s') }}</dd>
             </div>
         </dl>
     </div>
@@ -72,19 +72,19 @@
     {{-- Reviewer Info (if reviewed) --}}
     @if ($ticket->reviewed_at)
         <div class="mb-6 rounded-xl border border-gray-200 bg-white p-6 shadow-sm">
-            <h3 class="mb-4 text-sm font-semibold uppercase tracking-wider text-gray-500">Review</h3>
+            <h3 class="mb-4 text-sm font-semibold uppercase tracking-wider text-gray-500">Рассмотрение</h3>
             <dl class="space-y-3">
                 <div>
-                    <dt class="text-xs text-gray-500">Reviewed By</dt>
+                    <dt class="text-xs text-gray-500">Рассмотрел</dt>
                     <dd class="text-sm font-medium text-gray-900">{{ $ticket->reviewer?->name ?? '—' }}</dd>
                 </div>
                 <div>
-                    <dt class="text-xs text-gray-500">Reviewed At</dt>
-                    <dd class="text-sm text-gray-700">{{ $ticket->reviewed_at->format('M d, Y H:i:s') }}</dd>
+                    <dt class="text-xs text-gray-500">Дата рассмотрения</dt>
+                    <dd class="text-sm text-gray-700">{{ $ticket->reviewed_at->format('d.m.Y H:i:s') }}</dd>
                 </div>
                 @if ($ticket->admin_comment)
                     <div>
-                        <dt class="text-xs text-gray-500">Comment</dt>
+                        <dt class="text-xs text-gray-500">Комментарий</dt>
                         <dd class="text-sm text-gray-700">{{ $ticket->admin_comment }}</dd>
                     </div>
                 @endif
@@ -95,7 +95,7 @@
     {{-- Action Buttons (only if Pending) --}}
     @if ($ticket->status === App\Enums\DriverChangeRequestStatus::Pending)
         <div class="rounded-xl border border-gray-200 bg-white p-6 shadow-sm">
-            <h3 class="mb-4 text-sm font-semibold uppercase tracking-wider text-gray-500">Actions</h3>
+            <h3 class="mb-4 text-sm font-semibold uppercase tracking-wider text-gray-500">Действия</h3>
 
             <div class="flex flex-col gap-4 md:flex-row md:items-start">
                 {{-- Approve --}}
@@ -104,9 +104,9 @@
                     <button
                         type="submit"
                         class="inline-flex items-center rounded-lg bg-emerald-500 px-4 py-2 text-sm font-medium text-white shadow-sm hover:bg-emerald-600"
-                        onclick="return confirm('Are you sure you want to approve this change?')"
+                        onclick="return confirm('Вы уверены, что хотите одобрить это изменение?')"
                     >
-                        Approve
+                        Одобрить
                     </button>
                 </form>
 
@@ -117,15 +117,15 @@
                         <textarea
                             name="admin_comment"
                             rows="2"
-                            placeholder="Rejection reason (optional)"
+                            placeholder="Причина отклонения (необязательно)"
                             class="flex-1 rounded-lg border border-gray-300 px-3 py-2 text-sm text-gray-700 focus:border-amber-500 focus:outline-none focus:ring-1 focus:ring-amber-500"
                         ></textarea>
                         <button
                             type="submit"
                             class="inline-flex items-center rounded-lg bg-red-500 px-4 py-2 text-sm font-medium text-white shadow-sm hover:bg-red-600"
-                            onclick="return confirm('Are you sure you want to reject this change?')"
+                            onclick="return confirm('Вы уверены, что хотите отклонить это изменение?')"
                         >
-                            Reject
+                            Отклонить
                         </button>
                     </div>
                     @error('admin_comment')

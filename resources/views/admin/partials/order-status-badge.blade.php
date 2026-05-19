@@ -8,7 +8,16 @@ $colors = match($status) {
     App\Enums\OrderStatus::Cancelled  => 'bg-red-100 text-red-700',
     default                           => 'bg-gray-100 text-gray-700',
 };
+
+$labels = [
+    'searching'   => 'Ищем водителя',
+    'accepted'    => 'Принят',
+    'arrived'     => 'На месте',
+    'in_progress' => 'В пути',
+    'completed'   => 'Завершён',
+    'cancelled'   => 'Отменён',
+];
 @endphp
 <span class="inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium {{ $colors }}">
-    {{ $status->value }}
+    {{ $labels[$status->value] ?? $status->value }}
 </span>

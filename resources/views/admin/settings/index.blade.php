@@ -1,7 +1,7 @@
 @extends('layouts.admin')
 
-@section('title', 'Settings')
-@section('heading', 'Settings')
+@section('title', 'Настройки')
+@section('heading', 'Настройки')
 
 @section('content')
     @if (session('success'))
@@ -18,7 +18,7 @@
 
                 {{-- Day Price --}}
                 <div class="mb-5">
-                    <label for="day_price" class="mb-1.5 block text-sm font-medium text-gray-700">Day Price (KGS)</label>
+                    <label for="day_price" class="mb-1.5 block text-sm font-medium text-gray-700">Дневной тариф (сом)</label>
                     <input
                         type="number"
                         id="day_price"
@@ -37,7 +37,7 @@
 
                 {{-- Night Price --}}
                 <div class="mb-5">
-                    <label for="night_price" class="mb-1.5 block text-sm font-medium text-gray-700">Night Price (KGS)</label>
+                    <label for="night_price" class="mb-1.5 block text-sm font-medium text-gray-700">Ночной тариф (сом)</label>
                     <input
                         type="number"
                         id="night_price"
@@ -56,7 +56,7 @@
 
                 {{-- Cancellation Fee --}}
                 <div class="mb-5">
-                    <label for="cancellation_fee" class="mb-1.5 block text-sm font-medium text-gray-700">Cancellation Fee (KGS)</label>
+                    <label for="cancellation_fee" class="mb-1.5 block text-sm font-medium text-gray-700">Штраф за отмену (сом)</label>
                     <input
                         type="number"
                         id="cancellation_fee"
@@ -75,7 +75,7 @@
 
                 {{-- Max Search Radius --}}
                 <div class="mb-5">
-                    <label for="max_search_radius_km" class="mb-1.5 block text-sm font-medium text-gray-700">Max Search Radius (km)</label>
+                    <label for="max_search_radius_km" class="mb-1.5 block text-sm font-medium text-gray-700">Макс. радиус поиска (км)</label>
                     <input
                         type="number"
                         id="max_search_radius_km"
@@ -94,7 +94,7 @@
 
                 {{-- Stale Active Order Hours --}}
                 <div class="mb-5">
-                    <label for="stale_active_order_hours" class="mb-1.5 block text-sm font-medium text-gray-700">Stale Active Order Hours</label>
+                    <label for="stale_active_order_hours" class="mb-1.5 block text-sm font-medium text-gray-700">Срок зависшего активного заказа (часов)</label>
                     <input
                         type="number"
                         id="stale_active_order_hours"
@@ -117,7 +117,7 @@
                         type="submit"
                         class="rounded-lg bg-amber-500 px-5 py-2.5 text-sm font-medium text-white shadow-sm hover:bg-amber-600"
                     >
-                        Save Settings
+                        Сохранить настройки
                     </button>
                 </div>
             </form>

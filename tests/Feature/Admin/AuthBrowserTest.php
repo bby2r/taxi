@@ -43,8 +43,8 @@ class AuthBrowserTest extends TestCase
 
         $response = $this->get('/admin/login');
         $response->assertStatus(200);
-        $response->assertSee('AIYL Taxi Admin');
-        $response->assertSee('Sign In');
+        $response->assertSee('AIYL Taxi Админ');
+        $response->assertSee('Войти');
 
         $response = $this->post('/admin/login', [
             'phone' => '9876543210',
@@ -68,6 +68,6 @@ class AuthBrowserTest extends TestCase
             ]);
 
         $response->assertStatus(200);
-        $response->assertSee('Invalid credentials');
+        $response->assertSee('Неверный телефон или пароль');
     }
 }

@@ -99,7 +99,7 @@ class DashboardTest extends TestCase
         $response = $this->actingAs($admin)->get('/admin/dashboard');
 
         $response->assertStatus(200);
-        $response->assertSee('Dashboard');
+        $response->assertSee('Главная');
         $response->assertSee('AIYL Taxi');
         $response->assertSee('Admin User');
     }

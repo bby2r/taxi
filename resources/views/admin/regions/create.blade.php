@@ -1,7 +1,7 @@
 @extends('layouts.admin')
 
-@section('title', 'Add Region')
-@section('heading', 'Add Region')
+@section('title', 'Добавить регион')
+@section('heading', 'Добавить регион')
 
 @section('content')
     <div class="mx-auto max-w-2xl">
@@ -11,7 +11,7 @@
 
                 {{-- Name --}}
                 <div class="mb-5">
-                    <label for="name" class="mb-1.5 block text-sm font-medium text-gray-700">Name</label>
+                    <label for="name" class="mb-1.5 block text-sm font-medium text-gray-700">Название</label>
                     <input
                         type="text"
                         id="name"
@@ -26,7 +26,7 @@
 
                 {{-- Day Price --}}
                 <div class="mb-5">
-                    <label for="day_price" class="mb-1.5 block text-sm font-medium text-gray-700">Day Price (KGS)</label>
+                    <label for="day_price" class="mb-1.5 block text-sm font-medium text-gray-700">Дневной тариф (сом)</label>
                     <input
                         type="number"
                         id="day_price"
@@ -43,7 +43,7 @@
 
                 {{-- Night Price --}}
                 <div class="mb-5">
-                    <label for="night_price" class="mb-1.5 block text-sm font-medium text-gray-700">Night Price (KGS)</label>
+                    <label for="night_price" class="mb-1.5 block text-sm font-medium text-gray-700">Ночной тариф (сом)</label>
                     <input
                         type="number"
                         id="night_price"
@@ -60,7 +60,7 @@
 
                 {{-- Sort Order --}}
                 <div class="mb-5">
-                    <label for="sort_order" class="mb-1.5 block text-sm font-medium text-gray-700">Sort Order</label>
+                    <label for="sort_order" class="mb-1.5 block text-sm font-medium text-gray-700">Порядок сортировки</label>
                     <input
                         type="number"
                         id="sort_order"
@@ -79,7 +79,7 @@
                 <div class="mb-5">
                     <label class="flex items-center gap-2">
                         <input type="checkbox" name="is_active" value="1" {{ old('is_active', true) ? 'checked' : '' }} class="rounded border-gray-300 text-amber-500 focus:ring-amber-400">
-                        <span class="text-sm text-gray-700">Region is active</span>
+                        <span class="text-sm text-gray-700">Регион активен</span>
                     </label>
                     @error('is_active')
                         <p class="mt-1 text-sm text-red-600">{{ $message }}</p>
@@ -92,13 +92,13 @@
                         type="submit"
                         class="rounded-lg bg-amber-500 px-5 py-2.5 text-sm font-medium text-white shadow-sm hover:bg-amber-600"
                     >
-                        Create Region
+                        Создать регион
                     </button>
                     <a
                         href="{{ route('admin.regions.index') }}"
                         class="text-sm font-medium text-gray-600 hover:text-gray-800"
                     >
-                        Cancel
+                        Отмена
                     </a>
                 </div>
             </form>

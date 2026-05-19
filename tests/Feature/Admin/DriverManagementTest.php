@@ -44,7 +44,7 @@ class DriverManagementTest extends TestCase
         $response = $this->actingAs($this->admin)->get(route('admin.drivers.create'));
 
         $response->assertOk();
-        $response->assertSee('Add Driver');
+        $response->assertSee('Добавить водителя');
     }
 
     public function test_admin_can_create_driver(): void
@@ -187,8 +187,8 @@ class DriverManagementTest extends TestCase
         $response = $this->actingAs($this->admin)->get(route('admin.drivers.index'));
 
         $response->assertOk();
-        $response->assertSee('Online');
-        $response->assertSee('Offline');
+        $response->assertSee('Онлайн');
+        $response->assertSee('Не на линии');
     }
 
     public function test_non_admin_cannot_access_driver_routes(): void

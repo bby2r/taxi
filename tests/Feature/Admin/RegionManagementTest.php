@@ -51,8 +51,8 @@ class RegionManagementTest extends TestCase
         $response = $this->actingAs($this->admin)->get(route('admin.regions.index'));
 
         $response->assertOk();
-        $response->assertSee('Active');
-        $response->assertSee('Inactive');
+        $response->assertSee('Активен');
+        $response->assertSee('Неактивен');
     }
 
     // --- Create ---

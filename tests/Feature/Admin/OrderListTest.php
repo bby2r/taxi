@@ -115,8 +115,8 @@ class OrderListTest extends TestCase
         $response->assertStatus(200);
         $response->assertSee('John Client');
         $response->assertSee('Jane Driver');
-        $response->assertSee('350 KGS');
-        $response->assertSee('Pickup Address');
+        $response->assertSee('350 сом');
+        $response->assertSee('Адрес подачи');
         $response->assertSee('123 Pickup Street');
         $response->assertSee('Toyota Camry');
         $response->assertSee('B123ABC');

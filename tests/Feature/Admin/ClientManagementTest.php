@@ -25,7 +25,7 @@ class ClientManagementTest extends TestCase
         $response = $this->actingAs($this->admin)->get(route('admin.clients.index'));
 
         $response->assertOk();
-        $response->assertSee('Clients');
+        $response->assertSee('Клиенты');
     }
 
     public function test_client_index_shows_client_data(): void

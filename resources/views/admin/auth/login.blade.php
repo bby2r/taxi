@@ -1,15 +1,15 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="ru">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>AIYL Taxi Admin — Sign In</title>
+    <title>AIYL Taxi Админ — Вход</title>
     @vite(['resources/css/app.css', 'resources/js/app.js'])
 </head>
 <body class="min-h-screen flex items-center justify-center bg-[#F9FAFB]">
     <div class="w-full max-w-sm rounded-xl bg-white p-8 shadow-lg">
-        <h1 class="text-2xl font-bold text-gray-900">AIYL Taxi Admin</h1>
-        <p class="mt-1 text-sm text-gray-500">Sign in to your account</p>
+        <h1 class="text-2xl font-bold text-gray-900">AIYL Taxi Админ</h1>
+        <p class="mt-1 text-sm text-gray-500">Вход в личный кабинет</p>
 
         @if ($errors->any())
             <div class="mt-4 rounded-lg bg-red-50 p-3 text-sm text-red-700">
@@ -23,25 +23,25 @@
             @csrf
 
             <div>
-                <label for="phone" class="block text-sm font-medium text-gray-700">Phone</label>
+                <label for="phone" class="block text-sm font-medium text-gray-700">Телефон</label>
                 <input
                     type="tel"
                     id="phone"
                     name="phone"
                     value="{{ old('phone') }}"
-                    placeholder="Phone number"
+                    placeholder="Номер телефона"
                     required
                     class="mt-1 w-full rounded-lg border border-gray-300 px-4 py-3 text-gray-900 placeholder-gray-400 focus:border-amber-400 focus:ring-2 focus:ring-amber-400 focus:outline-none"
                 />
             </div>
 
             <div>
-                <label for="password" class="block text-sm font-medium text-gray-700">Password</label>
+                <label for="password" class="block text-sm font-medium text-gray-700">Пароль</label>
                 <input
                     type="password"
                     id="password"
                     name="password"
-                    placeholder="Password"
+                    placeholder="Пароль"
                     required
                     class="mt-1 w-full rounded-lg border border-gray-300 px-4 py-3 text-gray-900 placeholder-gray-400 focus:border-amber-400 focus:ring-2 focus:ring-amber-400 focus:outline-none"
                 />
@@ -51,7 +51,7 @@
                 type="submit"
                 class="w-full rounded-lg bg-amber-400 py-3 font-semibold text-gray-900 hover:bg-amber-500 focus:ring-2 focus:ring-amber-400 focus:ring-offset-2 focus:outline-none"
             >
-                Sign In
+                Войти
             </button>
         </form>
     </div>

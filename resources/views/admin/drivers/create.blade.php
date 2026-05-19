@@ -1,7 +1,7 @@
 @extends('layouts.admin')
 
-@section('title', 'Add Driver')
-@section('heading', 'Add Driver')
+@section('title', 'Добавить водителя')
+@section('heading', 'Добавить водителя')
 
 @section('content')
     <div class="mx-auto max-w-2xl">
@@ -11,7 +11,7 @@
 
                 {{-- Name --}}
                 <div class="mb-5">
-                    <label for="name" class="mb-1.5 block text-sm font-medium text-gray-700">Name</label>
+                    <label for="name" class="mb-1.5 block text-sm font-medium text-gray-700">Имя</label>
                     <input
                         type="text"
                         id="name"
@@ -26,7 +26,7 @@
 
                 {{-- Phone --}}
                 <div class="mb-5">
-                    <label for="phone" class="mb-1.5 block text-sm font-medium text-gray-700">Phone</label>
+                    <label for="phone" class="mb-1.5 block text-sm font-medium text-gray-700">Телефон</label>
                     <input
                         type="text"
                         id="phone"
@@ -41,7 +41,7 @@
 
                 {{-- Password --}}
                 <div class="mb-5">
-                    <label for="password" class="mb-1.5 block text-sm font-medium text-gray-700">Password</label>
+                    <label for="password" class="mb-1.5 block text-sm font-medium text-gray-700">Пароль</label>
                     <input
                         type="password"
                         id="password"
@@ -55,7 +55,7 @@
 
                 {{-- Car Model --}}
                 <div class="mb-5">
-                    <label for="car_model" class="mb-1.5 block text-sm font-medium text-gray-700">Car Model</label>
+                    <label for="car_model" class="mb-1.5 block text-sm font-medium text-gray-700">Марка автомобиля</label>
                     <input
                         type="text"
                         id="car_model"
@@ -70,7 +70,7 @@
 
                 {{-- Car Number --}}
                 <div class="mb-5">
-                    <label for="car_number" class="mb-1.5 block text-sm font-medium text-gray-700">Car Number</label>
+                    <label for="car_number" class="mb-1.5 block text-sm font-medium text-gray-700">Номер автомобиля</label>
                     <input
                         type="text"
                         id="car_number"
@@ -89,13 +89,13 @@
                         type="submit"
                         class="rounded-lg bg-amber-500 px-5 py-2.5 text-sm font-medium text-white shadow-sm hover:bg-amber-600"
                     >
-                        Create Driver
+                        Создать водителя
                     </button>
                     <a
                         href="{{ route('admin.drivers.index') }}"
                         class="text-sm font-medium text-gray-600 hover:text-gray-800"
                     >
-                        Cancel
+                        Отмена
                     </a>
                 </div>
             </form>

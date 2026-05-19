@@ -5,7 +5,13 @@ $colors = match($status) {
     App\Enums\DriverChangeRequestStatus::Rejected  => 'bg-red-100 text-red-700',
     default                                        => 'bg-gray-100 text-gray-700',
 };
+
+$labels = [
+    'pending'  => 'Ожидает',
+    'approved' => 'Одобрено',
+    'rejected' => 'Отклонено',
+];
 @endphp
 <span class="inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium {{ $colors }}">
-    {{ ucfirst($status->value) }}
+    {{ $labels[$status->value] ?? ucfirst($status->value) }}
 </span>

@@ -1,7 +1,7 @@
 @extends('layouts.admin')
 
-@section('title', 'Dashboard')
-@section('heading', 'Dashboard')
+@section('title', 'Главная')
+@section('heading', 'Главная')
 
 @section('content')
     {{-- Operational health (right now) --}}

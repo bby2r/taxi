@@ -1,19 +1,19 @@
 @extends('layouts.admin')
 
-@section('title', 'Driver Tickets')
-@section('heading', 'Driver Tickets')
+@section('title', 'Заявки водителей')
+@section('heading', 'Заявки водителей')
 
 @section('content')
     {{-- Filter Bar --}}
     <div class="mb-6 flex items-center justify-between">
-        <p class="text-sm text-gray-600">Total: {{ $tickets->total() }} tickets</p>
+        <p class="text-sm text-gray-600">Всего: {{ $tickets->total() }} заявок</p>
 
         <form method="GET" action="{{ route('admin.tickets.index') }}" class="flex items-center gap-2">
             <select
                 name="status"
                 class="rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-700 focus:border-amber-500 focus:outline-none focus:ring-1 focus:ring-amber-500"
             >
-                <option value="">All Statuses</option>
+                <option value="">Все статусы</option>
                 @foreach ($statuses as $status)
                     <option value="{{ $status->value }}" @selected(request('status') === $status->value)>
                         {{ ucfirst($status->value) }}
@@ -25,7 +25,7 @@
                 type="submit"
                 class="inline-flex items-center rounded-lg bg-amber-500 px-4 py-2 text-sm font-medium text-white shadow-sm hover:bg-amber-600"
             >
-                Filter
+                Фильтр
             </button>
 
             @if (request('status'))
@@ -33,7 +33,7 @@
                     href="{{ route('admin.tickets.index') }}"
                     class="text-sm font-medium text-gray-500 hover:text-gray-700"
                 >
-                    Clear
+                    Сбросить
                 </a>
             @endif
         </form>
@@ -46,12 +46,12 @@
                 <thead class="border-b border-gray-200 bg-gray-50 text-xs uppercase tracking-wider text-gray-500">
                     <tr>
                         <th class="px-6 py-3">ID</th>
-                        <th class="px-6 py-3">Driver</th>
-                        <th class="px-6 py-3">Field</th>
-                        <th class="px-6 py-3">Old Value</th>
-                        <th class="px-6 py-3">New Value</th>
-                        <th class="px-6 py-3">Status</th>
-                        <th class="px-6 py-3">Date</th>
+                        <th class="px-6 py-3">Водитель</th>
+                        <th class="px-6 py-3">Поле</th>
+                        <th class="px-6 py-3">Старое значение</th>
+                        <th class="px-6 py-3">Новое значение</th>
+                        <th class="px-6 py-3">Статус</th>
+                        <th class="px-6 py-3">Дата</th>
                         <th class="px-6 py-3"></th>
                     </tr>
                 </thead>
@@ -66,19 +66,19 @@
                             <td class="whitespace-nowrap px-6 py-4">
                                 @include('admin.partials.ticket-status-badge', ['status' => $ticket->status])
                             </td>
-                            <td class="whitespace-nowrap px-6 py-4 text-gray-500">{{ $ticket->created_at->format('M d, Y H:i') }}</td>
+                            <td class="whitespace-nowrap px-6 py-4 text-gray-500">{{ $ticket->created_at->format('d.m.Y H:i') }}</td>
                             <td class="whitespace-nowrap px-6 py-4 text-right">
                                 <a
                                     href="{{ route('admin.tickets.show', $ticket) }}"
                                     class="text-sm font-medium text-amber-600 hover:text-amber-700"
                                 >
-                                    View
+                                    Подробнее
                                 </a>
                             </td>
                         </tr>
                     @empty
                         <tr>
-                            <td colspan="8" class="px-6 py-8 text-center text-gray-500">No tickets found.</td>
+                            <td colspan="8" class="px-6 py-8 text-center text-gray-500">Заявок нет.</td>
                         </tr>
                     @endforelse
                 </tbody>
