@@ -5,6 +5,7 @@ import {
   TouchableOpacity,
   StyleSheet,
   Alert,
+  AppState,
   Platform,
   StatusBar,
   ActivityIndicator,
@@ -31,9 +32,25 @@ import {
   hasOverlayPermission,
   openOverlaySettings,
   isIgnoringBatteryOptimizations,
+  getManufacturer,
+  openOemPowerSettings,
 } from '../../modules/offer-overlay/src';
 import OrderOfferCard from '../components/OrderOfferCard';
 import PermissionGate from '../components/PermissionGate';
+import OemSetupWizard, { PROBLEMATIC_OEMS } from '../components/OemSetupWizard';
+
+// Lazy — SecureStore lives in the client too but the driver app may
+// have an older bundle without it; degrade to in-memory so we don't
+// crash, accepting that the wizard will re-show on every cold start
+// for that user (still better than throwing).
+let SecureStore: typeof import('expo-secure-store') | null = null;
+try {
+  SecureStore = require('expo-secure-store');
+} catch {
+  SecureStore = null;
+}
+
+const OEM_WIZARD_SEEN_KEY = 'oem_wizard_seen_v1';
 
 type NavigationProp = CompositeNavigationProp<
   BottomTabNavigationProp<DriverTabParamList, 'DriverHome'>,
@@ -60,6 +77,9 @@ export default function HomeScreen(): React.ReactNode {
   const [fsiStatus, setFsiStatus] = useState<FullScreenIntentStatus>('unknown');
   const [overlayGranted, setOverlayGranted] = useState<boolean>(true);
   const [permissionGateVisible, setPermissionGateVisible] = useState(false);
+  const [batteryWhitelisted, setBatteryWhitelisted] = useState<boolean>(true);
+  const [oemWizardVisible, setOemWizardVisible] = useState(false);
+  const [manufacturer, setManufacturer] = useState<string>('');
 
   // Android 14+ requires a separate manual grant for full-screen
   // notifications. Without it the offer notification falls back to a
@@ -83,10 +103,67 @@ export default function HomeScreen(): React.ReactNode {
   useEffect(() => {
     if (!isOfferOverlayAvailable()) {
       setOverlayGranted(true); // hide the banner — feature absent
+      setBatteryWhitelisted(true);
       return;
     }
     setOverlayGranted(hasOverlayPermission());
+    setBatteryWhitelisted(isIgnoringBatteryOptimizations());
+    setManufacturer(getManufacturer());
   }, []);
+
+  // First-launch OEM onboarding — only for known-aggressive OEMs
+  // (Xiaomi/Huawei/Vivo/Oppo/Realme) where the standard battery toggle
+  // isn't enough. Flag persists in SecureStore so we don't re-prompt
+  // on every cold start. The persistent battery banner below still
+  // catches cases where the OS later drops us out of the whitelist.
+  useEffect(() => {
+    if (Platform.OS !== 'android' || !isOfferOverlayAvailable()) return;
+    const oem = getManufacturer();
+    if (!PROBLEMATIC_OEMS.has(oem)) return;
+
+    let cancelled = false;
+    void (async () => {
+      try {
+        const seen = SecureStore ? await SecureStore.getItemAsync(OEM_WIZARD_SEEN_KEY) : null;
+        if (!cancelled && !seen) {
+          setOemWizardVisible(true);
+        }
+      } catch {
+        // SecureStore failed — show wizard once per session anyway,
+        // user can dismiss it with "Не сейчас".
+        if (!cancelled) setOemWizardVisible(true);
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  // Re-check battery whitelist each time the driver returns from a
+  // potential settings deep-link — the AppState 'active' transition
+  // fires when they tap the back gesture. Without this the banner
+  // would persist even after the driver actually fixed it.
+  useEffect(() => {
+    const sub = AppState.addEventListener('change', (next) => {
+      if (next === 'active' && isOfferOverlayAvailable()) {
+        setBatteryWhitelisted(isIgnoringBatteryOptimizations());
+        setOverlayGranted(hasOverlayPermission());
+      }
+    });
+    return () => sub.remove();
+  }, []);
+
+  const dismissOemWizard = async (markSeen: boolean): Promise<void> => {
+    setOemWizardVisible(false);
+    if (markSeen && SecureStore) {
+      try {
+        await SecureStore.setItemAsync(OEM_WIZARD_SEEN_KEY, '1');
+      } catch {
+        // ignore — worst case wizard shows again next cold start
+      }
+    }
+  };
 
   // Navigate to OrderActive when in any active phase
   useEffect(() => {
@@ -365,6 +442,34 @@ export default function HomeScreen(): React.ReactNode {
         </TouchableOpacity>
       )}
 
+      {!batteryWhitelisted && (
+        <TouchableOpacity
+          style={styles.fsiBanner}
+          onPress={() => {
+            // Vendor-specific intent on Xiaomi/Huawei/Vivo/Oppo/Realme
+            // (their autostart screen is what actually fixes it);
+            // standard battery toggle elsewhere. The AppState 'active'
+            // listener above refreshes the banner when the driver
+            // returns from settings.
+            openOemPowerSettings();
+          }}
+          activeOpacity={0.85}
+          testID="battery-banner"
+        >
+          <Text style={[Typography.bodyBold, { color: DriverColors.danger }]}>
+            ⚠ Приложение может вылетать в фоне
+          </Text>
+          <Text style={[Typography.caption, styles.pushBannerHint]}>
+            {PROBLEMATIC_OEMS.has(manufacturer)
+              ? 'На этом телефоне система жёстко контролирует фоновые приложения. Откройте настройки и разрешите автозапуск + отключите оптимизацию батареи — иначе заказы перестанут приходить через 5-10 минут.'
+              : 'Отключите оптимизацию батареи для AIYL Taxi — иначе система может выгрузить приложение в фоне и заказы перестанут приходить.'}
+          </Text>
+          <Text style={[Typography.caption, styles.pushBannerCta]}>
+            Нажмите чтобы открыть настройки →
+          </Text>
+        </TouchableOpacity>
+      )}
+
       {state.phase !== 'offer' && (
         <View style={styles.bottomPanel}>
           {isOnline && state.phase === 'online_idle' && (
@@ -425,6 +530,13 @@ export default function HomeScreen(): React.ReactNode {
           void performToggle();
         }}
         onDismiss={() => setPermissionGateVisible(false)}
+      />
+
+      <OemSetupWizard
+        visible={oemWizardVisible}
+        manufacturer={manufacturer}
+        onDone={() => void dismissOemWizard(true)}
+        onSkip={() => void dismissOemWizard(true)}
       />
     </View>
   );

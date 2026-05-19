@@ -8,6 +8,8 @@ let NativeModule: {
   openOverlaySettings: () => void;
   isIgnoringBatteryOptimizations: () => boolean;
   requestIgnoreBatteryOptimizations: () => void;
+  getManufacturer: () => string;
+  openOemPowerSettings: () => void;
   showOffer: (params: {
     orderId: number;
     address: string;
@@ -44,6 +46,20 @@ export function isIgnoringBatteryOptimizations(): boolean {
 
 export function requestIgnoreBatteryOptimizations(): void {
   NativeModule?.requestIgnoreBatteryOptimizations();
+}
+
+// Lowercased Build.MANUFACTURER on Android, empty string elsewhere.
+// Used to pick OEM-specific tutorial steps in the onboarding wizard.
+export function getManufacturer(): string {
+  return NativeModule ? NativeModule.getManufacturer() : '';
+}
+
+// Opens the vendor-specific autostart / protected-apps screen on
+// Xiaomi/Huawei/Vivo/Oppo/Realme (where the stock battery toggle is
+// insufficient). Falls back to the standard battery-optimization screen
+// on other OEMs.
+export function openOemPowerSettings(): void {
+  NativeModule?.openOemPowerSettings();
 }
 
 export function showOfferOverlay(params: {

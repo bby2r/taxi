@@ -134,6 +134,85 @@ object OfferOverlayManager {
     }
 
     /**
+     * Lowercased device manufacturer (xiaomi / huawei / vivo / oppo /
+     * realme / samsung / google / oneplus / ...). Used by the JS wizard
+     * to pick OEM-specific tutorial steps.
+     */
+    fun getManufacturer(): String = Build.MANUFACTURER.lowercase()
+
+    /**
+     * Opens the vendor-specific "autostart / protected apps" screen for
+     * known-aggressive OEMs (Xiaomi, Huawei, Vivo, Oppo, Realme). The
+     * stock Android battery-optimization toggle is not enough on these —
+     * MIUI/EMUI/FunTouch maintain a separate, more restrictive list that
+     * the public API can't reach, so we hard-code the intent for each.
+     * Falls back to the standard battery-optimization screen on Samsung,
+     * OnePlus, Pixel, etc. where the standard toggle is sufficient.
+     */
+    fun openOemPowerSettings(context: Context) {
+        val intents: List<Intent> = when (getManufacturer()) {
+            "xiaomi", "redmi", "poco" -> listOf(
+                // MIUI autostart manager — most important on Xiaomi
+                Intent().setComponent(android.content.ComponentName(
+                    "com.miui.securitycenter",
+                    "com.miui.permcenter.autostart.AutoStartManagementActivity",
+                )),
+                Intent().setComponent(android.content.ComponentName(
+                    "com.miui.securitycenter",
+                    "com.miui.powercenter.PowerSettings",
+                )),
+            )
+            "huawei", "honor" -> listOf(
+                Intent().setComponent(android.content.ComponentName(
+                    "com.huawei.systemmanager",
+                    "com.huawei.systemmanager.startupmgr.ui.StartupNormalAppListActivity",
+                )),
+                Intent().setComponent(android.content.ComponentName(
+                    "com.huawei.systemmanager",
+                    "com.huawei.systemmanager.optimize.process.ProtectActivity",
+                )),
+            )
+            "vivo", "iqoo" -> listOf(
+                Intent().setComponent(android.content.ComponentName(
+                    "com.vivo.permissionmanager",
+                    "com.vivo.permissionmanager.activity.BgStartUpManagerActivity",
+                )),
+                Intent().setComponent(android.content.ComponentName(
+                    "com.iqoo.secure",
+                    "com.iqoo.secure.ui.phoneoptimize.BgStartUpManager",
+                )),
+            )
+            "oppo", "realme" -> listOf(
+                Intent().setComponent(android.content.ComponentName(
+                    "com.coloros.safecenter",
+                    "com.coloros.safecenter.startupapp.StartupAppListActivity",
+                )),
+                Intent().setComponent(android.content.ComponentName(
+                    "com.coloros.safecenter",
+                    "com.coloros.safecenter.permission.startup.StartupAppListActivity",
+                )),
+                Intent().setComponent(android.content.ComponentName(
+                    "com.oppo.safe",
+                    "com.oppo.safe.permission.startup.StartupAppListActivity",
+                )),
+            )
+            else -> emptyList()
+        }
+
+        for (intent in intents) {
+            try {
+                intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                context.startActivity(intent)
+                return
+            } catch (_: Exception) {
+                // try next fallback
+            }
+        }
+        // Last-resort fallback — the standard battery-optimization screen.
+        requestIgnoreBatteryOptimizations(context)
+    }
+
+    /**
      * Show the bottom-sheet overlay. Always posts to the main looper so
      * it's safe to call from a service / background thread / JS bridge.
      */
