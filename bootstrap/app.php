@@ -8,6 +8,7 @@ use Illuminate\Foundation\Configuration\Exceptions;
 use Illuminate\Foundation\Configuration\Middleware;
 use Illuminate\Http\Middleware\HandleCors;
 use Illuminate\Http\Request;
+use Sentry\Laravel\Integration;
 
 return Application::configure(basePath: dirname(__DIR__))
     ->withRouting(
@@ -34,5 +35,9 @@ return Application::configure(basePath: dirname(__DIR__))
         ]);
     })
     ->withExceptions(function (Exceptions $exceptions): void {
-        //
+        // Forward unhandled exceptions to Sentry — silently no-ops if
+        // SENTRY_LARAVEL_DSN is not set, so local dev / tests behave
+        // exactly as before. On prod set the DSN env var to start
+        // collecting errors.
+        Integration::handles($exceptions);
     })->create();
