@@ -407,7 +407,7 @@ class GeoServiceTest extends TestCase
     public function test_find_nearest_drivers_heartbeat_window_is_configurable(): void
     {
         // Shorter window — 10 s. Driver pinged 20 s ago, so they fall out.
-        Setting::create(['key' => 'live_heartbeat_seconds', 'value' => '10']);
+        Setting::updateOrCreate(['key' => 'live_heartbeat_seconds'], ['value' => '10']);
 
         $pickup = [42.8746, 74.5698];
 

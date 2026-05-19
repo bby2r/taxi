@@ -34,6 +34,38 @@ export function useDriverLocation({ enabled }: UseDriverLocationOptions): Locati
       // Also request background
       await Location.requestBackgroundPermissionsAsync();
 
+      // Seed coordsRef immediately with a Balanced-accuracy fix (cell +
+      // wifi + GPS, comes back in 1-2 s even indoors). watchPositionAsync
+      // below uses High accuracy which can take 10-30 s for a first fix
+      // on cold GPS — without this seed the 3-second upload interval
+      // skipped every tick (the `if (coordsRef.current)` guard), and the
+      // driver became Stale on the admin dashboard within 30 s of going
+      // online despite the app working correctly.
+      try {
+        const initial = await Location.getCurrentPositionAsync({
+          accuracy: Location.Accuracy.Balanced,
+        });
+        coordsRef.current = {
+          latitude: initial.coords.latitude,
+          longitude: initial.coords.longitude,
+          heading: initial.coords.heading,
+        };
+        // First push happens immediately so the driver never sits with a
+        // stale location_updated_at waiting for the 3-second interval.
+        try {
+          await updateLocation(
+            initial.coords.latitude,
+            initial.coords.longitude,
+            initial.coords.heading,
+          );
+        } catch {
+          // Network may be flaky right at toggle-online — interval will retry
+        }
+      } catch {
+        // getCurrentPositionAsync can throw if location services are off;
+        // fall through to watchPositionAsync, which will populate eventually
+      }
+
       subscription = await Location.watchPositionAsync(
         {
           accuracy: Location.Accuracy.High,

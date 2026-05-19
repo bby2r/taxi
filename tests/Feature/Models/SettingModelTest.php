@@ -82,6 +82,6 @@ class SettingModelTest extends TestCase
         $this->seed(SettingSeeder::class);
         $this->seed(SettingSeeder::class);
 
-        $this->assertSame(7, Setting::count());
+        $this->assertSame(8, Setting::count());
     }
 }

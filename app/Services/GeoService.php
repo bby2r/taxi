@@ -66,10 +66,13 @@ class GeoService
         // Liveness heartbeat — a driver whose location_updated_at hasn't
         // been bumped in this many seconds is treated as offline for
         // dispatch even if their is_online flag is still true. The
-        // driver app pings every ~3 s, so 30 s gives 10× margin for
-        // network blips while still catching OEM-killed processes
-        // (Xiaomi / Vivo) that leave the flag stuck.
-        $liveHeartbeatSeconds = (int) Setting::getValue('live_heartbeat_seconds', 30);
+        // driver app pings every ~3 s in foreground, but JS timers
+        // pause when the app is backgrounded (RN limitation — true
+        // background tracking via expo-task-manager is on the TODO).
+        // 60 s gives drivers room to briefly check WhatsApp / map etc.
+        // without dropping out of dispatch, while still catching
+        // OEM-killed processes (Xiaomi / Vivo) that leave the flag stuck.
+        $liveHeartbeatSeconds = (int) Setting::getValue('live_heartbeat_seconds', 60);
         $liveCutoff = now()->subSeconds($liveHeartbeatSeconds);
 
         $drivers = DriverProfile::online()
