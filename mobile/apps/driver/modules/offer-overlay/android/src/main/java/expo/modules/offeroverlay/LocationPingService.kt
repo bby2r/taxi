@@ -9,8 +9,8 @@ import android.content.Intent
 import android.content.pm.PackageManager
 import android.location.Location
 import android.os.Build
+import android.os.HandlerThread
 import android.os.IBinder
-import android.os.Looper
 import androidx.core.app.NotificationCompat
 import com.google.android.gms.location.FusedLocationProviderClient
 import com.google.android.gms.location.LocationCallback
@@ -21,37 +21,35 @@ import com.google.android.gms.location.Priority
 import org.json.JSONObject
 import java.net.HttpURLConnection
 import java.net.URL
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
 import java.util.concurrent.Executors
 
 /**
  * Long-lived foreground service that ships GPS pings to the server in
  * native code — entirely independent of any JS runtime.
  *
- * Why this exists: with the previous expo-task-manager approach, the
- * Android foreground service stayed alive on Xiaomi/MIUI when the
- * driver swiped the app out of recents, but the headless JS context
- * that ran the TaskManager task body was killed — so the notification
- * was still visible while pings silently stopped, and the driver
- * dropped to Stale on dispatch within 60 s. With this service, the
- * upload happens in a plain Kotlin Thread inside the same process as
- * the foreground service, so as long as Android keeps the service
- * alive (which the persistent notification guarantees on AOSP-spec
- * OEMs), pings keep landing.
- *
- * Auth is bridged in once at "go online" time via OfferOverlayManager
- * helpers — the token + API URL get written to a private
- * SharedPreferences file, this service reads them back on each tick.
- * That avoids needing JS to feed the service continuously (which
- * defeats the point — JS may be dead).
+ * Diagnostics: every state change (fix received, post sent, post
+ * succeeded, post failed) updates the persistent notification's text
+ * with a timestamp. The driver and operator can SEE that pings are
+ * still alive — if the timestamp stops advancing while the
+ * notification stays visible, that's the OS killing one half of the
+ * service (typical Xiaomi pattern). Without this signal the
+ * notification looked alive but pings were silently dead, which is
+ * exactly what the previous expo-task-manager attempt suffered from.
  */
 class LocationPingService : Service() {
 
     private lateinit var fusedClient: FusedLocationProviderClient
     private var locationCallback: LocationCallback? = null
-    // Single-thread executor keeps uploads off the main thread and
-    // serializes them — no risk of a long network hang stacking up
-    // a dozen concurrent POSTs when the network unblocks.
     private val uploadExecutor = Executors.newSingleThreadExecutor()
+    // Dedicated thread for FusedLocationProvider callbacks so they don't
+    // depend on the main thread surviving (MIUI sometimes tears down
+    // the main looper while keeping the service alive — using
+    // getMainLooper() then meant callbacks silently stopped firing).
+    private var callbackThread: HandlerThread? = null
+    @Volatile private var lastTickStatus: String = "ожидание GPS"
 
     override fun onBind(intent: Intent?): IBinder? = null
 
@@ -59,20 +57,20 @@ class LocationPingService : Service() {
         super.onCreate()
         fusedClient = LocationServices.getFusedLocationProviderClient(this)
         ensureChannel(this)
+        callbackThread = HandlerThread("aiyl-location-cb").apply { start() }
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
-        startForeground(NOTIFICATION_ID, buildNotification(this))
+        startForeground(NOTIFICATION_ID, buildNotification(this, lastTickStatus))
         startLocationUpdates()
-        // START_STICKY: if Android tears us down for memory, restart on
-        // its own. On Xiaomi this is best-effort — MIUI may ignore it
-        // unless the user enabled autostart for our app.
         return START_STICKY
     }
 
     override fun onDestroy() {
         locationCallback?.let { fusedClient.removeLocationUpdates(it) }
         locationCallback = null
+        callbackThread?.quitSafely()
+        callbackThread = null
         uploadExecutor.shutdown()
         super.onDestroy()
     }
@@ -83,16 +81,12 @@ class LocationPingService : Service() {
         val hasCoarse = checkSelfPermission(android.Manifest.permission.ACCESS_COARSE_LOCATION) ==
             PackageManager.PERMISSION_GRANTED
         if (!hasFine && !hasCoarse) {
-            // Without runtime permission FusedLocationProvider will
-            // throw SecurityException — silently stop instead.
+            updateNotification("нет разрешения на геолокацию")
             stopSelf()
             return
         }
 
         val request = LocationRequest.Builder(
-            // Same priority Balanced gives the JS path: city/wifi/GPS,
-            // fix in 1-2 s indoors, kind to battery. High would lock
-            // the chip into pure-GPS mode — too much for dispatch.
             Priority.PRIORITY_BALANCED_POWER_ACCURACY,
             3_000L,
         )
@@ -106,9 +100,17 @@ class LocationPingService : Service() {
             }
         }
 
+        val looper = callbackThread?.looper
+        if (looper == null) {
+            updateNotification("ошибка инициализации")
+            stopSelf()
+            return
+        }
+
         try {
-            fusedClient.requestLocationUpdates(request, locationCallback!!, Looper.getMainLooper())
+            fusedClient.requestLocationUpdates(request, locationCallback!!, looper)
         } catch (_: SecurityException) {
+            updateNotification("нет разрешения")
             stopSelf()
         }
     }
@@ -116,20 +118,29 @@ class LocationPingService : Service() {
     private fun uploadLocation(loc: Location) {
         val ctx = applicationContext
         uploadExecutor.execute {
-            val token = OfferOverlayManager.getAuthToken(ctx) ?: return@execute
-            val apiBase = OfferOverlayManager.getApiBaseUrl(ctx) ?: return@execute
+            val token = OfferOverlayManager.getAuthToken(ctx)
+            val apiBase = OfferOverlayManager.getApiBaseUrl(ctx)
+            if (token == null || apiBase == null) {
+                updateNotification("нет токена/URL")
+                return@execute
+            }
             val json = JSONObject().apply {
                 put("latitude", loc.latitude)
                 put("longitude", loc.longitude)
                 if (loc.hasBearing()) put("heading", loc.bearing.toDouble())
             }
-            postJson("$apiBase/api/v1/driver/location", token, json.toString())
+            val code = postJson("$apiBase/api/v1/driver/location", token, json.toString())
+            updateNotification(
+                if (code in 200..299) "пинг ${TIME_FMT.format(Date())} OK"
+                else if (code != null) "пинг ${TIME_FMT.format(Date())} HTTP $code"
+                else "сеть недоступна",
+            )
         }
     }
 
-    private fun postJson(url: String, token: String, body: String) {
+    private fun postJson(url: String, token: String, body: String): Int? {
         var conn: HttpURLConnection? = null
-        try {
+        return try {
             conn = (URL(url).openConnection() as HttpURLConnection).apply {
                 requestMethod = "POST"
                 doOutput = true
@@ -140,21 +151,28 @@ class LocationPingService : Service() {
                 setRequestProperty("Authorization", "Bearer $token")
             }
             conn.outputStream.use { it.write(body.toByteArray(Charsets.UTF_8)) }
-            // We deliberately don't read the response body — the only
-            // thing we care about is "did the server accept" and the
-            // status code suffices. responseCode triggers the actual
-            // round-trip.
             conn.responseCode
         } catch (_: Exception) {
-            // Silent — next location tick (3 s) retries.
+            null
         } finally {
             conn?.disconnect()
+        }
+    }
+
+    private fun updateNotification(status: String) {
+        lastTickStatus = status
+        try {
+            val mgr = getSystemService(NotificationManager::class.java) ?: return
+            mgr.notify(NOTIFICATION_ID, buildNotification(this, status))
+        } catch (_: Exception) {
+            // best effort
         }
     }
 
     companion object {
         const val NOTIFICATION_ID = 7421
         const val CHANNEL_ID = "aiyl_location_v1"
+        private val TIME_FMT = SimpleDateFormat("HH:mm:ss", Locale.US)
 
         fun ensureChannel(context: Context) {
             if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) return
@@ -163,7 +181,7 @@ class LocationPingService : Service() {
             val channel = NotificationChannel(
                 CHANNEL_ID,
                 "На линии",
-                NotificationManager.IMPORTANCE_LOW, // silent foreground-service style
+                NotificationManager.IMPORTANCE_LOW,
             ).apply {
                 description = "Постоянное уведомление пока водитель на линии"
                 setShowBadge(false)
@@ -171,8 +189,7 @@ class LocationPingService : Service() {
             mgr.createNotificationChannel(channel)
         }
 
-        fun buildNotification(context: Context): android.app.Notification {
-            // Tap → launch our app's main Activity (whichever Expo picks).
+        fun buildNotification(context: Context, status: String): android.app.Notification {
             val launch = context.packageManager.getLaunchIntentForPackage(context.packageName)
             val pending = launch?.let {
                 PendingIntent.getActivity(
@@ -185,10 +202,11 @@ class LocationPingService : Service() {
             return NotificationCompat.Builder(context, CHANNEL_ID)
                 .setSmallIcon(android.R.drawable.ic_menu_mylocation)
                 .setContentTitle("AIYL Taxi — на линии")
-                .setContentText("Принимаем заказы. Нажмите чтобы открыть.")
+                .setContentText(status)
                 .setColor(0xFBBF24.toInt())
                 .setOngoing(true)
                 .setSilent(true)
+                .setOnlyAlertOnce(true)
                 .setCategory(NotificationCompat.CATEGORY_SERVICE)
                 .setPriority(NotificationCompat.PRIORITY_LOW)
                 .setContentIntent(pending)

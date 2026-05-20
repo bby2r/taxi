@@ -233,10 +233,15 @@ object OfferOverlayManager {
 
     fun setNativeAuth(context: Context, token: String?, apiBaseUrl: String?) {
         val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+        // commit() (synchronous) rather than apply() — JS calls
+        // startNativeLocationPings() immediately after setNativeAuth(),
+        // and an async apply() race could leave the service starting
+        // with a not-yet-flushed token, reading null, and silently
+        // skipping its first ping.
         prefs.edit().apply {
             if (token.isNullOrBlank()) remove(KEY_AUTH_TOKEN) else putString(KEY_AUTH_TOKEN, token)
             if (apiBaseUrl.isNullOrBlank()) remove(KEY_API_BASE) else putString(KEY_API_BASE, apiBaseUrl.trimEnd('/'))
-            apply()
+            commit()
         }
     }
 
