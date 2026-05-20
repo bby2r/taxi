@@ -152,8 +152,30 @@ export default function OemSetupWizard({
 
   return (
     <Modal visible transparent animationType="slide" onRequestClose={onSkip}>
-      <View style={styles.backdrop}>
-        <View style={styles.card}>
+      {/* Backdrop tap dismisses — otherwise on small screens or render
+          glitches the driver could get stuck staring at a grey screen
+          with no way out (originally led to the "оффер не открывается"
+          bug: an incoming offer card rendered beneath this modal and
+          looked like the modal had eaten the whole UI). */}
+      <TouchableOpacity
+        style={styles.backdrop}
+        activeOpacity={1}
+        onPress={onSkip}
+      >
+        <TouchableOpacity
+          style={styles.card}
+          activeOpacity={1}
+          onPress={() => undefined}
+        >
+          {/* Close X — explicit escape hatch in addition to the backdrop
+              tap and the Android back button (Modal's onRequestClose). */}
+          <TouchableOpacity
+            onPress={onSkip}
+            style={styles.closeBtn}
+            hitSlop={{ top: 12, right: 12, bottom: 12, left: 12 }}
+          >
+            <Text style={styles.closeBtnText}>✕</Text>
+          </TouchableOpacity>
           <Text style={[Typography.h2, styles.title]}>Чтобы не пропускать заказы</Text>
           <Text style={[Typography.body, styles.subtitle]}>
             На устройствах {oemLabel} нужно сделать {steps.length}{' '}
@@ -201,8 +223,8 @@ export default function OemSetupWizard({
             </TouchableOpacity>
             <ActionButton title="Готово, я всё настроил" onPress={onDone} />
           </View>
-        </View>
-      </View>
+        </TouchableOpacity>
+      </TouchableOpacity>
     </Modal>
   );
 }
@@ -220,6 +242,18 @@ const styles = StyleSheet.create({
     padding: 20,
     paddingBottom: 32,
     maxHeight: '85%',
+  },
+  closeBtn: {
+    position: 'absolute',
+    top: 10,
+    right: 14,
+    padding: 4,
+    zIndex: 1,
+  },
+  closeBtnText: {
+    color: DriverColors.textMuted,
+    fontSize: 22,
+    fontWeight: '700' as const,
   },
   title: {
     color: DriverColors.textPrimary,

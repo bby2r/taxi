@@ -165,6 +165,16 @@ export default function HomeScreen(): React.ReactNode {
     }
   };
 
+  // If an offer lands while the wizard is open, force-dismiss it so the
+  // driver actually sees the offer card. Without this the wizard's
+  // grey backdrop hid the offer entirely on fresh installs (Xiaomi
+  // first-launch + incoming order = "грейзз экран, ничего не открывается").
+  useEffect(() => {
+    if (state.phase === 'offer' && oemWizardVisible) {
+      void dismissOemWizard(false);
+    }
+  }, [state.phase, oemWizardVisible]);
+
   // Navigate to OrderActive when in any active phase
   useEffect(() => {
     if (
