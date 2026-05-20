@@ -32,12 +32,17 @@ interface LocationCoords {
  */
 export function useDriverLocation({ enabled }: UseDriverLocationOptions): LocationCoords | null {
   const coordsRef = useRef<LocationCoords | null>(null);
+  const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   useEffect(() => {
     let cancelled = false;
     let subscription: Location.LocationSubscription | null = null;
 
     if (!enabled) {
+      if (intervalRef.current) {
+        clearInterval(intervalRef.current);
+        intervalRef.current = null;
+      }
       void stopBackgroundLocation().catch(() => undefined);
       return;
     }
@@ -102,6 +107,27 @@ export function useDriverLocation({ enabled }: UseDriverLocationOptions): Locati
         },
       );
 
+      // Foreground heartbeat — JS interval that uploads the latest
+      // coordsRef every 3 s. Kept (rather than fully delegated to the
+      // native background task) so that even if startBackgroundLocation
+      // fails to start (background-permission denied, OEM blocked the
+      // foreground service, expo-task-manager not bundled in the build),
+      // drivers on the home screen still ping and don't flip to Stale.
+      // Native task below covers the backgrounded case.
+      intervalRef.current = setInterval(async () => {
+        if (coordsRef.current) {
+          try {
+            await updateLocation(
+              coordsRef.current.latitude,
+              coordsRef.current.longitude,
+              coordsRef.current.heading,
+            );
+          } catch {
+            // Silent — next interval retries
+          }
+        }
+      }, 3000);
+
       // Kick off the native background task. Idempotent — if it was
       // already running (e.g. user toggled offline then online quickly,
       // before the stop completed), this is a no-op.
@@ -109,16 +135,18 @@ export function useDriverLocation({ enabled }: UseDriverLocationOptions): Locati
         await startBackgroundLocation();
       } catch {
         // Foreground service start can throw on devices that
-        // mis-declared the FOREGROUND_SERVICE_LOCATION permission. We
-        // log nothing visible — the server-side heartbeat will surface
-        // the consequence (driver flipping to Stale) and the OEM
-        // wizard banner already nudges them to fix their permissions.
+        // mis-declared the FOREGROUND_SERVICE_LOCATION permission. The
+        // JS interval above keeps the foreground heartbeat alive.
       }
     })();
 
     return () => {
       cancelled = true;
       subscription?.remove();
+      if (intervalRef.current) {
+        clearInterval(intervalRef.current);
+        intervalRef.current = null;
+      }
       // Stop the background task on shift-end. Errors swallowed: if the
       // task wasn't running we don't care, and if Android refused the
       // stop we'll retry on the next toggle.
