@@ -31,7 +31,7 @@
     "expo-secure-store": "~15.0.8",
     "expo-speech": "~14.0.7",
     "expo-status-bar": "~3.0.9",
-    "expo-task-manager": "^55.0.16",
+    "expo-task-manager": "~14.0.9",
     "expo-updates": "~29.0.16",
     "offer-overlay": "file:./modules/offer-overlay",
     "pusher-js": "^8.5.0",
