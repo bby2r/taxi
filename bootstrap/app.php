@@ -35,9 +35,13 @@ return Application::configure(basePath: dirname(__DIR__))
         ]);
     })
     ->withExceptions(function (Exceptions $exceptions): void {
-        // Forward unhandled exceptions to Sentry — silently no-ops if
-        // SENTRY_LARAVEL_DSN is not set, so local dev / tests behave
-        // exactly as before. On prod set the DSN env var to start
-        // collecting errors.
-        Integration::handles($exceptions);
+        // Forward unhandled exceptions to Sentry, but only when the
+        // package is actually installed — the class_exists guard keeps
+        // local environments where `composer install` hasn't run for
+        // sentry/sentry-laravel yet from crashing on boot. On prod
+        // after `composer update sentry/sentry-laravel` + setting
+        // SENTRY_LARAVEL_DSN, this lights up automatically.
+        if (class_exists(Integration::class)) {
+            Integration::handles($exceptions);
+        }
     })->create();
