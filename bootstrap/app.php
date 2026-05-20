@@ -8,7 +8,6 @@ use Illuminate\Foundation\Configuration\Exceptions;
 use Illuminate\Foundation\Configuration\Middleware;
 use Illuminate\Http\Middleware\HandleCors;
 use Illuminate\Http\Request;
-use Sentry\Laravel\Integration;
 
 return Application::configure(basePath: dirname(__DIR__))
     ->withRouting(
@@ -35,13 +34,5 @@ return Application::configure(basePath: dirname(__DIR__))
         ]);
     })
     ->withExceptions(function (Exceptions $exceptions): void {
-        // Forward unhandled exceptions to Sentry, but only when the
-        // package is actually installed — the class_exists guard keeps
-        // local environments where `composer install` hasn't run for
-        // sentry/sentry-laravel yet from crashing on boot. On prod
-        // after `composer update sentry/sentry-laravel` + setting
-        // SENTRY_LARAVEL_DSN, this lights up automatically.
-        if (class_exists(Integration::class)) {
-            Integration::handles($exceptions);
-        }
+        //
     })->create();
