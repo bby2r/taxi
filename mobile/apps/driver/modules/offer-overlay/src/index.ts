@@ -10,6 +10,9 @@ let NativeModule: {
   requestIgnoreBatteryOptimizations: () => void;
   getManufacturer: () => string;
   openOemPowerSettings: () => void;
+  setNativeAuth: (token: string | null, apiBaseUrl: string | null) => void;
+  startNativeLocationPings: () => void;
+  stopNativeLocationPings: () => void;
   showOffer: (params: {
     orderId: number;
     address: string;
@@ -60,6 +63,26 @@ export function getManufacturer(): string {
 // on other OEMs.
 export function openOemPowerSettings(): void {
   NativeModule?.openOemPowerSettings();
+}
+
+// Hand the bearer token + API base URL to the native location-ping
+// service so it can authenticate POSTs without a live JS runtime. Call
+// with (null, null) on logout to wipe the stored credentials.
+export function setNativeAuth(token: string | null, apiBaseUrl: string | null): void {
+  NativeModule?.setNativeAuth(token, apiBaseUrl);
+}
+
+// Start the long-lived native foreground service that pings driver
+// location to the server. Survives Xiaomi-style swipe-from-recents (the
+// whole reason this exists — expo-task-manager's headless JS body
+// died on MIUI even when the foreground service stayed alive).
+// Requires setNativeAuth() to have been called first.
+export function startNativeLocationPings(): void {
+  NativeModule?.startNativeLocationPings();
+}
+
+export function stopNativeLocationPings(): void {
+  NativeModule?.stopNativeLocationPings();
 }
 
 export function showOfferOverlay(params: {

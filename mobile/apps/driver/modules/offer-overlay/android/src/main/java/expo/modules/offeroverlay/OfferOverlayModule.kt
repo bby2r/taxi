@@ -62,6 +62,21 @@ class OfferOverlayModule : Module() {
             appContext.reactContext?.let { OfferOverlayManager.openOemPowerSettings(it) }
         }
 
+        // Seed the bearer token + API base into the native bridge so
+        // LocationPingService (which runs without JS) can authenticate
+        // its POSTs. Call once at login and again on logout to clear.
+        Function("setNativeAuth") { token: String?, apiBaseUrl: String? ->
+            appContext.reactContext?.let { OfferOverlayManager.setNativeAuth(it, token, apiBaseUrl) }
+        }
+
+        Function("startNativeLocationPings") {
+            appContext.reactContext?.let { OfferOverlayManager.startNativeLocationPings(it) }
+        }
+
+        Function("stopNativeLocationPings") {
+            appContext.reactContext?.let { OfferOverlayManager.stopNativeLocationPings(it) }
+        }
+
         Function("showOffer") { params: Map<String, Any?> ->
             appContext.reactContext?.let { context ->
                 val orderId = (params["orderId"] as? Number)?.toInt() ?: -1

@@ -37,4 +37,8 @@ dependencies {
   // NotificationCompat / ContextCompat are likewise provided by the
   // consuming app's AppCompat transitive deps.
   compileOnly 'androidx.core:core-ktx:1.13.1'
+  // FusedLocationProviderClient for LocationPingService — expo-location
+  // already pulls play-services-location at runtime, so compileOnly
+  // avoids duplicate-class merge failures.
+  compileOnly 'com.google.android.gms:play-services-location:21.3.0'
 }

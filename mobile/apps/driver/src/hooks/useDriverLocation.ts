@@ -1,7 +1,12 @@
 import { useEffect, useRef } from 'react';
 import * as Location from 'expo-location';
+import { API_BASE_URL, getToken } from '@taxi/shared';
 import { updateLocation } from '../api/driver';
-import { startBackgroundLocation, stopBackgroundLocation } from '../lib/location-task';
+import {
+  setNativeAuth,
+  startNativeLocationPings,
+  stopNativeLocationPings,
+} from '../../modules/offer-overlay/src';
 
 interface UseDriverLocationOptions {
   enabled: boolean;
@@ -14,21 +19,24 @@ interface LocationCoords {
 }
 
 /**
- * Drives the location pipeline for an on-shift driver.
+ * Drives the location pipeline for an on-shift driver. Three layers
+ * run in parallel:
  *
- * - Background pinging (the heartbeat that keeps the driver in dispatch)
- *   runs in a native expo-task-manager task — survives the app being
- *   minimized, the screen going off, the driver scrolling Instagram for
- *   an hour. The task fires from a foreground service so Android doesn't
- *   throttle it.
- * - Foreground UI updates (the blue dot on the home-screen map) still
- *   come from watchPositionAsync because the JS layer needs the
- *   coordinate object to re-render — but they are NOT what keeps the
- *   server seeing this driver as alive.
+ * 1. watchPositionAsync — feeds coordsRef so the home-screen blue dot
+ *    keeps following the driver. Foreground only.
  *
- * Before this split, the heartbeat was a JS setInterval that froze the
- * moment the app went background — drivers flipped to Stale within 30 s
- * of swiping to WhatsApp.
+ * 2. JS setInterval — uploads coordsRef every 3 s. Foreground only
+ *    (RN freezes JS timers in background). Acts as a safety net if
+ *    the native ping service didn't start (no background-location
+ *    permission, OEM blocked the foreground service, older build
+ *    without the native module).
+ *
+ * 3. Native LocationPingService — Kotlin foreground service. Survives
+ *    the user swiping the app out of recents on Xiaomi/MIUI (where the
+ *    previous expo-task-manager headless JS body got killed even
+ *    though the service notification stayed visible — the actual bug
+ *    that triggered this whole native rewrite). Reads token + API
+ *    URL from a SharedPreferences seeded by setNativeAuth() below.
  */
 export function useDriverLocation({ enabled }: UseDriverLocationOptions): LocationCoords | null {
   const coordsRef = useRef<LocationCoords | null>(null);
@@ -43,7 +51,15 @@ export function useDriverLocation({ enabled }: UseDriverLocationOptions): Locati
         clearInterval(intervalRef.current);
         intervalRef.current = null;
       }
-      void stopBackgroundLocation().catch(() => undefined);
+      try {
+        stopNativeLocationPings();
+        // Wipe the cached token from native prefs on shift-end so a
+        // stale token can't accidentally ping if the service is woken
+        // back up by Android resurrection logic.
+        setNativeAuth(null, null);
+      } catch {
+        // Native module may be absent in older builds
+      }
       return;
     }
 
@@ -51,19 +67,35 @@ export function useDriverLocation({ enabled }: UseDriverLocationOptions): Locati
       const { status } = await Location.requestForegroundPermissionsAsync();
       if (status !== 'granted') return;
 
-      // Background permission is required for the foreground-service
-      // task to deliver fixes when the app is not on screen. If the
-      // user declines, the foreground UI still updates but the
-      // background heartbeat won't survive a minimize.
+      // Background permission is what lets LocationPingService actually
+      // deliver fixes from the foreground service when the app is
+      // swiped out of recents. Without it the foreground JS still
+      // pings, but the moment the driver minimizes for >60 s they
+      // flip to Stale.
       await Location.requestBackgroundPermissionsAsync();
 
       if (cancelled) return;
 
+      // Hand auth credentials to the native service BEFORE starting
+      // it — the service reads them on every tick, no JS runtime
+      // required after this point. Token comes from the same
+      // SecureStore that the JS apiClient uses, API_BASE_URL is the
+      // compile-time EXPO_PUBLIC_API_URL.
+      try {
+        const token = await getToken();
+        if (token) {
+          setNativeAuth(token, API_BASE_URL);
+          startNativeLocationPings();
+        }
+      } catch {
+        // Native bridge missing — foreground JS interval below
+        // still keeps the driver visible while on home screen.
+      }
+
       // Immediate fire-and-forget seed: get a fast Balanced fix and
       // POST it so location_updated_at moves the moment the driver
       // taps "На линию" — without this we wait up to the task's
-      // timeInterval (3 s) for the first ping, plus the task's own
-      // startup time (1-2 s on cold launch).
+      // timeInterval (3 s) for the first ping.
       try {
         const initial = await Location.getCurrentPositionAsync({
           accuracy: Location.Accuracy.Balanced,
@@ -80,18 +112,18 @@ export function useDriverLocation({ enabled }: UseDriverLocationOptions): Locati
             initial.coords.heading,
           );
         } catch {
-          // Network may be flaky right at toggle-online — the background
-          // task will retry on its next interval tick
+          // Network flaky right at toggle-online — the interval below
+          // retries on its next tick
         }
       } catch {
-        // getCurrentPositionAsync can throw when location services are
-        // off; the watch/background paths below will pick up later
+        // getCurrentPositionAsync can throw when location services
+        // are off; the watch path below picks up later
       }
 
       if (cancelled) return;
 
       // Foreground UI watch — drives the blue dot on the home-screen
-      // map. Separate from the background heartbeat above.
+      // map. Separate from the native heartbeat.
       subscription = await Location.watchPositionAsync(
         {
           accuracy: Location.Accuracy.High,
@@ -107,13 +139,10 @@ export function useDriverLocation({ enabled }: UseDriverLocationOptions): Locati
         },
       );
 
-      // Foreground heartbeat — JS interval that uploads the latest
-      // coordsRef every 3 s. Kept (rather than fully delegated to the
-      // native background task) so that even if startBackgroundLocation
-      // fails to start (background-permission denied, OEM blocked the
-      // foreground service, expo-task-manager not bundled in the build),
-      // drivers on the home screen still ping and don't flip to Stale.
-      // Native task below covers the backgrounded case.
+      // Foreground JS heartbeat — uploads coordsRef every 3 s. Safety
+      // net when the native service didn't start (no bg-location
+      // permission, OEM blocked, older APK build without the native
+      // module). Server doesn't mind seeing pings from both sources.
       intervalRef.current = setInterval(async () => {
         if (coordsRef.current) {
           try {
@@ -127,17 +156,6 @@ export function useDriverLocation({ enabled }: UseDriverLocationOptions): Locati
           }
         }
       }, 3000);
-
-      // Kick off the native background task. Idempotent — if it was
-      // already running (e.g. user toggled offline then online quickly,
-      // before the stop completed), this is a no-op.
-      try {
-        await startBackgroundLocation();
-      } catch {
-        // Foreground service start can throw on devices that
-        // mis-declared the FOREGROUND_SERVICE_LOCATION permission. The
-        // JS interval above keeps the foreground heartbeat alive.
-      }
     })();
 
     return () => {
@@ -147,10 +165,10 @@ export function useDriverLocation({ enabled }: UseDriverLocationOptions): Locati
         clearInterval(intervalRef.current);
         intervalRef.current = null;
       }
-      // Stop the background task on shift-end. Errors swallowed: if the
-      // task wasn't running we don't care, and if Android refused the
-      // stop we'll retry on the next toggle.
-      void stopBackgroundLocation().catch(() => undefined);
+      // Note: deliberately not stopping the native service here —
+      // unmounting HomeScreen (e.g. when navigating to OrderActive)
+      // should NOT take the driver off shift. The cleanup only fires
+      // when enabled flips false (handled at the top of the effect).
     };
   }, [enabled]);
 

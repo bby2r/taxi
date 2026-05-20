@@ -212,6 +212,58 @@ object OfferOverlayManager {
         requestIgnoreBatteryOptimizations(context)
     }
 
+    // ─────────────────────────────────────────────────────────────────
+    // Native auth bridge for LocationPingService.
+    //
+    // The native location-ping service runs entirely outside the JS
+    // runtime (on Xiaomi/MIUI the headless JS dies even when the
+    // service stays alive — that was the whole reason for the rewrite).
+    // It needs the bearer token and API base URL ahead of time, so JS
+    // writes them here once at "go online" and the service reads them
+    // back on every tick. SharedPreferences is intentional: it's
+    // process-local, survives kills, and Android's per-app sandboxing
+    // means no other app can read it. The token's a short-lived
+    // Sanctum bearer — acceptable security trade-off for the freedom
+    // of not needing JS alive to send pings.
+    // ─────────────────────────────────────────────────────────────────
+
+    private const val PREFS_NAME = "aiyl_native_bridge"
+    private const val KEY_AUTH_TOKEN = "auth_token"
+    private const val KEY_API_BASE = "api_base_url"
+
+    fun setNativeAuth(context: Context, token: String?, apiBaseUrl: String?) {
+        val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+        prefs.edit().apply {
+            if (token.isNullOrBlank()) remove(KEY_AUTH_TOKEN) else putString(KEY_AUTH_TOKEN, token)
+            if (apiBaseUrl.isNullOrBlank()) remove(KEY_API_BASE) else putString(KEY_API_BASE, apiBaseUrl.trimEnd('/'))
+            apply()
+        }
+    }
+
+    fun getAuthToken(context: Context): String? {
+        val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+        return prefs.getString(KEY_AUTH_TOKEN, null)
+    }
+
+    fun getApiBaseUrl(context: Context): String? {
+        val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+        return prefs.getString(KEY_API_BASE, null)
+    }
+
+    fun startNativeLocationPings(context: Context) {
+        val intent = Intent(context, LocationPingService::class.java)
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            context.startForegroundService(intent)
+        } else {
+            context.startService(intent)
+        }
+    }
+
+    fun stopNativeLocationPings(context: Context) {
+        val intent = Intent(context, LocationPingService::class.java)
+        context.stopService(intent)
+    }
+
     /**
      * Show the bottom-sheet overlay. Always posts to the main looper so
      * it's safe to call from a service / background thread / JS bridge.
