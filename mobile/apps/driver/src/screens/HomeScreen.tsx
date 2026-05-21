@@ -11,7 +11,7 @@ import {
   ActivityIndicator,
   Linking,
 } from 'react-native';
-import MapView, { Marker } from 'react-native-maps';
+import Mapbox from '@rnmapbox/maps';
 import * as Location from 'expo-location';
 import { useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
@@ -72,7 +72,7 @@ export default function HomeScreen(): React.ReactNode {
 
   const driverLocation = useLocation();
   useDriverLocation({ enabled: isOnline });
-  const mapRef = useRef<MapView>(null);
+  const cameraRef = useRef<Mapbox.Camera>(null);
   const pushStatus = usePushStatus();
   const [fsiStatus, setFsiStatus] = useState<FullScreenIntentStatus>('unknown');
   const [overlayGranted, setOverlayGranted] = useState<boolean>(true);
@@ -199,19 +199,14 @@ export default function HomeScreen(): React.ReactNode {
   // the upstream useLocation hook already throttles location pushes to
   // ~5 s / 10 m, so this only fires on meaningful movement.
   useEffect(() => {
-    if (driverLocation.loading || driverLocation.error || !mapRef.current) {
+    if (driverLocation.loading || driverLocation.error || !cameraRef.current) {
       return;
     }
-    mapRef.current.animateCamera(
-      {
-        center: {
-          latitude: driverLocation.latitude,
-          longitude: driverLocation.longitude,
-        },
-        zoom: 15,
-      },
-      { duration: 600 },
-    );
+    cameraRef.current.setCamera({
+      centerCoordinate: [driverLocation.longitude, driverLocation.latitude],
+      zoomLevel: 15,
+      animationDuration: 600,
+    });
   }, [
     driverLocation.loading,
     driverLocation.error,
@@ -252,19 +247,14 @@ export default function HomeScreen(): React.ReactNode {
   };
 
   const handleRecenter = (): void => {
-    if (driverLocation.loading || driverLocation.error || !mapRef.current) {
+    if (driverLocation.loading || driverLocation.error || !cameraRef.current) {
       return;
     }
-    mapRef.current.animateCamera(
-      {
-        center: {
-          latitude: driverLocation.latitude,
-          longitude: driverLocation.longitude,
-        },
-        zoom: 16,
-      },
-      { duration: 400 },
-    );
+    cameraRef.current.setCamera({
+      centerCoordinate: [driverLocation.longitude, driverLocation.latitude],
+      zoomLevel: 16,
+      animationDuration: 400,
+    });
   };
 
   const driverPoint =
@@ -272,14 +262,9 @@ export default function HomeScreen(): React.ReactNode {
       ? { latitude: driverLocation.latitude, longitude: driverLocation.longitude }
       : null;
 
-  const initialRegion = driverPoint
-    ? {
-        latitude: driverPoint.latitude,
-        longitude: driverPoint.longitude,
-        latitudeDelta: 0.02,
-        longitudeDelta: 0.02,
-      }
-    : DEFAULT_MAP_REGION;
+  const initialCenter: [number, number] = driverPoint
+    ? [driverPoint.longitude, driverPoint.latitude]
+    : [DEFAULT_MAP_REGION.longitude, DEFAULT_MAP_REGION.latitude];
 
   return (
     <View style={styles.container}>
@@ -289,19 +274,26 @@ export default function HomeScreen(): React.ReactNode {
         translucent
       />
 
-      <MapView
-        ref={mapRef}
+      <Mapbox.MapView
         style={StyleSheet.absoluteFill}
-        initialRegion={initialRegion}
-        showsCompass={false}
-        showsMyLocationButton={false}
-        toolbarEnabled={false}
+        styleURL={Mapbox.StyleURL.TrafficDay}
+        compassEnabled={false}
+        scaleBarEnabled={false}
+        logoEnabled={false}
+        attributionEnabled={false}
       >
+        <Mapbox.Camera
+          ref={cameraRef}
+          defaultSettings={{
+            centerCoordinate: initialCenter,
+            zoomLevel: 14,
+          }}
+        />
+
         {driverPoint && (
-          <Marker
-            coordinate={driverPoint}
-            anchor={{ x: 0.5, y: 0.5 }}
-            flat
+          <Mapbox.PointAnnotation
+            id="driver-self"
+            coordinate={[driverPoint.longitude, driverPoint.latitude]}
           >
             <View
               style={[
@@ -311,9 +303,9 @@ export default function HomeScreen(): React.ReactNode {
             >
               <View style={styles.driverDotInner} />
             </View>
-          </Marker>
+          </Mapbox.PointAnnotation>
         )}
-      </MapView>
+      </Mapbox.MapView>
 
       <View style={styles.topBar} pointerEvents="box-none">
         <View style={styles.topPill}>
