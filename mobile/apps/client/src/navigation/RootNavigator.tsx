@@ -5,12 +5,13 @@ import { ActivityIndicator, View, StyleSheet } from 'react-native';
 import { useAuth, ClientColors, navigationRef } from '@taxi/shared';
 import AuthStack from './AuthStack';
 import ClientTabs from './ClientTabs';
+import NameSetupScreen from '../screens/NameSetupScreen';
 import { RootStackParamList } from './types';
 
 const Stack = createNativeStackNavigator<RootStackParamList>();
 
 export default function RootNavigator(): React.ReactNode {
-  const { isLoading, isAuthenticated } = useAuth();
+  const { isLoading, isAuthenticated, user } = useAuth();
 
   if (isLoading) {
     return (
@@ -20,11 +21,20 @@ export default function RootNavigator(): React.ReactNode {
     );
   }
 
+  // Authenticated but no name yet → gate behind NameSetupScreen.
+  // New clients are firstOrCreate'd server-side with name = '', so
+  // without this gate the driver sees an empty "имя клиента" slot
+  // on first ride. The setup screen calls refreshUser when done, which
+  // re-renders this component and flips us into ClientTabs naturally.
+  const needsName = isAuthenticated && !user?.name?.trim();
+
   return (
     <NavigationContainer ref={navigationRef}>
       <Stack.Navigator screenOptions={{ headerShown: false }}>
         {!isAuthenticated ? (
           <Stack.Screen name="Auth" component={AuthStack} />
+        ) : needsName ? (
+          <Stack.Screen name="NameSetup" component={NameSetupScreen} />
         ) : (
           <Stack.Screen name="ClientApp" component={ClientTabs} />
         )}

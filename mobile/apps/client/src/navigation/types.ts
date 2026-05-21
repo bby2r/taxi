@@ -11,5 +11,6 @@ export type ClientTabParamList = {
 
 export type RootStackParamList = {
   Auth: undefined;
+  NameSetup: undefined;
   ClientApp: undefined;
 };
