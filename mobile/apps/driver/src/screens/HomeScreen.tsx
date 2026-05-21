@@ -38,6 +38,7 @@ import {
 import OrderOfferCard from '../components/OrderOfferCard';
 import PermissionGate from '../components/PermissionGate';
 import OemSetupWizard, { PROBLEMATIC_OEMS } from '../components/OemSetupWizard';
+import DriverArrow from '../components/DriverArrow';
 
 // Lazy — SecureStore lives in the client too but the driver app may
 // have an older bundle without it; degrade to in-memory so we don't
@@ -295,14 +296,7 @@ export default function HomeScreen(): React.ReactNode {
             id="driver-self"
             coordinate={[driverPoint.longitude, driverPoint.latitude]}
           >
-            <View
-              style={[
-                styles.driverDot,
-                isOnline ? styles.driverDotOnline : styles.driverDotOffline,
-              ]}
-            >
-              <View style={styles.driverDotInner} />
-            </View>
+            <DriverArrow heading={driverLocation.heading} online={isOnline} />
           </Mapbox.PointAnnotation>
         )}
       </Mapbox.MapView>

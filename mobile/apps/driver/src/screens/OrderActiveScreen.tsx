@@ -23,6 +23,7 @@ import {
 } from '@taxi/shared';
 import type { Order, DriverCancellationReason, Route } from '@taxi/shared';
 import { useDriverOrder } from '../hooks/useDriverOrder';
+import DriverArrow from '../components/DriverArrow';
 import type { DriverStackParamList } from '../navigation/types';
 
 // Driver must be within this distance of the pickup point before they can
@@ -698,7 +699,7 @@ export default function OrderActiveScreen(): React.ReactNode {
             id="driver"
             coordinate={[driverPoint.longitude, driverPoint.latitude]}
           >
-            <View style={styles.driverDot} />
+            <DriverArrow heading={driverLocation.heading} online />
           </Mapbox.PointAnnotation>
         )}
       </Mapbox.MapView>
