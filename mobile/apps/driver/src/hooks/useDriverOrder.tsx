@@ -925,10 +925,18 @@ function useDriverOrderState(): UseDriverOrderReturn {
     if (current.phase !== 'in_progress') return;
     setError(null);
     setLoading(true);
+    // Suppress the next cancellation alert: the 7s active-order
+    // poll fires during the completeOrder round-trip, sees the
+    // endpoint now 404 (because the order moved to "completed"),
+    // and would otherwise pop "Клиент отменил заказ". Same race
+    // pattern as cancelByDriver / declineOffer.
+    suppressNextCancelAlertRef.current = true;
     try {
       const order = await completeOrder(current.order.id);
       setState({ phase: 'completed', order });
     } catch (err: unknown) {
+      // Reset the suppression so a real future cancel still alerts.
+      suppressNextCancelAlertRef.current = false;
       setError(describeDriverActionError(err));
     } finally {
       setLoading(false);
