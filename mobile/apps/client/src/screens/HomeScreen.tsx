@@ -186,7 +186,7 @@ export default function HomeScreen(): React.ReactNode {
                 activeOpacity={0.85}
               >
                 <Text style={styles.regionChipEmoji}>🌍</Text>
-                <Text style={styles.regionChipText}>Межгород</Text>
+                <Text style={styles.regionChipText}>Межселами</Text>
               </TouchableOpacity>
             </View>
 
@@ -205,7 +205,7 @@ export default function HomeScreen(): React.ReactNode {
               ) : (
                 <>
                   <Text style={styles.heroButtonEmoji}>🚕</Text>
-                  <Text style={styles.heroButtonText}>Вызвать такси</Text>
+                  <Text style={styles.heroButtonText}>Заказ внутри села</Text>
                 </>
               )}
             </TouchableOpacity>

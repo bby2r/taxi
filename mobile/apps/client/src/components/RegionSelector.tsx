@@ -72,7 +72,7 @@ export default function RegionSelector({
               { color: ClientColors.dark, marginBottom: 16 },
             ]}
           >
-            Межгород
+            Межселами
           </Text>
 
           {loading && (
