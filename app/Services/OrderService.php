@@ -136,24 +136,20 @@ class OrderService
 
         $driverUser = User::find($driver->user_id);
         if ($driverUser) {
-            // For inter-district orders include the destination in the
-            // address line — the SYSTEM_ALERT_WINDOW overlay only has
-            // room for one address field, so a bare pickup leaves the
-            // driver guessing whether the trip is across the village or
-            // 4 hours to Bishkek (very different decisions). The in-app
-            // OrderOfferCard renders dropoff separately under "Куда" so
-            // it's not affected by this composition.
-            $destinationName = $order->is_inter_district
+            // Inter-district = region_id is set. Order model has no
+            // is_inter_district accessor, so checking $order->is_inter_district
+            // silently always returned null and the dropoff text never
+            // made it into the FCM payload — the original cause of the
+            // "300 сом и всё" overlay report.
+            $destinationName = $order->region_id !== null
                 ? ($order->dropoff_address ?: $order->region?->name)
                 : null;
-            $displayPickup = $order->pickup_address ?: ($destinationName ? 'Геолокация клиента' : null);
-            $displayAddress = $destinationName
-                ? ($displayPickup ? "{$displayPickup} → {$destinationName}" : "→ {$destinationName}")
-                : $displayPickup;
 
-            $body = $displayAddress
-                ? "Подача: {$displayAddress} · {$order->price} сом · ~{$etaMinutes} мин"
-                : "Новый заказ · {$order->price} сом · ~{$etaMinutes} мин";
+            $body = $order->pickup_address
+                ? "Подача: {$order->pickup_address}".($destinationName ? " → {$destinationName}" : '')." · {$order->price} сом · ~{$etaMinutes} мин"
+                : ($destinationName
+                    ? "→ {$destinationName} · {$order->price} сом · ~{$etaMinutes} мин"
+                    : "Новый заказ · {$order->price} сом · ~{$etaMinutes} мин");
 
             $this->pushService->sendOfferToDriver(
                 $driverUser,
@@ -169,11 +165,12 @@ class OrderService
                     // OfferTimeoutJob (no longer "30 s on the card while
                     // 24 s left on the server").
                     'offered_at' => $offeredAt->toIso8601String(),
-                    // Used by the driver app's background notification task
-                    // to populate the SYSTEM_ALERT_WINDOW overlay without a
-                    // round-trip to /orders/pending-offer (which the OS may
-                    // not let a brief background JS task complete in time).
-                    'pickup_address' => $displayAddress,
+                    // Pickup address stays "pure" — just the pickup. The
+                    // native overlay renders dropoff_text as a separate
+                    // "Куда" line, so we don't need to compose them
+                    // into one string anymore.
+                    'pickup_address' => $order->pickup_address,
+                    'dropoff_text' => $destinationName,
                     'price' => (int) $order->price,
                     'eta_minutes' => $etaMinutes,
                     'distance_km' => (float) ($driver->distance_km ?? 0),

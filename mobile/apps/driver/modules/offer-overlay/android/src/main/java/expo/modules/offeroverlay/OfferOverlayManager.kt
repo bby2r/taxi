@@ -272,10 +272,16 @@ object OfferOverlayManager {
     /**
      * Show the bottom-sheet overlay. Always posts to the main looper so
      * it's safe to call from a service / background thread / JS bridge.
+     *
+     * `dropoff` is rendered as a separate "Куда" line below the pickup
+     * address — useful for inter-district orders so the driver sees
+     * destination before deciding (a 5-km local vs 200-km Bishkek trip
+     * are very different accept/decline calls at the same price-per-km).
+     * Pass null/blank to hide the dropoff block entirely.
      */
-    fun showOverlay(context: Context, orderId: Int, address: String, price: Int, durationSeconds: Int) {
+    fun showOverlay(context: Context, orderId: Int, address: String, dropoff: String?, price: Int, durationSeconds: Int) {
         Handler(Looper.getMainLooper()).post {
-            showOverlayOnMain(context.applicationContext, orderId, address, price, durationSeconds)
+            showOverlayOnMain(context.applicationContext, orderId, address, dropoff, price, durationSeconds)
         }
     }
 
@@ -302,7 +308,7 @@ object OfferOverlayManager {
         }
     }
 
-    private fun showOverlayOnMain(context: Context, orderId: Int, address: String, price: Int, durationSeconds: Int) {
+    private fun showOverlayOnMain(context: Context, orderId: Int, address: String, dropoff: String?, price: Int, durationSeconds: Int) {
         if (!hasPermission(context)) {
             return
         }
@@ -339,6 +345,12 @@ object OfferOverlayManager {
         val addressView = view.findViewById<TextView>(
             context.resources.getIdentifier("offer_address", "id", context.packageName),
         )
+        val dropoffLabel = view.findViewById<TextView>(
+            context.resources.getIdentifier("offer_dropoff_label", "id", context.packageName),
+        )
+        val dropoffView = view.findViewById<TextView>(
+            context.resources.getIdentifier("offer_dropoff", "id", context.packageName),
+        )
         val priceView = view.findViewById<TextView>(
             context.resources.getIdentifier("offer_price", "id", context.packageName),
         )
@@ -353,6 +365,14 @@ object OfferOverlayManager {
         )
 
         addressView?.text = address.ifBlank { "Геолокация клиента" }
+        if (!dropoff.isNullOrBlank()) {
+            dropoffView?.text = dropoff
+            dropoffView?.visibility = View.VISIBLE
+            dropoffLabel?.visibility = View.VISIBLE
+        } else {
+            dropoffView?.visibility = View.GONE
+            dropoffLabel?.visibility = View.GONE
+        }
         priceView?.text = "$price сом"
 
         acceptBtn?.setOnClickListener {

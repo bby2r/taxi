@@ -16,6 +16,7 @@ let NativeModule: {
   showOffer: (params: {
     orderId: number;
     address: string;
+    dropoff?: string | null;
     price: number;
     durationSeconds: number;
   }) => void;
@@ -88,6 +89,7 @@ export function stopNativeLocationPings(): void {
 export function showOfferOverlay(params: {
   orderId: number;
   address: string;
+  dropoff?: string | null;
   price: number;
   durationSeconds?: number;
 }): void {
@@ -95,6 +97,7 @@ export function showOfferOverlay(params: {
   NativeModule.showOffer({
     orderId: params.orderId,
     address: params.address,
+    dropoff: params.dropoff,
     price: params.price,
     durationSeconds: params.durationSeconds ?? 20,
   });

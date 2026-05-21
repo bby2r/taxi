@@ -81,9 +81,10 @@ class OfferOverlayModule : Module() {
             appContext.reactContext?.let { context ->
                 val orderId = (params["orderId"] as? Number)?.toInt() ?: -1
                 val address = (params["address"] as? String) ?: ""
+                val dropoff = params["dropoff"] as? String
                 val price = (params["price"] as? Number)?.toInt() ?: 0
                 val durationSeconds = (params["durationSeconds"] as? Number)?.toInt() ?: 20
-                OfferOverlayManager.showOverlay(context, orderId, address, price, durationSeconds)
+                OfferOverlayManager.showOverlay(context, orderId, address, dropoff, price, durationSeconds)
             }
         }
 

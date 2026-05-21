@@ -71,6 +71,32 @@
         android:layout_marginTop="2dp"
         android:layout_marginBottom="12dp" />
 
+    <!-- Destination block — visible only when offer_dropoff has text
+         (set in OfferOverlayManager). Inter-district orders need this
+         because cost / time decision changes massively between a 2-km
+         village trip and a 200-km trip to Bishkek. -->
+    <TextView
+        android:id="@+id/offer_dropoff_label"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="Куда"
+        android:textColor="#9CA3AF"
+        android:textSize="12sp"
+        android:visibility="gone" />
+
+    <TextView
+        android:id="@+id/offer_dropoff"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:textColor="#FFFFFF"
+        android:textSize="16sp"
+        android:textStyle="bold"
+        android:maxLines="2"
+        android:ellipsize="end"
+        android:layout_marginTop="2dp"
+        android:layout_marginBottom="12dp"
+        android:visibility="gone" />
+
     <TextView
         android:id="@+id/offer_price"
         android:layout_width="match_parent"
