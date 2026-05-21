@@ -34,7 +34,6 @@ import {
   restoreVolumeAfterOffer,
 } from '../lib/volumeGuard';
 import {
-  startShiftForegroundService,
   stopShiftForegroundService,
 } from '../lib/foregroundService';
 import { AppState as RNAppState } from 'react-native';
@@ -734,14 +733,17 @@ function useDriverOrderState(): UseDriverOrderReturn {
       if (stateRef.current.phase === 'offline') {
         await goOnline(latitude, longitude);
         setState({ phase: 'online_idle', order: null });
-        // Foreground service keeps the JS process alive so Pusher stays
-        // connected and notifee can fire full-screen incoming-call
-        // notifications even when the app is swiped away or the screen
-        // is locked. No-op on iOS / older APKs.
-        void startShiftForegroundService();
+        // No notifee shift notification anymore — the native
+        // LocationPingService (started from useDriverLocation) already
+        // shows a foreground-service notification, and stacking a
+        // second one was the user-visible "две плашки" complaint. FCM
+        // offers are handled by OfferFirebaseMessagingService natively
+        // and don't need JS alive; Pusher is only a foreground nicety.
       } else {
         await goOffline();
         setState({ phase: 'offline', order: null });
+        // Belt-and-braces: stop the legacy shift service in case an
+        // older build had started it before this APK was installed.
         void stopShiftForegroundService();
       }
     } catch (err: unknown) {
