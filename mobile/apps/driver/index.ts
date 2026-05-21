@@ -2,6 +2,19 @@ import { registerRootComponent } from 'expo';
 
 import App from './App';
 import { registerBackgroundEvents } from './src/lib/notifee';
+import { MAPBOX_ACCESS_TOKEN } from './src/lib/mapboxConfig';
+
+// Set the Mapbox pk-token before any <MapView> mounts. Wrapped in try
+// because in older builds without @rnmapbox/maps autolinked, the
+// require throws — we degrade silently (driver screens will fall back
+// to react-native-maps until the new APK ships).
+try {
+  // Lazy require so a missing native module doesn't crash JS startup.
+  const Mapbox = require('@rnmapbox/maps').default;
+  Mapbox?.setAccessToken?.(MAPBOX_ACCESS_TOKEN);
+} catch (e) {
+  console.warn('[index] Mapbox token init skipped:', e);
+}
 
 // Notifee requires its background event handler to be registered as
 // early as possible — before any React component mounts — so the OS can

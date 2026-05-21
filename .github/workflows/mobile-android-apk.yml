@@ -41,6 +41,10 @@ jobs:
       EXPO_PUBLIC_API_URL: ${{ vars.EXPO_PUBLIC_API_URL || 'https://staging.aiyltaxi.kg/api' }}
       EXPO_PUBLIC_PUSHER_KEY: ${{ vars.EXPO_PUBLIC_PUSHER_KEY }}
       EXPO_PUBLIC_PUSHER_CLUSTER: ${{ vars.EXPO_PUBLIC_PUSHER_CLUSTER || 'ap1' }}
+      # Mapbox pk-token, bundled into JS at build time. Kept out of the
+      # repo (GitHub Push Protection treats any Mapbox token as a secret
+      # — easier to env-var both halves than to allow-list each pk).
+      EXPO_PUBLIC_MAPBOX_TOKEN: ${{ secrets.EXPO_PUBLIC_MAPBOX_TOKEN }}
 
     steps:
       - name: Checkout repository
@@ -91,6 +95,27 @@ jobs:
           fi
           printf '%s' "$GOOGLE_SERVICES_JSON" > google-services.json
           echo "google-services.json written ($(wc -c < google-services.json) bytes)"
+
+      - name: Write Mapbox downloads token to ~/.gradle (driver only)
+        if: matrix.app == 'driver'
+        env:
+          MAPBOX_DOWNLOADS_TOKEN: ${{ secrets.MAPBOX_DOWNLOADS_TOKEN }}
+        run: |
+          # @rnmapbox/maps' Gradle plugin pulls the Mapbox Android SDK from
+          # api.mapbox.com/downloads, which is a credentialed private Maven
+          # repo. The plugin reads MAPBOX_DOWNLOADS_TOKEN from
+          # gradle.properties to populate the Authorization header — without
+          # this the assembleRelease step fails on artifact resolution.
+          # We never write the sk-token to disk inside the repo: it lives
+          # in GitHub Secrets and gets written to the runner's home gradle
+          # config for the duration of the build only.
+          if [ -z "$MAPBOX_DOWNLOADS_TOKEN" ]; then
+            echo "::error::MAPBOX_DOWNLOADS_TOKEN secret is not set — driver APK can't pull the Mapbox Android SDK."
+            exit 1
+          fi
+          mkdir -p ~/.gradle
+          echo "MAPBOX_DOWNLOADS_TOKEN=$MAPBOX_DOWNLOADS_TOKEN" >> ~/.gradle/gradle.properties
+          echo "Mapbox downloads token written to ~/.gradle/gradle.properties"
 
       - name: Expo prebuild (generate native android project)
         working-directory: mobile/apps/${{ matrix.app }}

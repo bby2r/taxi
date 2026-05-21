@@ -9,7 +9,7 @@ import {
   StatusBar,
   Modal,
 } from 'react-native';
-import MapView, { Marker, Polyline } from 'react-native-maps';
+import Mapbox from '@rnmapbox/maps';
 import { useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import {
@@ -428,7 +428,7 @@ export default function OrderActiveScreen(): React.ReactNode {
     dismissCompleted,
     loading,
   } = useDriverOrder();
-  const mapRef = useRef<MapView>(null);
+  const cameraRef = useRef<Mapbox.Camera>(null);
   const driverLocation = useLocation();
   const [cancelSheetOpen, setCancelSheetOpen] = useState(false);
   const [pendingAction, setPendingAction] = useState<null | {
@@ -551,26 +551,73 @@ export default function OrderActiveScreen(): React.ReactNode {
     error: routeError,
   } = useNavigationRoute(routeOrigin, routeDestination);
 
-  // Fit map to route bounds (or pickup + driver, or pickup alone)
+  // Two camera modes for the active screen:
+  //
+  //   - "Navigation" — driving phases (active / in_progress). Camera
+  //     locks onto the driver, tilts to 55°, rotates to follow heading.
+  //     Yandex-style "you're inside the trip", not "you're looking down
+  //     at a map". Updated on every coord/heading change.
+  //
+  //   - "Overview" — arrived / completed / no route yet. Fit to bounds
+  //     (driver + pickup or full route line) so the operator can see
+  //     the whole situation at a glance.
+  //
+  const isNavigating =
+    (state.phase === 'active' || state.phase === 'in_progress') && driverPoint !== null;
+
   useEffect(() => {
-    if (!mapRef.current || !order) {
+    if (!cameraRef.current || !order) return;
+    if (isNavigating && driverPoint) {
+      // Tilt + bearing + zoom. Heading comes from expo-location's
+      // `useLocation` hook (degrees, 0 = north) — Mapbox uses the same
+      // convention. animationDuration = 1000ms keeps the camera glide
+      // smooth rather than snapping per fix.
+      cameraRef.current.setCamera({
+        centerCoordinate: [driverPoint.longitude, driverPoint.latitude],
+        zoomLevel: 17,
+        pitch: 55,
+        heading:
+          typeof driverLocation.heading === 'number' && driverLocation.heading >= 0
+            ? driverLocation.heading
+            : 0,
+        animationDuration: 1000,
+      });
       return;
     }
+    // Overview: compute lat/lng bounds from route or available points.
     const coords =
       route && route.coordinates.length > 0
         ? route.coordinates
         : [
             ...(pickupPoint ? [pickupPoint] : []),
+            ...(dropoffPoint ? [dropoffPoint] : []),
             ...(driverPoint ? [driverPoint] : []),
           ];
-    if (coords.length === 0) {
-      return;
+    if (coords.length === 0) return;
+    let minLat = coords[0].latitude;
+    let maxLat = coords[0].latitude;
+    let minLng = coords[0].longitude;
+    let maxLng = coords[0].longitude;
+    for (const c of coords) {
+      if (c.latitude < minLat) minLat = c.latitude;
+      if (c.latitude > maxLat) maxLat = c.latitude;
+      if (c.longitude < minLng) minLng = c.longitude;
+      if (c.longitude > maxLng) maxLng = c.longitude;
     }
-    mapRef.current.fitToCoordinates(coords, {
-      edgePadding: { top: 80, right: 60, bottom: 60, left: 60 },
-      animated: true,
-    });
-  }, [order, route, driverPoint?.latitude, driverPoint?.longitude]);
+    cameraRef.current.fitBounds(
+      [maxLng, maxLat], // NE
+      [minLng, minLat], // SW
+      [80, 60, 60, 60], // padding: top, right, bottom, left
+      800,
+    );
+  }, [
+    isNavigating,
+    order,
+    route,
+    driverPoint?.latitude,
+    driverPoint?.longitude,
+    driverLocation.heading,
+  ]);
 
   if (!order) {
     return null;
@@ -588,55 +635,73 @@ export default function OrderActiveScreen(): React.ReactNode {
 
   return (
     <View style={styles.container}>
-      <MapView
-        ref={mapRef}
+      <Mapbox.MapView
         style={styles.map}
-        initialRegion={{
-          latitude: pickupPoint?.latitude ?? 42.87,
-          longitude: pickupPoint?.longitude ?? 74.59,
-          latitudeDelta: 0.02,
-          longitudeDelta: 0.02,
-        }}
-        showsUserLocation
-        showsMyLocationButton
-        mapPadding={{ top: Platform.OS === 'android' ? (StatusBar.currentHeight ?? 40) + 8 : 0, right: 0, bottom: 0, left: 0 }}
+        styleURL={Mapbox.StyleURL.TrafficDay}
+        compassEnabled={false}
+        scaleBarEnabled={false}
+        logoEnabled={false}
+        attributionEnabled={false}
       >
+        <Mapbox.Camera ref={cameraRef} />
+
+        {/* Thick highlighted route polyline — drawn first so markers
+            sit on top. Style stays the same in both navigation and
+            overview camera modes. */}
+        {trimmedCoordinates.length > 1 && (
+          <Mapbox.ShapeSource
+            id="route-source"
+            shape={{
+              type: 'Feature',
+              properties: {},
+              geometry: {
+                type: 'LineString',
+                coordinates: trimmedCoordinates.map((c) => [c.longitude, c.latitude]),
+              },
+            }}
+          >
+            <Mapbox.LineLayer
+              id="route-line"
+              style={{
+                lineColor: DriverColors.primary,
+                lineWidth: 9,
+                lineCap: 'round',
+                lineJoin: 'round',
+                lineOpacity: 0.95,
+              }}
+            />
+          </Mapbox.ShapeSource>
+        )}
+
         {pickupPoint && (
-          <Marker
-            coordinate={pickupPoint}
+          <Mapbox.PointAnnotation
+            id="pickup"
+            coordinate={[pickupPoint.longitude, pickupPoint.latitude]}
             title={order.pickup_address || 'Клиент'}
-            pinColor={DriverColors.primary}
-          />
+          >
+            <View style={styles.pickupPin} />
+          </Mapbox.PointAnnotation>
         )}
+
         {dropoffPoint && (
-          <Marker
-            coordinate={dropoffPoint}
+          <Mapbox.PointAnnotation
+            id="dropoff"
+            coordinate={[dropoffPoint.longitude, dropoffPoint.latitude]}
             title={order.dropoff_address || order.region?.name || 'Пункт Б'}
-            pinColor={DriverColors.success}
-            testID="dropoff-marker"
-          />
+          >
+            <View style={styles.dropoffPin} />
+          </Mapbox.PointAnnotation>
         )}
+
         {driverPoint && (state.phase === 'active' || state.phase === 'in_progress') && (
-          <Marker
-            coordinate={driverPoint}
-            title="Вы"
-            anchor={{ x: 0.5, y: 0.5 }}
-            testID="driver-marker"
+          <Mapbox.PointAnnotation
+            id="driver"
+            coordinate={[driverPoint.longitude, driverPoint.latitude]}
           >
             <View style={styles.driverDot} />
-          </Marker>
+          </Mapbox.PointAnnotation>
         )}
-        {trimmedCoordinates.length > 1 && (
-          <Polyline
-            coordinates={trimmedCoordinates}
-            strokeColor={DriverColors.success}
-            strokeWidth={6}
-            lineCap="round"
-            lineJoin="round"
-            testID="route-polyline"
-          />
-        )}
-      </MapView>
+      </Mapbox.MapView>
 
       <View style={styles.bottomCard}>
         {state.phase === 'active' && (
@@ -729,12 +794,38 @@ const styles = StyleSheet.create({
     marginBottom: 4,
   },
   driverDot: {
-    width: 16,
-    height: 16,
-    borderRadius: 8,
+    width: 18,
+    height: 18,
+    borderRadius: 9,
     backgroundColor: DriverColors.primary,
     borderWidth: 3,
     borderColor: '#fff',
+  },
+  pickupPin: {
+    width: 18,
+    height: 18,
+    borderRadius: 9,
+    backgroundColor: DriverColors.primary,
+    borderWidth: 4,
+    borderColor: '#fff',
+    shadowColor: '#000',
+    shadowOpacity: 0.25,
+    shadowRadius: 4,
+    shadowOffset: { width: 0, height: 2 },
+    elevation: 4,
+  },
+  dropoffPin: {
+    width: 18,
+    height: 18,
+    borderRadius: 9,
+    backgroundColor: DriverColors.success,
+    borderWidth: 4,
+    borderColor: '#fff',
+    shadowColor: '#000',
+    shadowOpacity: 0.25,
+    shadowRadius: 4,
+    shadowOffset: { width: 0, height: 2 },
+    elevation: 4,
   },
   distanceHint: {
     color: DriverColors.textMuted,
