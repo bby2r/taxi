@@ -566,13 +566,32 @@ export default function OrderActiveScreen(): React.ReactNode {
   const isNavigating =
     (state.phase === 'active' || state.phase === 'in_progress') && driverPoint !== null;
 
+  // Camera follow toggle. Defaults on; the driver pinching/panning the
+  // map sets it to false (handled by onCameraChanged below) — that's
+  // when the "Вернуться к маршруту" button appears so they can opt back
+  // in. Same pattern Yandex uses: never fight the user's gesture.
+  const [following, setFollowing] = useState(true);
+
+  // Re-enable follow whenever the screen transitions into a new phase
+  // (newly accepted, freshly in-progress). Driver expects auto-follow
+  // again after a state change even if they had panned away.
+  useEffect(() => {
+    setFollowing(true);
+  }, [state.phase]);
+
   useEffect(() => {
     if (!cameraRef.current || !order) return;
+    if (!following) return; // user panned away — respect their view
     if (isNavigating && driverPoint) {
       // Tilt + bearing + zoom. Heading comes from expo-location's
       // `useLocation` hook (degrees, 0 = north) — Mapbox uses the same
       // convention. animationDuration = 1000ms keeps the camera glide
       // smooth rather than snapping per fix.
+      //
+      // padding shifts where in the viewport the centerCoordinate lands.
+      // Big paddingBottom pushes the visual center upward, so the driver
+      // arrow sits in the lower-third of the screen — leaves room to
+      // see the road ahead, matching navigation-app convention.
       cameraRef.current.setCamera({
         centerCoordinate: [driverPoint.longitude, driverPoint.latitude],
         zoomLevel: 17,
@@ -581,6 +600,7 @@ export default function OrderActiveScreen(): React.ReactNode {
           typeof driverLocation.heading === 'number' && driverLocation.heading >= 0
             ? driverLocation.heading
             : 0,
+        padding: { paddingTop: 60, paddingBottom: 380, paddingLeft: 0, paddingRight: 0 },
         animationDuration: 1000,
       });
       return;
@@ -618,6 +638,7 @@ export default function OrderActiveScreen(): React.ReactNode {
     driverPoint?.latitude,
     driverPoint?.longitude,
     driverLocation.heading,
+    following,
   ]);
 
   if (!order) {
@@ -643,6 +664,20 @@ export default function OrderActiveScreen(): React.ReactNode {
         scaleBarEnabled={false}
         logoEnabled={false}
         attributionEnabled={false}
+        onCameraChanged={(state) => {
+          // reason === 'gesture' fires only when the driver pans/pinches
+          // — we never trigger gestures from code. Break follow so our
+          // useEffect stops fighting the driver's view. They'll get a
+          // "Вернуться к маршруту" button to opt back in.
+          if (
+            following &&
+            isNavigating &&
+            (state as { gestures?: { isGestureActive?: boolean } }).gestures
+              ?.isGestureActive
+          ) {
+            setFollowing(false);
+          }
+        }}
       >
         <Mapbox.Camera ref={cameraRef} />
 
@@ -703,6 +738,20 @@ export default function OrderActiveScreen(): React.ReactNode {
           </Mapbox.PointAnnotation>
         )}
       </Mapbox.MapView>
+
+      {/* Re-engage follow camera. Shows only when driver opted out of
+          follow by panning the map mid-navigation. Tap snaps back to
+          the tilted heading-locked view. */}
+      {isNavigating && !following && (
+        <TouchableOpacity
+          style={styles.recenterButton}
+          onPress={() => setFollowing(true)}
+          activeOpacity={0.85}
+        >
+          <Text style={styles.recenterIcon}>🎯</Text>
+          <Text style={styles.recenterText}>Вернуться к маршруту</Text>
+        </TouchableOpacity>
+      )}
 
       <View style={styles.bottomCard}>
         {state.phase === 'active' && (
@@ -801,6 +850,33 @@ const styles = StyleSheet.create({
     backgroundColor: DriverColors.primary,
     borderWidth: 3,
     borderColor: '#fff',
+  },
+  recenterButton: {
+    position: 'absolute',
+    bottom: 320,
+    alignSelf: 'center',
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    paddingHorizontal: 18,
+    paddingVertical: 12,
+    borderRadius: 24,
+    backgroundColor: DriverColors.cardBackground,
+    borderWidth: 1,
+    borderColor: DriverColors.border,
+    shadowColor: '#000',
+    shadowOpacity: 0.25,
+    shadowRadius: 8,
+    shadowOffset: { width: 0, height: 4 },
+    elevation: 8,
+  },
+  recenterIcon: {
+    fontSize: 16,
+  },
+  recenterText: {
+    color: DriverColors.textPrimary,
+    fontSize: 14,
+    fontWeight: '700' as const,
   },
   pickupPin: {
     width: 18,
