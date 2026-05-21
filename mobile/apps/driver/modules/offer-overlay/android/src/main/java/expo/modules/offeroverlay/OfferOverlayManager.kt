@@ -279,9 +279,9 @@ object OfferOverlayManager {
      * are very different accept/decline calls at the same price-per-km).
      * Pass null/blank to hide the dropoff block entirely.
      */
-    fun showOverlay(context: Context, orderId: Int, address: String, dropoff: String?, price: Int, durationSeconds: Int) {
+    fun showOverlay(context: Context, orderId: Int, address: String, dropoff: String?, comment: String?, price: Int, durationSeconds: Int) {
         Handler(Looper.getMainLooper()).post {
-            showOverlayOnMain(context.applicationContext, orderId, address, dropoff, price, durationSeconds)
+            showOverlayOnMain(context.applicationContext, orderId, address, dropoff, comment, price, durationSeconds)
         }
     }
 
@@ -308,7 +308,7 @@ object OfferOverlayManager {
         }
     }
 
-    private fun showOverlayOnMain(context: Context, orderId: Int, address: String, dropoff: String?, price: Int, durationSeconds: Int) {
+    private fun showOverlayOnMain(context: Context, orderId: Int, address: String, dropoff: String?, comment: String?, price: Int, durationSeconds: Int) {
         if (!hasPermission(context)) {
             return
         }
@@ -364,6 +364,13 @@ object OfferOverlayManager {
             context.resources.getIdentifier("offer_decline", "id", context.packageName),
         )
 
+        val commentBox = view.findViewById<View>(
+            context.resources.getIdentifier("offer_comment_box", "id", context.packageName),
+        )
+        val commentView = view.findViewById<TextView>(
+            context.resources.getIdentifier("offer_comment", "id", context.packageName),
+        )
+
         addressView?.text = address.ifBlank { "Геолокация клиента" }
         if (!dropoff.isNullOrBlank()) {
             dropoffView?.text = dropoff
@@ -372,6 +379,12 @@ object OfferOverlayManager {
         } else {
             dropoffView?.visibility = View.GONE
             dropoffLabel?.visibility = View.GONE
+        }
+        if (!comment.isNullOrBlank()) {
+            commentView?.text = comment
+            commentBox?.visibility = View.VISIBLE
+        } else {
+            commentBox?.visibility = View.GONE
         }
         priceView?.text = "$price сом"
 

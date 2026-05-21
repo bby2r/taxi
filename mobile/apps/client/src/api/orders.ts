@@ -3,12 +3,14 @@ import { apiClient, Order, PaginatedResponse } from '@taxi/shared';
 export async function createOrder(
   latitude: number,
   longitude: number,
-  address?: string
+  address?: string,
+  comment?: string,
 ): Promise<Order> {
   const { data } = await apiClient.post<{ data: Order }>('/api/v1/client/orders', {
     pickup_latitude: latitude,
     pickup_longitude: longitude,
     pickup_address: address,
+    client_comment: comment,
   });
   return data.data;
 }
@@ -39,13 +41,15 @@ export async function createRegionalOrder(
   latitude: number,
   longitude: number,
   regionId: number,
-  address?: string
+  address?: string,
+  comment?: string,
 ): Promise<Order> {
   const { data } = await apiClient.post<{ data: Order }>('/api/v1/client/orders/regional', {
     pickup_latitude: latitude,
     pickup_longitude: longitude,
     region_id: regionId,
     pickup_address: address,
+    client_comment: comment,
   });
   return data.data;
 }

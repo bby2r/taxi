@@ -30,8 +30,8 @@ type ClientOrderState =
 
 export interface UseOrderReturn {
   state: ClientOrderState;
-  callTaxi: (latitude: number, longitude: number, address?: string) => Promise<void>;
-  callRegionalTaxi: (latitude: number, longitude: number, regionId: number, address?: string) => Promise<void>;
+  callTaxi: (latitude: number, longitude: number, address?: string, comment?: string) => Promise<void>;
+  callRegionalTaxi: (latitude: number, longitude: number, regionId: number, address?: string, comment?: string) => Promise<void>;
   cancelOrder: () => Promise<void>;
   dismissCompleted: () => void;
   loading: boolean;
@@ -248,27 +248,30 @@ export function useOrder(): UseOrderReturn {
     return () => clearInterval(interval);
   }, [state.phase]);
 
-  const callTaxi = useCallback(async (latitude: number, longitude: number, address?: string) => {
-    setLoading(true);
-    setError(null);
-    try {
-      const order = await ordersApi.createOrder(latitude, longitude, address);
-      orderRef.current = order;
-      setState({ phase: 'searching', order });
-    } catch (e: unknown) {
-      const axiosError = e as { response?: { data?: { message?: string } } };
-      setError(axiosError.response?.data?.message || 'Не удалось создать заказ');
-    } finally {
-      setLoading(false);
-    }
-  }, []);
-
-  const callRegionalTaxi = useCallback(
-    async (latitude: number, longitude: number, regionId: number, address?: string) => {
+  const callTaxi = useCallback(
+    async (latitude: number, longitude: number, address?: string, comment?: string) => {
       setLoading(true);
       setError(null);
       try {
-        const order = await ordersApi.createRegionalOrder(latitude, longitude, regionId, address);
+        const order = await ordersApi.createOrder(latitude, longitude, address, comment);
+        orderRef.current = order;
+        setState({ phase: 'searching', order });
+      } catch (e: unknown) {
+        const axiosError = e as { response?: { data?: { message?: string } } };
+        setError(axiosError.response?.data?.message || 'Не удалось создать заказ');
+      } finally {
+        setLoading(false);
+      }
+    },
+    [],
+  );
+
+  const callRegionalTaxi = useCallback(
+    async (latitude: number, longitude: number, regionId: number, address?: string, comment?: string) => {
+      setLoading(true);
+      setError(null);
+      try {
+        const order = await ordersApi.createRegionalOrder(latitude, longitude, regionId, address, comment);
         orderRef.current = order;
         setState({ phase: 'searching', order });
       } catch (e: unknown) {

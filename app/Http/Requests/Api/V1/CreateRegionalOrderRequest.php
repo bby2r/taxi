@@ -38,6 +38,7 @@ class CreateRegionalOrderRequest extends FormRequest
                     }
                 },
             ],
+            'client_comment' => ['nullable', 'string', 'max:255'],
         ];
     }
 }

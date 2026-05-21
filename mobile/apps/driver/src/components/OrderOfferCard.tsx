@@ -219,6 +219,15 @@ export default function OrderOfferCard({
         </>
       )}
 
+      {order.client_comment && (
+        <View style={styles.commentBox}>
+          <Text style={styles.commentEmoji}>💬</Text>
+          <Text style={[Typography.body, styles.commentText]}>
+            {order.client_comment}
+          </Text>
+        </View>
+      )}
+
       <Text style={[Typography.h1, { color: DriverColors.primary, marginBottom: 20 }]}>
         {order.price} сом
       </Text>
@@ -339,6 +348,22 @@ const styles = StyleSheet.create({
     color: DriverColors.textPrimary,
     fontSize: 11,
     fontWeight: '700' as const,
+  },
+  commentBox: {
+    flexDirection: 'row',
+    backgroundColor: DriverColors.background,
+    borderRadius: 12,
+    padding: 12,
+    marginBottom: 14,
+    gap: 8,
+  },
+  commentEmoji: {
+    fontSize: 16,
+  },
+  commentText: {
+    color: DriverColors.textPrimary,
+    flex: 1,
+    lineHeight: 20,
   },
   buttonRow: {
     flexDirection: 'row',

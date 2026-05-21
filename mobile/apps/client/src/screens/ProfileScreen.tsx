@@ -228,6 +228,16 @@ export default function ProfileScreen(): React.ReactNode {
           <Text style={styles.supportPhone}>+996 509 397 226</Text>
         </TouchableOpacity>
 
+        {/* Privacy Policy — required by Play Console listing. Lives on
+            the server so updates don't ship via APK. */}
+        <TouchableOpacity
+          style={styles.legalButton}
+          onPress={() => Linking.openURL('https://aiyltaxi.kg/privacy')}
+          activeOpacity={0.85}
+        >
+          <Text style={styles.legalButtonText}>Политика конфиденциальности</Text>
+        </TouchableOpacity>
+
         {/* Logout */}
         <TouchableOpacity style={styles.logoutButton} onPress={handleLogout}>
           <Text style={styles.logoutButtonText}>Выйти</Text>
@@ -357,6 +367,17 @@ const styles = StyleSheet.create({
   supportPhone: {
     ...Typography.body,
     color: ClientColors.primary,
+  },
+  legalButton: {
+    paddingVertical: 14,
+    paddingHorizontal: 16,
+    marginTop: 8,
+    alignItems: 'center',
+  },
+  legalButtonText: {
+    ...Typography.caption,
+    color: ClientColors.textMuted,
+    fontSize: 13,
   },
   logoutButton: {
     backgroundColor: ClientColors.danger,

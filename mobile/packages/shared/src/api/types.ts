@@ -42,6 +42,7 @@ export interface Order {
   dropoff_address: string | null;
   dropoff_latitude: number | null;
   dropoff_longitude: number | null;
+  client_comment: string | null;
   is_inter_district: boolean;
   region: { id: number; name: string } | null;
   client: OrderClient;

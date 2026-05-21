@@ -97,6 +97,37 @@
         android:layout_marginBottom="12dp"
         android:visibility="gone" />
 
+    <!-- Client comment block — same visibility-gated pattern as dropoff.
+         Shown for orders where the client added a note ("у красного
+         магазина", "большой багаж"). -->
+    <LinearLayout
+        android:id="@+id/offer_comment_box"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal"
+        android:background="@drawable/offer_handle_bg"
+        android:padding="12dp"
+        android:layout_marginBottom="14dp"
+        android:visibility="gone">
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="💬"
+            android:textSize="16sp"
+            android:layout_marginEnd="8dp" />
+
+        <TextView
+            android:id="@+id/offer_comment"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:textColor="#FFFFFF"
+            android:textSize="14sp"
+            android:maxLines="3"
+            android:ellipsize="end" />
+
+    </LinearLayout>
+
     <TextView
         android:id="@+id/offer_price"
         android:layout_width="match_parent"

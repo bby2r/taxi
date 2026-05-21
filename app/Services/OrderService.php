@@ -39,6 +39,7 @@ class OrderService
         ?float $dropoffLon = null,
         ?string $dropoffAddress = null,
         ?int $regionId = null,
+        ?string $clientComment = null,
     ): Order {
         $activeOrder = Order::forClient($client->id)->active()->first();
         if ($activeOrder) {
@@ -62,6 +63,7 @@ class OrderService
             'dropoff_latitude' => $dropoffLat,
             'dropoff_longitude' => $dropoffLon,
             'dropoff_address' => $dropoffAddress,
+            'client_comment' => $clientComment,
             'price' => $price,
             'region_id' => $regionId,
             'declined_drivers' => [],
@@ -171,6 +173,7 @@ class OrderService
                     // into one string anymore.
                     'pickup_address' => $order->pickup_address,
                     'dropoff_text' => $destinationName,
+                    'client_comment' => $order->client_comment,
                     'price' => (int) $order->price,
                     'eta_minutes' => $etaMinutes,
                     'distance_km' => (float) ($driver->distance_km ?? 0),
