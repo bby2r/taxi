@@ -5,6 +5,8 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <meta name="description" content="AIYL Taxi — современное такси для жителей Таласа и соседних сёл. Заказ за 5 секунд, водитель на карте, цена известна заранее.">
     <title>AIYL Taxi — такси по селу и в город</title>
+    <link rel="icon" type="image/png" href="{{ asset('favicon.png') }}">
+    <link rel="apple-touch-icon" href="{{ asset('apple-touch-icon.png') }}">
 
     {{-- Distinctive type pairing: Fraunces (expressive serif with optical-size & soft variant axis)
          for editorial display, Manrope for the warm geometric sans body. Pre-connect to keep
