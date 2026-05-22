@@ -1,4 +1,5 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect, useCallback } from 'react';
+import { useFocusEffect } from '@react-navigation/native';
 import {
   View,
   Text,
@@ -76,11 +77,20 @@ export default function HomeScreen(): React.ReactNode {
   const [currentPrice, setCurrentPrice] = useState<number>(80);
   const cardAnim = useRef(new Animated.Value(0)).current;
 
-  useEffect(() => {
-    getCurrentPrice()
-      .then(setCurrentPrice)
-      .catch(() => setCurrentPrice(80));
-  }, []);
+  // Re-fetch the in-village price every time the home tab regains
+  // focus (and on first mount). Previously this was a one-shot
+  // useEffect — operator would change the price in /admin/settings,
+  // but every client app with HomeScreen already mounted kept the
+  // stale value forever. Now the fresh value lands when the user
+  // switches back from another tab, returns from background, or
+  // simply taps the tab bar.
+  useFocusEffect(
+    useCallback(() => {
+      getCurrentPrice()
+        .then(setCurrentPrice)
+        .catch(() => undefined);
+    }, []),
+  );
 
   // Slide the bottom card up on first mount for a more "alive" feel.
   useEffect(() => {
