@@ -27,7 +27,12 @@ class LandingPageTest extends TestCase
     {
         $response = $this->get('/');
 
-        $response->assertSee('Your AIYL Taxi Service');
+        // Landing was rewritten as a Russian editorial-style page; the
+        // hero now leads with "Такси по селу и в город" split across two
+        // h1 lines, plus the bold geographic eyebrow.
+        $response->assertSee('Такси');
+        $response->assertSee('город');
+        $response->assertSee('Таласская область');
     }
 
     /**
