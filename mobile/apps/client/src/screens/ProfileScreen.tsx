@@ -241,7 +241,7 @@ export default function ProfileScreen(): React.ReactNode {
 
           <TouchableOpacity
             style={styles.menuRow}
-            onPress={() => Linking.openURL('https://aiyltaxi.kg/privacy')}
+            onPress={() => Linking.openURL('https://taxi-api-cy7a.onrender.com/privacy')}
             activeOpacity={0.7}
           >
             <View style={[styles.menuIconBox, { backgroundColor: ClientColors.surfaceMuted }]}>

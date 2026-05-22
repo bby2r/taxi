@@ -38,7 +38,7 @@ jobs:
         app: [client, driver]
 
     env:
-      EXPO_PUBLIC_API_URL: ${{ vars.EXPO_PUBLIC_API_URL || 'https://staging.aiyltaxi.kg/api' }}
+      EXPO_PUBLIC_API_URL: ${{ vars.EXPO_PUBLIC_API_URL || 'https://taxi-api-cy7a.onrender.com/api' }}
       EXPO_PUBLIC_PUSHER_KEY: ${{ vars.EXPO_PUBLIC_PUSHER_KEY }}
       EXPO_PUBLIC_PUSHER_CLUSTER: ${{ vars.EXPO_PUBLIC_PUSHER_CLUSTER || 'ap1' }}
       # Mapbox pk-token, bundled into JS at build time. Kept out of the

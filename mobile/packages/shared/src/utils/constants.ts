@@ -1,12 +1,9 @@
-// Both branches point at the ngrok tunnel served by the dev laptop's
-// `php artisan serve`. While the Render service is suspended this is
-// the only working backend; the laptop must be running ngrok + the
-// Laravel dev server for the APK to reach the API. Switch the
-// production branch back to https://taxi-l1jn.onrender.com once the
-// Render service is reactivated.
+// Points at the live Render-hosted backend for both dev and production.
+// EXPO_PUBLIC_API_URL in eas.json overrides this for build-time configs;
+// this constant is the fallback when env is missing or read from JS bundle.
 export const API_BASE_URL = __DEV__
-  ? 'https://glottal-brigid-oversensibly.ngrok-free.dev'
-  : 'https://glottal-brigid-oversensibly.ngrok-free.dev';
+  ? 'https://taxi-api-cy7a.onrender.com'
+  : 'https://taxi-api-cy7a.onrender.com';
 
 export const PUSHER_KEY = '0d48c79a3cabdd93025a';
 export const PUSHER_CLUSTER = 'ap1';
