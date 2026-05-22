@@ -9,7 +9,6 @@ import {
   Easing,
   Platform,
   StatusBar,
-  TextInput,
   TouchableOpacity,
 } from 'react-native';
 import MapView, { Region } from 'react-native-maps';
@@ -75,11 +74,6 @@ export default function HomeScreen(): React.ReactNode {
   const mapRef = useRef<MapView>(null);
   const [regionSelectorVisible, setRegionSelectorVisible] = useState(false);
   const [currentPrice, setCurrentPrice] = useState<number>(80);
-  // Free-text note that lands on the driver's offer card. Empty most
-  // of the time; valuable when it isn't ("у красного магазина",
-  // "большой багаж"). Reset to '' once the order is placed so the
-  // next idle session starts fresh.
-  const [comment, setComment] = useState('');
   const cardAnim = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
@@ -107,17 +101,13 @@ export default function HomeScreen(): React.ReactNode {
 
   const handleCallTaxi = async (): Promise<void> => {
     const address = await reverseGeocode(location.latitude, location.longitude);
-    const trimmedComment = comment.trim() || undefined;
-    await callTaxi(location.latitude, location.longitude, address, trimmedComment);
-    setComment('');
+    await callTaxi(location.latitude, location.longitude, address);
   };
 
   const handleRegionSelect = async (regionId: number): Promise<void> => {
     setRegionSelectorVisible(false);
     const address = await reverseGeocode(location.latitude, location.longitude);
-    const trimmedComment = comment.trim() || undefined;
-    await callRegionalTaxi(location.latitude, location.longitude, regionId, address, trimmedComment);
-    setComment('');
+    await callRegionalTaxi(location.latitude, location.longitude, regionId, address);
   };
 
   const driverCoords =
@@ -200,20 +190,6 @@ export default function HomeScreen(): React.ReactNode {
                 <Text style={styles.regionChipText}>Межселами</Text>
               </TouchableOpacity>
             </View>
-
-            {/* Optional note to the driver — landmark, expected wait,
-                luggage. Stays in-card, not behind a tap, because for
-                most village rides the comment IS the actual address. */}
-            <TextInput
-              style={styles.commentInput}
-              value={comment}
-              onChangeText={setComment}
-              placeholder="Комментарий водителю (необязательно)"
-              placeholderTextColor={ClientColors.textMuted}
-              maxLength={255}
-              multiline={false}
-              returnKeyType="done"
-            />
 
             {/* Hero call button — large, primary teal, pill-shaped */}
             <TouchableOpacity
@@ -396,17 +372,6 @@ const styles = StyleSheet.create({
     fontSize: 15,
     fontWeight: '600' as const,
     color: ClientColors.secondaryDark,
-  },
-  commentInput: {
-    backgroundColor: ClientColors.background,
-    borderRadius: 14,
-    borderWidth: 1,
-    borderColor: ClientColors.border,
-    paddingHorizontal: 14,
-    paddingVertical: 12,
-    fontSize: 14,
-    color: ClientColors.dark,
-    marginBottom: 12,
   },
   heroButton: {
     backgroundColor: ClientColors.primary,
