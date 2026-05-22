@@ -14,6 +14,7 @@ import {
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { ClientColors, sendOtp, formatPhoneDigits, extractDigits } from '@taxi/shared';
 import { AuthStackParamList } from '../navigation/types';
+import Icon from '../components/Icon';
 
 type Props = NativeStackScreenProps<AuthStackParamList, 'PhoneLogin'>;
 
@@ -53,7 +54,9 @@ export default function PhoneLoginScreen({ navigation }: Props): React.ReactNode
       >
         <View style={styles.content}>
           <View style={styles.heroBlock}>
-            <Text style={styles.brandEmoji}>🚕</Text>
+            <View style={styles.brandMark}>
+              <Icon name="car" size={36} color={ClientColors.white} strokeWidth={2} />
+            </View>
             <Text style={styles.title}>AIYL Taxi</Text>
             <Text style={styles.subtitle}>
               Такси в селе и до города{'\n'}за пару минут
@@ -124,9 +127,20 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     marginBottom: 36,
   },
-  brandEmoji: {
-    fontSize: 56,
-    marginBottom: 14,
+  brandMark: {
+    width: 72,
+    height: 72,
+    borderRadius: 22,
+    backgroundColor: ClientColors.primary,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 18,
+    shadowColor: ClientColors.primary,
+    shadowOpacity: 0.35,
+    shadowRadius: 18,
+    shadowOffset: { width: 0, height: 10 },
+    elevation: 10,
+    transform: [{ rotate: '-6deg' }],
   },
   title: {
     fontSize: 30,

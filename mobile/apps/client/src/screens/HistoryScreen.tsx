@@ -11,6 +11,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { Order, ClientColors, Typography } from '@taxi/shared';
 import { getOrderHistory } from '../api/orders';
 import OrderHistoryItem from '../components/OrderHistoryItem';
+import Icon from '../components/Icon';
 
 export default function HistoryScreen(): React.ReactNode {
   const [orders, setOrders] = useState<Order[]>([]);
@@ -106,8 +107,13 @@ export default function HistoryScreen(): React.ReactNode {
         }
         ListEmptyComponent={
           <View style={styles.emptyContainer}>
-            <Text style={[Typography.body, { color: ClientColors.textSecondary }]}>
-              У вас пока нет поездок
+            <View style={styles.emptyIconBox}>
+              <Icon name="clock" size={36} color={ClientColors.primary} strokeWidth={1.8} />
+            </View>
+            <Text style={styles.emptyTitle}>Здесь будет история ваших поездок</Text>
+            <Text style={styles.emptySubtitle}>
+              После первой поездки увидите её на этом экране — куда ездили, кто
+              был водителем, сколько заплатили.
             </Text>
           </View>
         }
@@ -139,6 +145,31 @@ const styles = StyleSheet.create({
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
+    paddingHorizontal: 36,
+    paddingTop: 64,
+  },
+  emptyIconBox: {
+    width: 96,
+    height: 96,
+    borderRadius: 30,
+    backgroundColor: ClientColors.primaryTint,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 20,
+  },
+  emptyTitle: {
+    fontSize: 18,
+    fontWeight: '700' as const,
+    color: ClientColors.dark,
+    textAlign: 'center',
+    marginBottom: 8,
+    letterSpacing: -0.2,
+  },
+  emptySubtitle: {
+    fontSize: 14,
+    color: ClientColors.textSecondary,
+    textAlign: 'center',
+    lineHeight: 20,
   },
   retryButton: {
     backgroundColor: ClientColors.primary,

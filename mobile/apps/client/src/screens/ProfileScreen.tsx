@@ -20,6 +20,7 @@ import {
   Typography,
   OTP_LENGTH,
 } from '@taxi/shared';
+import Icon from '../components/Icon';
 
 export default function ProfileScreen(): React.ReactNode {
   const { user, logout, refreshUser } = useAuth();
@@ -211,36 +212,52 @@ export default function ProfileScreen(): React.ReactNode {
           )}
         </View>
 
-        {/* Support */}
-        <TouchableOpacity
-          style={styles.supportButton}
-          onPress={() =>
-            Linking.openURL(
-              'https://wa.me/996509397226?text=' +
-                encodeURIComponent(
-                  'Здравствуйте, нужна помощь по приложению AIYL Taxi.',
-                ),
-            )
-          }
-          activeOpacity={0.85}
-        >
-          <Text style={styles.supportLabel}>Поддержка в WhatsApp</Text>
-          <Text style={styles.supportPhone}>+996 509 397 226</Text>
-        </TouchableOpacity>
+        {/* Action rows — icon + label + chevron, native-app-feel
+            list rather than a stack of buttons. */}
+        <View style={styles.menuCard}>
+          <TouchableOpacity
+            style={styles.menuRow}
+            onPress={() =>
+              Linking.openURL(
+                'https://wa.me/996509397226?text=' +
+                  encodeURIComponent(
+                    'Здравствуйте, нужна помощь по приложению AIYL Taxi.',
+                  ),
+              )
+            }
+            activeOpacity={0.7}
+          >
+            <View style={[styles.menuIconBox, { backgroundColor: ClientColors.primaryTint }]}>
+              <Icon name="message" size={20} color={ClientColors.primaryDark} strokeWidth={2.2} />
+            </View>
+            <View style={styles.menuRowText}>
+              <Text style={styles.menuLabel}>Поддержка в WhatsApp</Text>
+              <Text style={styles.menuMeta}>+996 509 397 226</Text>
+            </View>
+            <Icon name="chevron-right" size={20} color={ClientColors.textMuted} strokeWidth={2.2} />
+          </TouchableOpacity>
 
-        {/* Privacy Policy — required by Play Console listing. Lives on
-            the server so updates don't ship via APK. */}
-        <TouchableOpacity
-          style={styles.legalButton}
-          onPress={() => Linking.openURL('https://aiyltaxi.kg/privacy')}
-          activeOpacity={0.85}
-        >
-          <Text style={styles.legalButtonText}>Политика конфиденциальности</Text>
-        </TouchableOpacity>
+          <View style={styles.menuDivider} />
 
-        {/* Logout */}
-        <TouchableOpacity style={styles.logoutButton} onPress={handleLogout}>
-          <Text style={styles.logoutButtonText}>Выйти</Text>
+          <TouchableOpacity
+            style={styles.menuRow}
+            onPress={() => Linking.openURL('https://aiyltaxi.kg/privacy')}
+            activeOpacity={0.7}
+          >
+            <View style={[styles.menuIconBox, { backgroundColor: ClientColors.surfaceMuted }]}>
+              <Icon name="shield" size={20} color={ClientColors.darkSecondary} strokeWidth={2.2} />
+            </View>
+            <View style={styles.menuRowText}>
+              <Text style={styles.menuLabel}>Политика конфиденциальности</Text>
+            </View>
+            <Icon name="chevron-right" size={20} color={ClientColors.textMuted} strokeWidth={2.2} />
+          </TouchableOpacity>
+        </View>
+
+        {/* Logout — destructive action set apart visually */}
+        <TouchableOpacity style={styles.logoutButton} onPress={handleLogout} activeOpacity={0.85}>
+          <Icon name="logout" size={18} color={ClientColors.danger} strokeWidth={2.2} />
+          <Text style={styles.logoutButtonText}>Выйти из аккаунта</Text>
         </TouchableOpacity>
       </ScrollView>
     </SafeAreaView>
@@ -348,46 +365,61 @@ const styles = StyleSheet.create({
     color: ClientColors.textSecondary,
     fontSize: 13,
   },
-  supportButton: {
+  menuCard: {
     backgroundColor: ClientColors.cardBackground,
-    borderRadius: 12,
-    paddingVertical: 14,
-    paddingHorizontal: 16,
+    borderRadius: 18,
     marginTop: 16,
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
+    overflow: 'hidden',
     borderWidth: 1,
     borderColor: ClientColors.border,
   },
-  supportLabel: {
+  menuRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 14,
+    paddingHorizontal: 14,
+    gap: 14,
+  },
+  menuIconBox: {
+    width: 40,
+    height: 40,
+    borderRadius: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  menuRowText: {
+    flex: 1,
+  },
+  menuLabel: {
     ...Typography.bodyBold,
     color: ClientColors.textPrimary,
+    fontSize: 15,
   },
-  supportPhone: {
-    ...Typography.body,
-    color: ClientColors.primary,
-  },
-  legalButton: {
-    paddingVertical: 14,
-    paddingHorizontal: 16,
-    marginTop: 8,
-    alignItems: 'center',
-  },
-  legalButtonText: {
-    ...Typography.caption,
-    color: ClientColors.textMuted,
+  menuMeta: {
     fontSize: 13,
+    color: ClientColors.primary,
+    marginTop: 2,
+  },
+  menuDivider: {
+    height: 1,
+    backgroundColor: ClientColors.border,
+    marginLeft: 68,
   },
   logoutButton: {
-    backgroundColor: ClientColors.danger,
-    borderRadius: 12,
-    paddingVertical: 14,
+    flexDirection: 'row',
     alignItems: 'center',
-    marginTop: 12,
+    justifyContent: 'center',
+    gap: 10,
+    backgroundColor: 'transparent',
+    borderWidth: 1.5,
+    borderColor: '#FFD4D4',
+    borderRadius: 14,
+    paddingVertical: 14,
+    marginTop: 20,
   },
   logoutButtonText: {
-    ...Typography.button,
-    color: ClientColors.white,
+    color: ClientColors.danger,
+    fontSize: 15,
+    fontWeight: '700' as const,
   },
 });

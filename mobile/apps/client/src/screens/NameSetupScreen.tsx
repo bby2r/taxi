@@ -16,6 +16,7 @@ import {
   updateClientProfile,
   useAuth,
 } from '@taxi/shared';
+import Icon from '../components/Icon';
 
 /**
  * One-time name capture. New clients are firstOrCreate'd on the
@@ -59,7 +60,9 @@ export default function NameSetupScreen(): React.ReactNode {
       >
         <View style={styles.content}>
           <View style={styles.heroBlock}>
-            <Text style={styles.brandEmoji}>👋</Text>
+            <View style={styles.brandMark}>
+              <Icon name="user" size={36} color={ClientColors.white} strokeWidth={2} />
+            </View>
             <Text style={styles.title}>Как вас зовут?</Text>
             <Text style={styles.subtitle}>
               Водитель увидит ваше имя{'\n'}когда примет заказ
@@ -111,7 +114,21 @@ const styles = StyleSheet.create({
   container: { flex: 1 },
   content: { flex: 1, justifyContent: 'center', paddingHorizontal: 24 },
   heroBlock: { alignItems: 'center', marginBottom: 36 },
-  brandEmoji: { fontSize: 56, marginBottom: 14 },
+  brandMark: {
+    width: 72,
+    height: 72,
+    borderRadius: 22,
+    backgroundColor: ClientColors.primary,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 18,
+    shadowColor: ClientColors.primary,
+    shadowOpacity: 0.35,
+    shadowRadius: 18,
+    shadowOffset: { width: 0, height: 10 },
+    elevation: 10,
+    transform: [{ rotate: '-6deg' }],
+  },
   title: {
     fontSize: 26,
     fontWeight: '800' as const,

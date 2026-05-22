@@ -18,6 +18,7 @@ import { useOrder } from '../hooks/useOrder';
 import DriverCard from '../components/DriverCard';
 import RegionSelector from '../components/RegionSelector';
 import AnimatedDriverMarker from '../components/AnimatedDriverMarker';
+import Icon from '../components/Icon';
 import { getCurrentPrice } from '../api/regions';
 
 function PulsingDot(): React.ReactNode {
@@ -159,7 +160,7 @@ export default function HomeScreen(): React.ReactNode {
           previous raw red toast. */}
       {state.phase === 'cancelled' && (
         <View style={styles.cancelledToast}>
-          <Text style={styles.cancelledToastEmoji}>🚫</Text>
+          <Icon name="ban" size={20} color={ClientColors.white} strokeWidth={2.2} />
           <Text style={[Typography.bodyBold, styles.cancelledToastText]}>
             {state.reason === 'no_drivers'
               ? 'Свободных водителей сейчас нет'
@@ -177,7 +178,7 @@ export default function HomeScreen(): React.ReactNode {
 
         {error && (
           <View style={styles.errorPill}>
-            <Text style={styles.errorEmoji}>⚠️</Text>
+            <Icon name="alert" size={18} color={ClientColors.danger} strokeWidth={2.2} />
             <Text style={[Typography.caption, styles.errorText]}>{error}</Text>
           </View>
         )}
@@ -195,7 +196,7 @@ export default function HomeScreen(): React.ReactNode {
                 onPress={() => setRegionSelectorVisible(true)}
                 activeOpacity={0.85}
               >
-                <Text style={styles.regionChipEmoji}>🌍</Text>
+                <Icon name="route" size={20} color={ClientColors.secondaryDark} strokeWidth={2.2} />
                 <Text style={styles.regionChipText}>Межселами</Text>
               </TouchableOpacity>
             </View>
@@ -228,14 +229,17 @@ export default function HomeScreen(): React.ReactNode {
                 <ActivityIndicator color={ClientColors.white} />
               ) : (
                 <>
-                  <Text style={styles.heroButtonEmoji}>🚕</Text>
+                  <Icon name="car" size={22} color={ClientColors.white} strokeWidth={2} />
                   <Text style={styles.heroButtonText}>Заказ внутри села</Text>
                 </>
               )}
             </TouchableOpacity>
-            <Text style={styles.helperText}>
-              Подача — ваше текущее местоположение
-            </Text>
+            <View style={styles.helperRow}>
+              <Icon name="pin" size={13} color={ClientColors.textMuted} strokeWidth={2} />
+              <Text style={styles.helperText}>
+                Подача — ваше текущее местоположение
+              </Text>
+            </View>
           </>
         )}
 
@@ -282,12 +286,15 @@ export default function HomeScreen(): React.ReactNode {
           )}
       </Animated.View>
 
-      {/* Completed Modal — slightly festive */}
+      {/* Completed Modal — refined card with checkmark badge */}
       <Modal visible={state.phase === 'completed'} transparent animationType="fade">
         <View style={styles.modalOverlay}>
           <View style={styles.modalContent}>
-            <Text style={styles.completedEmoji}>🎉</Text>
-            <Text style={styles.completedTitle}>Поездка завершена!</Text>
+            <View style={styles.completedBadge}>
+              <Icon name="check" size={40} color={ClientColors.white} strokeWidth={2.5} />
+            </View>
+            <Text style={styles.completedTitle}>Поездка завершена</Text>
+            <Text style={styles.completedSubtitle}>Спасибо, что выбрали AIYL Taxi</Text>
             {state.phase === 'completed' && (
               <View style={styles.completedPriceBlock}>
                 <Text style={styles.completedPriceLabel}>К оплате водителю</Text>
@@ -301,7 +308,7 @@ export default function HomeScreen(): React.ReactNode {
               onPress={dismissCompleted}
               activeOpacity={0.9}
             >
-              <Text style={styles.modalButtonText}>Спасибо!</Text>
+              <Text style={styles.modalButtonText}>Готово</Text>
             </TouchableOpacity>
           </View>
         </View>
@@ -383,10 +390,7 @@ const styles = StyleSheet.create({
     paddingVertical: 12,
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
-  },
-  regionChipEmoji: {
-    fontSize: 22,
+    gap: 10,
   },
   regionChipText: {
     fontSize: 15,
@@ -411,18 +415,15 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 10,
+    gap: 12,
     shadowColor: ClientColors.primary,
     shadowOpacity: 0.35,
-    shadowRadius: 12,
-    shadowOffset: { width: 0, height: 6 },
-    elevation: 6,
+    shadowRadius: 14,
+    shadowOffset: { width: 0, height: 8 },
+    elevation: 8,
   },
   heroButtonDisabled: {
     opacity: 0.6,
-  },
-  heroButtonEmoji: {
-    fontSize: 22,
   },
   heroButtonText: {
     color: ClientColors.white,
@@ -430,9 +431,14 @@ const styles = StyleSheet.create({
     fontWeight: '700' as const,
     letterSpacing: 0.2,
   },
+  helperRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    marginTop: 14,
+  },
   helperText: {
-    textAlign: 'center',
-    marginTop: 12,
     fontSize: 12,
     color: ClientColors.textMuted,
   },
@@ -446,10 +452,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
     paddingVertical: 10,
     marginBottom: 12,
-    gap: 8,
-  },
-  errorEmoji: {
-    fontSize: 16,
+    gap: 10,
   },
   errorText: {
     color: ClientColors.danger,
@@ -485,23 +488,40 @@ const styles = StyleSheet.create({
   },
   modalContent: {
     backgroundColor: ClientColors.white,
-    borderRadius: 28,
+    borderRadius: 32,
     paddingHorizontal: 28,
-    paddingTop: 28,
-    paddingBottom: 24,
+    paddingTop: 36,
+    paddingBottom: 28,
     width: '100%',
     alignItems: 'center',
   },
-  completedEmoji: {
-    fontSize: 56,
-    marginBottom: 8,
+  completedBadge: {
+    width: 84,
+    height: 84,
+    borderRadius: 42,
+    backgroundColor: ClientColors.primary,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 22,
+    shadowColor: ClientColors.primary,
+    shadowOpacity: 0.4,
+    shadowRadius: 16,
+    shadowOffset: { width: 0, height: 8 },
+    elevation: 8,
   },
   completedTitle: {
-    fontSize: 22,
-    fontWeight: '700' as const,
+    fontSize: 24,
+    fontWeight: '800' as const,
     color: ClientColors.dark,
     textAlign: 'center',
-    marginBottom: 18,
+    letterSpacing: -0.4,
+  },
+  completedSubtitle: {
+    fontSize: 14,
+    color: ClientColors.textSecondary,
+    textAlign: 'center',
+    marginTop: 6,
+    marginBottom: 22,
   },
   completedPriceBlock: {
     alignItems: 'center',
@@ -552,9 +572,6 @@ const styles = StyleSheet.create({
     shadowRadius: 10,
     shadowOffset: { width: 0, height: 4 },
     elevation: 6,
-  },
-  cancelledToastEmoji: {
-    fontSize: 22,
   },
   cancelledToastText: {
     color: ClientColors.white,
