@@ -3,7 +3,9 @@
 namespace App\Providers;
 
 use App\Models\DriverChangeRequest;
+use App\Models\User;
 use App\Services\NikitaSmsService;
+use Illuminate\Support\Facades\Gate;
 use Illuminate\Support\Facades\Route;
 use Illuminate\Support\ServiceProvider;
 
@@ -28,5 +30,7 @@ class AppServiceProvider extends ServiceProvider
     public function boot(): void
     {
         Route::model('ticket', DriverChangeRequest::class);
+
+        Gate::define('viewLogViewer', fn (?User $user) => $user?->isAdmin() ?? false);
     }
 }
