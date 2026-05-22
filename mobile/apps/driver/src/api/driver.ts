@@ -46,8 +46,11 @@ export async function startRide(orderId: number): Promise<Order> {
   return data.data;
 }
 
-export async function completeOrder(orderId: number): Promise<Order> {
-  const { data } = await apiClient.post<{ data: Order }>(`/api/v1/driver/orders/${orderId}/complete`);
+export async function completeOrder(orderId: number, oneWayFallback: boolean = false): Promise<Order> {
+  const { data } = await apiClient.post<{ data: Order }>(
+    `/api/v1/driver/orders/${orderId}/complete`,
+    oneWayFallback ? { one_way_fallback: true } : {},
+  );
   return data.data;
 }
 

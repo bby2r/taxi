@@ -39,6 +39,7 @@ class CreateRegionalOrderRequest extends FormRequest
                 },
             ],
             'client_comment' => ['nullable', 'string', 'max:255'],
+            'is_round_trip' => ['sometimes', 'boolean'],
         ];
     }
 }

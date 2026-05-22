@@ -170,11 +170,23 @@ class DriverController extends Controller
 
     /**
      * Complete the given order.
+     *
+     * Accepts an optional `one_way_fallback` boolean — driver flips it on
+     * when the client booked round-trip but didn't come back, so the
+     * surcharge is rolled out of the price + commission for fairness.
      */
     public function completeOrder(Request $request, Order $order): JsonResponse
     {
+        $validated = $request->validate([
+            'one_way_fallback' => ['sometimes', 'boolean'],
+        ]);
+
         try {
-            $order = $this->orderService->completeOrder($order, $request->user());
+            $order = $this->orderService->completeOrder(
+                $order,
+                $request->user(),
+                (bool) ($validated['one_way_fallback'] ?? false),
+            );
             $order->load(['client', 'driver.driverProfile']);
 
             return (new OrderResource($order))->response();

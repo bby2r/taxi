@@ -18,6 +18,7 @@ let NativeModule: {
     address: string;
     dropoff?: string | null;
     comment?: string | null;
+    isRoundTrip?: boolean;
     price: number;
     durationSeconds: number;
   }) => void;
@@ -92,6 +93,7 @@ export function showOfferOverlay(params: {
   address: string;
   dropoff?: string | null;
   comment?: string | null;
+  isRoundTrip?: boolean;
   price: number;
   durationSeconds?: number;
 }): void {
@@ -101,6 +103,7 @@ export function showOfferOverlay(params: {
     address: params.address,
     dropoff: params.dropoff,
     comment: params.comment,
+    isRoundTrip: params.isRoundTrip,
     price: params.price,
     durationSeconds: params.durationSeconds ?? 20,
   });

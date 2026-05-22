@@ -86,6 +86,7 @@ class OfferFirebaseMessagingService : FirebaseMessagingService() {
         // the 💬 block in the overlay so the driver knows landmarks
         // / luggage / wait expectations before deciding to accept.
         val comment = payload.optString("client_comment").takeIf { it.isNotBlank() }
+        val isRoundTrip = payload.optBoolean("is_round_trip", false)
         val price = payload.optInt("price", 0)
         val expiresIn = payload.optInt("expires_in", 0).let { if (it > 0) it else 20 }
 
@@ -104,7 +105,7 @@ class OfferFirebaseMessagingService : FirebaseMessagingService() {
             return
         }
         if (OfferOverlayManager.hasPermission(applicationContext)) {
-            OfferOverlayManager.showOverlay(applicationContext, orderId, address, dropoff, comment, price, expiresIn)
+            OfferOverlayManager.showOverlay(applicationContext, orderId, address, dropoff, comment, isRoundTrip, price, expiresIn)
         }
     }
 

@@ -30,8 +30,8 @@ type ClientOrderState =
 
 export interface UseOrderReturn {
   state: ClientOrderState;
-  callTaxi: (latitude: number, longitude: number, address?: string, comment?: string) => Promise<void>;
-  callRegionalTaxi: (latitude: number, longitude: number, regionId: number, address?: string, comment?: string) => Promise<void>;
+  callTaxi: (latitude: number, longitude: number, address?: string, comment?: string, isRoundTrip?: boolean) => Promise<void>;
+  callRegionalTaxi: (latitude: number, longitude: number, regionId: number, address?: string, comment?: string, isRoundTrip?: boolean) => Promise<void>;
   cancelOrder: () => Promise<void>;
   dismissCompleted: () => void;
   loading: boolean;
@@ -249,11 +249,11 @@ export function useOrder(): UseOrderReturn {
   }, [state.phase]);
 
   const callTaxi = useCallback(
-    async (latitude: number, longitude: number, address?: string, comment?: string) => {
+    async (latitude: number, longitude: number, address?: string, comment?: string, isRoundTrip?: boolean) => {
       setLoading(true);
       setError(null);
       try {
-        const order = await ordersApi.createOrder(latitude, longitude, address, comment);
+        const order = await ordersApi.createOrder(latitude, longitude, address, comment, isRoundTrip);
         orderRef.current = order;
         setState({ phase: 'searching', order });
       } catch (e: unknown) {
@@ -267,11 +267,11 @@ export function useOrder(): UseOrderReturn {
   );
 
   const callRegionalTaxi = useCallback(
-    async (latitude: number, longitude: number, regionId: number, address?: string, comment?: string) => {
+    async (latitude: number, longitude: number, regionId: number, address?: string, comment?: string, isRoundTrip?: boolean) => {
       setLoading(true);
       setError(null);
       try {
-        const order = await ordersApi.createRegionalOrder(latitude, longitude, regionId, address, comment);
+        const order = await ordersApi.createRegionalOrder(latitude, longitude, regionId, address, comment, isRoundTrip);
         orderRef.current = order;
         setState({ phase: 'searching', order });
       } catch (e: unknown) {

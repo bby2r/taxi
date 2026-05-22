@@ -199,6 +199,13 @@ export default function OrderOfferCard({
             </Text>
           </View>
         )}
+        {order.is_round_trip && (
+          <View style={[styles.badge, styles.badgeRoundTrip]}>
+            <Text style={[Typography.caption, styles.badgeText, { color: DriverColors.background }]}>
+              ↻ Туда-обратно
+            </Text>
+          </View>
+        )}
       </View>
 
       <Text style={[Typography.caption, { color: DriverColors.textMuted, marginBottom: 4 }]}>
@@ -343,6 +350,9 @@ const styles = StyleSheet.create({
     backgroundColor: DriverColors.cardBackground,
     borderWidth: 1,
     borderColor: DriverColors.border,
+  },
+  badgeRoundTrip: {
+    backgroundColor: DriverColors.primary,
   },
   badgeText: {
     color: DriverColors.textPrimary,

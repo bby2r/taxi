@@ -167,7 +167,7 @@ interface UseDriverOrderReturn {
   declineOffer: (reason: DeclineReason) => Promise<void>;
   markArrived: () => Promise<void>;
   markStarted: () => Promise<void>;
-  markCompleted: () => Promise<void>;
+  markCompleted: (oneWayFallback?: boolean) => Promise<void>;
   cancelByDriver: (reason: DriverCancellationReason) => Promise<void>;
   dismissCompleted: () => void;
   loading: boolean;
@@ -920,7 +920,7 @@ function useDriverOrderState(): UseDriverOrderReturn {
     }
   }, []);
 
-  const markCompleted = useCallback(async (): Promise<void> => {
+  const markCompleted = useCallback(async (oneWayFallback: boolean = false): Promise<void> => {
     const current = stateRef.current;
     if (current.phase !== 'in_progress') return;
     setError(null);
@@ -932,7 +932,7 @@ function useDriverOrderState(): UseDriverOrderReturn {
     // pattern as cancelByDriver / declineOffer.
     suppressNextCancelAlertRef.current = true;
     try {
-      const order = await completeOrder(current.order.id);
+      const order = await completeOrder(current.order.id, oneWayFallback);
       setState({ phase: 'completed', order });
     } catch (err: unknown) {
       // Reset the suppression so a real future cancel still alerts.

@@ -44,6 +44,7 @@ class ClientOrderController extends Controller
                 dropoffLon: $request->validated('dropoff_longitude') ? (float) $request->validated('dropoff_longitude') : null,
                 dropoffAddress: $request->validated('dropoff_address'),
                 clientComment: $request->validated('client_comment'),
+                isRoundTrip: (bool) $request->validated('is_round_trip', false),
             );
 
             $order->load(['client', 'driver.driverProfile']);
@@ -69,6 +70,7 @@ class ClientOrderController extends Controller
                 pickupAddress: $request->validated('pickup_address'),
                 regionId: (int) $request->validated('region_id'),
                 clientComment: $request->validated('client_comment'),
+                isRoundTrip: (bool) $request->validated('is_round_trip', false),
             );
 
             $order->load(['client', 'driver.driverProfile', 'region']);

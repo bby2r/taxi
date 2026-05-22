@@ -83,9 +83,10 @@ class OfferOverlayModule : Module() {
                 val address = (params["address"] as? String) ?: ""
                 val dropoff = params["dropoff"] as? String
                 val comment = params["comment"] as? String
+                val isRoundTrip = params["isRoundTrip"] as? Boolean ?: false
                 val price = (params["price"] as? Number)?.toInt() ?: 0
                 val durationSeconds = (params["durationSeconds"] as? Number)?.toInt() ?: 20
-                OfferOverlayManager.showOverlay(context, orderId, address, dropoff, comment, price, durationSeconds)
+                OfferOverlayManager.showOverlay(context, orderId, address, dropoff, comment, isRoundTrip, price, durationSeconds)
             }
         }
 

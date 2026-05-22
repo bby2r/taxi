@@ -1,6 +1,7 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { useFocusEffect } from '@react-navigation/native';
 import {
+  Alert,
   View,
   Text,
   StyleSheet,
@@ -19,7 +20,7 @@ import DriverCard from '../components/DriverCard';
 import RegionSelector from '../components/RegionSelector';
 import AnimatedDriverMarker from '../components/AnimatedDriverMarker';
 import Icon from '../components/Icon';
-import { getCurrentPrice } from '../api/regions';
+import { getTariff } from '../api/regions';
 
 function PulsingDot(): React.ReactNode {
   const scale = useRef(new Animated.Value(1)).current;
@@ -75,6 +76,11 @@ export default function HomeScreen(): React.ReactNode {
   const mapRef = useRef<MapView>(null);
   const [regionSelectorVisible, setRegionSelectorVisible] = useState(false);
   const [currentPrice, setCurrentPrice] = useState<number>(80);
+  // Surcharge fetched alongside base price so the toggle preview is
+  // instant — no API call per checkbox tap. Default 70 % matches the
+  // server-side default seeded into Settings.
+  const [roundTripPct, setRoundTripPct] = useState<number>(70);
+  const [isRoundTrip, setIsRoundTrip] = useState(false);
   const cardAnim = useRef(new Animated.Value(0)).current;
 
   // Re-fetch the in-village price every time the home tab regains
@@ -86,8 +92,11 @@ export default function HomeScreen(): React.ReactNode {
   // simply taps the tab bar.
   useFocusEffect(
     useCallback(() => {
-      getCurrentPrice()
-        .then(setCurrentPrice)
+      getTariff()
+        .then((t) => {
+          setCurrentPrice(t.price);
+          setRoundTripPct(t.roundTripSurchargePercent);
+        })
         .catch(() => undefined);
     }, []),
   );
@@ -109,16 +118,56 @@ export default function HomeScreen(): React.ReactNode {
     longitudeDelta: 0.015,
   };
 
+  // Wraps the actual order call in a "wait time" confirmation when
+  // round-trip is on. Drivers won't sit at the destination for 2-3
+  // hours — the surcharge prices in ~15-20 min, not a half-day. We
+  // surface this expectation BEFORE the order goes out so neither
+  // side ends up surprised. Returns a promise that resolves to true
+  // if the user wants to proceed.
+  const confirmRoundTripIfNeeded = (): Promise<boolean> => {
+    if (!isRoundTrip) return Promise.resolve(true);
+    return new Promise((resolve) => {
+      Alert.alert(
+        'Туда и обратно',
+        'Водитель довозит вас до места, ждёт и привозит обратно.\n\n' +
+          'Постарайтесь уложиться в 15-20 минут на месте — водитель не может ждать 2-3 часа.\n\n' +
+          'Если задержитесь дольше — водитель уедет на другие заказы, и вам придётся заказывать новое такси обратно.',
+        [
+          { text: 'Отмена', style: 'cancel', onPress: () => resolve(false) },
+          { text: 'Понятно, заказать', style: 'default', onPress: () => resolve(true) },
+        ],
+        { cancelable: false },
+      );
+    });
+  };
+
   const handleCallTaxi = async (): Promise<void> => {
+    if (!(await confirmRoundTripIfNeeded())) return;
     const address = await reverseGeocode(location.latitude, location.longitude);
-    await callTaxi(location.latitude, location.longitude, address);
+    await callTaxi(location.latitude, location.longitude, address, undefined, isRoundTrip);
   };
 
   const handleRegionSelect = async (regionId: number): Promise<void> => {
     setRegionSelectorVisible(false);
+    if (!(await confirmRoundTripIfNeeded())) return;
     const address = await reverseGeocode(location.latitude, location.longitude);
-    await callRegionalTaxi(location.latitude, location.longitude, regionId, address);
+    await callRegionalTaxi(
+      location.latitude,
+      location.longitude,
+      regionId,
+      address,
+      undefined,
+      isRoundTrip,
+    );
   };
+
+  // Live preview price including the round-trip surcharge when toggled.
+  // Math runs locally so the chip updates the moment the user taps the
+  // checkbox; final price the server records uses the same formula so
+  // there's no mismatch between displayed and charged amounts.
+  const displayedPrice = isRoundTrip
+    ? Math.round(currentPrice * (1 + roundTripPct / 100))
+    : currentPrice;
 
   const driverCoords =
     state.phase !== 'idle' &&
@@ -189,7 +238,7 @@ export default function HomeScreen(): React.ReactNode {
             <View style={styles.priceRow}>
               <View style={styles.priceChip}>
                 <Text style={styles.priceChipLabel}>в селе</Text>
-                <Text style={styles.priceChipValue}>{currentPrice} сом</Text>
+                <Text style={styles.priceChipValue}>{displayedPrice} сом</Text>
               </View>
               <TouchableOpacity
                 style={styles.regionChip}
@@ -200,6 +249,34 @@ export default function HomeScreen(): React.ReactNode {
                 <Text style={styles.regionChipText}>Межселами</Text>
               </TouchableOpacity>
             </View>
+
+            {/* Round-trip toggle. Tapping flips isRoundTrip → displayedPrice
+                re-renders with the surcharge applied immediately. State
+                travels into both callTaxi / callRegionalTaxi so the order
+                lands on the server with the matching is_round_trip flag
+                and final price. */}
+            <TouchableOpacity
+              style={[styles.roundTripRow, isRoundTrip && styles.roundTripRowActive]}
+              onPress={() => setIsRoundTrip((v) => !v)}
+              activeOpacity={0.7}
+            >
+              <View style={[styles.checkbox, isRoundTrip && styles.checkboxActive]}>
+                {isRoundTrip && (
+                  <Icon name="check" size={16} color={ClientColors.white} strokeWidth={3} />
+                )}
+              </View>
+              <Text style={styles.roundTripLabel}>Туда и обратно</Text>
+              {isRoundTrip && (
+                <View style={styles.roundTripBadge}>
+                  <Text style={styles.roundTripBadgeText}>+{roundTripPct}%</Text>
+                </View>
+              )}
+            </TouchableOpacity>
+            {isRoundTrip && (
+              <Text style={styles.roundTripHint}>
+                Водитель ждёт на месте 15-20 минут и везёт обратно
+              </Text>
+            )}
 
             {/* Hero call button — large, primary teal, pill-shaped */}
             <TouchableOpacity
@@ -382,6 +459,60 @@ const styles = StyleSheet.create({
     fontSize: 15,
     fontWeight: '600' as const,
     color: ClientColors.secondaryDark,
+  },
+  roundTripRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+    borderRadius: 14,
+    borderWidth: 1.5,
+    borderColor: ClientColors.border,
+    marginBottom: 14,
+  },
+  roundTripRowActive: {
+    borderColor: ClientColors.primary,
+    backgroundColor: ClientColors.primaryTint,
+  },
+  checkbox: {
+    width: 22,
+    height: 22,
+    borderRadius: 6,
+    borderWidth: 2,
+    borderColor: ClientColors.textMuted,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: 'transparent',
+  },
+  checkboxActive: {
+    borderColor: ClientColors.primary,
+    backgroundColor: ClientColors.primary,
+  },
+  roundTripLabel: {
+    flex: 1,
+    fontSize: 14,
+    fontWeight: '600' as const,
+    color: ClientColors.dark,
+  },
+  roundTripBadge: {
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 10,
+    backgroundColor: ClientColors.primary,
+  },
+  roundTripBadgeText: {
+    fontSize: 12,
+    fontWeight: '700' as const,
+    color: ClientColors.white,
+  },
+  roundTripHint: {
+    fontSize: 12,
+    color: ClientColors.primaryDark,
+    marginTop: -6,
+    marginBottom: 14,
+    paddingHorizontal: 4,
+    lineHeight: 16,
   },
   heroButton: {
     backgroundColor: ClientColors.primary,

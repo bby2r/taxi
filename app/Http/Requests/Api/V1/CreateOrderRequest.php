@@ -29,6 +29,7 @@ class CreateOrderRequest extends FormRequest
             'dropoff_longitude' => ['nullable', 'numeric', 'between:-180,180'],
             'dropoff_address' => ['nullable', 'string', 'max:500'],
             'client_comment' => ['nullable', 'string', 'max:255'],
+            'is_round_trip' => ['sometimes', 'boolean'],
         ];
     }
 }

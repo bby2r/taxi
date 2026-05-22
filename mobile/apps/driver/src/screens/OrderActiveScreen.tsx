@@ -1,5 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import {
+  Alert,
   View,
   Text,
   StyleSheet,
@@ -453,10 +454,35 @@ export default function OrderActiveScreen(): React.ReactNode {
     });
   };
   const requestComplete = (): void => {
+    // Round-trip orders branch into "fulfilled" vs "client didn't
+    // come back" — the latter strips the surcharge off the price +
+    // commission so the driver doesn't pay full commission on a fare
+    // they only earned half of. One-way orders go straight to confirm.
+    if (state.phase === 'in_progress' && state.order.is_round_trip) {
+      Alert.alert(
+        'Завершение поездки',
+        'Клиент вернулся с вами обратно?',
+        [
+          {
+            text: 'Клиент не вернулся',
+            style: 'destructive',
+            onPress: () => void markCompleted(true),
+          },
+          {
+            text: 'Да, туда-обратно',
+            style: 'default',
+            onPress: () => void markCompleted(false),
+          },
+          { text: 'Отмена', style: 'cancel' },
+        ],
+        { cancelable: true },
+      );
+      return;
+    }
     setPendingAction({
       message: 'Подтвердите завершение поездки',
       confirmLabel: 'Завершить',
-      run: markCompleted,
+      run: () => markCompleted(false),
     });
   };
 

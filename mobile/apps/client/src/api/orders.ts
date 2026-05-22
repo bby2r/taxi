@@ -5,12 +5,14 @@ export async function createOrder(
   longitude: number,
   address?: string,
   comment?: string,
+  isRoundTrip?: boolean,
 ): Promise<Order> {
   const { data } = await apiClient.post<{ data: Order }>('/api/v1/client/orders', {
     pickup_latitude: latitude,
     pickup_longitude: longitude,
     pickup_address: address,
     client_comment: comment,
+    is_round_trip: isRoundTrip,
   });
   return data.data;
 }
@@ -43,6 +45,7 @@ export async function createRegionalOrder(
   regionId: number,
   address?: string,
   comment?: string,
+  isRoundTrip?: boolean,
 ): Promise<Order> {
   const { data } = await apiClient.post<{ data: Order }>('/api/v1/client/orders/regional', {
     pickup_latitude: latitude,
@@ -50,6 +53,7 @@ export async function createRegionalOrder(
     region_id: regionId,
     pickup_address: address,
     client_comment: comment,
+    is_round_trip: isRoundTrip,
   });
   return data.data;
 }

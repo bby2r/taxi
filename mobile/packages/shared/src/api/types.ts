@@ -43,6 +43,7 @@ export interface Order {
   dropoff_latitude: number | null;
   dropoff_longitude: number | null;
   client_comment: string | null;
+  is_round_trip: boolean;
   is_inter_district: boolean;
   region: { id: number; name: string } | null;
   client: OrderClient;

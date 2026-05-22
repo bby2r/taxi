@@ -279,9 +279,9 @@ object OfferOverlayManager {
      * are very different accept/decline calls at the same price-per-km).
      * Pass null/blank to hide the dropoff block entirely.
      */
-    fun showOverlay(context: Context, orderId: Int, address: String, dropoff: String?, comment: String?, price: Int, durationSeconds: Int) {
+    fun showOverlay(context: Context, orderId: Int, address: String, dropoff: String?, comment: String?, isRoundTrip: Boolean, price: Int, durationSeconds: Int) {
         Handler(Looper.getMainLooper()).post {
-            showOverlayOnMain(context.applicationContext, orderId, address, dropoff, comment, price, durationSeconds)
+            showOverlayOnMain(context.applicationContext, orderId, address, dropoff, comment, isRoundTrip, price, durationSeconds)
         }
     }
 
@@ -308,7 +308,7 @@ object OfferOverlayManager {
         }
     }
 
-    private fun showOverlayOnMain(context: Context, orderId: Int, address: String, dropoff: String?, comment: String?, price: Int, durationSeconds: Int) {
+    private fun showOverlayOnMain(context: Context, orderId: Int, address: String, dropoff: String?, comment: String?, isRoundTrip: Boolean, price: Int, durationSeconds: Int) {
         if (!hasPermission(context)) {
             return
         }
@@ -370,6 +370,9 @@ object OfferOverlayManager {
         val commentView = view.findViewById<TextView>(
             context.resources.getIdentifier("offer_comment", "id", context.packageName),
         )
+        val roundTripBadge = view.findViewById<TextView>(
+            context.resources.getIdentifier("offer_round_trip_badge", "id", context.packageName),
+        )
 
         addressView?.text = address.ifBlank { "Геолокация клиента" }
         if (!dropoff.isNullOrBlank()) {
@@ -386,6 +389,7 @@ object OfferOverlayManager {
         } else {
             commentBox?.visibility = View.GONE
         }
+        roundTripBadge?.visibility = if (isRoundTrip) View.VISIBLE else View.GONE
         priceView?.text = "$price сом"
 
         acceptBtn?.setOnClickListener {

@@ -28,6 +28,7 @@ class OrderResource extends JsonResource
                 : null,
             'dropoff_address' => $this->dropoff_address,
             'client_comment' => $this->client_comment,
+            'is_round_trip' => (bool) $this->is_round_trip,
             'price' => $this->price,
             'cancellation_fee' => $this->cancellation_fee,
             'cancelled_by' => $this->cancelled_by,

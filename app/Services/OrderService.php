@@ -40,15 +40,29 @@ class OrderService
         ?string $dropoffAddress = null,
         ?int $regionId = null,
         ?string $clientComment = null,
+        bool $isRoundTrip = false,
     ): Order {
         $activeOrder = Order::forClient($client->id)->active()->first();
         if ($activeOrder) {
             throw new \RuntimeException('Client already has an active order.');
         }
 
-        $price = $regionId
+        $basePrice = $regionId
             ? Region::findOrFail($regionId)->getCurrentPrice()
             : $this->tariffService->getCurrentPrice();
+
+        // Round-trip = driver waits at the destination and brings the
+        // client back. Surcharge percent comes from Settings so the
+        // operator can tune it without a redeploy; defaults to 70 %
+        // (final price = base * 1.7). Applied here at creation time so
+        // the orders.price column locks in the full amount — every
+        // downstream consumer (dispatch FCM, billing snapshot, admin
+        // history) gets the same number with zero special-casing.
+        $price = $basePrice;
+        if ($isRoundTrip) {
+            $surchargePct = (int) Setting::getValue('round_trip_surcharge_percent', 70);
+            $price = (int) round($basePrice * (1 + $surchargePct / 100));
+        }
 
         $order = Order::create([
             'client_id' => $client->id,
@@ -64,6 +78,7 @@ class OrderService
             'dropoff_longitude' => $dropoffLon,
             'dropoff_address' => $dropoffAddress,
             'client_comment' => $clientComment,
+            'is_round_trip' => $isRoundTrip,
             'price' => $price,
             'region_id' => $regionId,
             'declined_drivers' => [],
@@ -174,6 +189,7 @@ class OrderService
                     'pickup_address' => $order->pickup_address,
                     'dropoff_text' => $destinationName,
                     'client_comment' => $order->client_comment,
+                    'is_round_trip' => $order->is_round_trip,
                     'price' => (int) $order->price,
                     'eta_minutes' => $etaMinutes,
                     'distance_km' => (float) ($driver->distance_km ?? 0),
@@ -369,14 +385,35 @@ class OrderService
 
     /**
      * Complete the order (transition from InProgress to Completed).
+     *
+     * For round-trip orders the driver gets a "клиент не вернулся"
+     * option — `oneWayFallback=true` strips the round-trip surcharge
+     * off the price before the commission is locked in. Without this,
+     * the platform would skim a 7 % cut of a fare the driver only
+     * earned half of, on top of the driver eating the lost return leg.
      */
-    public function completeOrder(Order $order, User $driver): Order
+    public function completeOrder(Order $order, User $driver, bool $oneWayFallback = false): Order
     {
-        $order = DB::transaction(function () use ($order, $driver) {
+        $order = DB::transaction(function () use ($order, $driver, $oneWayFallback) {
             $order = Order::lockForUpdate()->findOrFail($order->id);
 
             if ($order->status !== OrderStatus::InProgress || $order->driver_id !== $driver->id) {
                 throw new \RuntimeException('Cannot complete this order.');
+            }
+
+            // If round-trip was sold but client didn't actually return,
+            // back out the surcharge so commission is taken from the
+            // real one-way amount. Also flip is_round_trip off — the
+            // history row reflects what actually happened, not what
+            // was originally quoted.
+            $effectivePrice = (int) $order->price;
+            $finalIsRoundTrip = (bool) $order->is_round_trip;
+            if ($oneWayFallback && $order->is_round_trip) {
+                $surchargePct = (int) Setting::getValue('round_trip_surcharge_percent', 70);
+                if ($surchargePct > 0) {
+                    $effectivePrice = (int) round($order->price / (1 + $surchargePct / 100));
+                }
+                $finalIsRoundTrip = false;
             }
 
             // Lock the operator commission onto the order at completion time
@@ -384,11 +421,13 @@ class OrderService
             // orders generate commission — cancellations and the
             // cancellation_fee don't.
             $rate = (int) Setting::getValue('commission_rate', 7);
-            $commission = (int) round(($order->price * $rate) / 100);
+            $commission = (int) round(($effectivePrice * $rate) / 100);
 
             $order->update([
                 'status' => OrderStatus::Completed,
                 'completed_at' => now(),
+                'price' => $effectivePrice,
+                'is_round_trip' => $finalIsRoundTrip,
                 'commission_amount' => $commission,
             ]);
 
