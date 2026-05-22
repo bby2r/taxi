@@ -31,7 +31,7 @@
       "ios": { "autoIncrement": true },
       "env": {
         "EXPO_PUBLIC_API_URL": "https://aiyltaxi.kg/api",
-        "EXPO_PUBLIC_PUSHER_KEY": "your-production-pusher-key",
+        "EXPO_PUBLIC_PUSHER_KEY": "77eb270f5c73dda1665b",
         "EXPO_PUBLIC_PUSHER_CLUSTER": "ap1"
       },
       "channel": "production"
