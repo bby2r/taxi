@@ -8,7 +8,7 @@ use Illuminate\Support\Facades\Log;
 class OtpService
 {
     public function __construct(
-        private readonly NikitaSmsService $sms,
+        private readonly OtpDispatcher $dispatcher,
     ) {}
 
     /**
@@ -33,7 +33,7 @@ class OtpService
             Log::info("Code for $phone is $code");
         }
 
-        $this->sms->send($phone, "Ваш код подтверждения: {$code}");
+        $this->dispatcher->send($phone, $code);
 
         return $otpCode;
     }

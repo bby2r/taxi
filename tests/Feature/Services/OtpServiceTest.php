@@ -3,7 +3,7 @@
 namespace Tests\Feature\Services;
 
 use App\Models\OtpCode;
-use App\Services\NikitaSmsService;
+use App\Services\OtpDispatcher;
 use App\Services\OtpService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use PHPUnit\Framework\Attributes\Test;
@@ -19,7 +19,7 @@ class OtpServiceTest extends TestCase
     {
         parent::setUp();
 
-        $this->mock(NikitaSmsService::class)
+        $this->mock(OtpDispatcher::class)
             ->shouldReceive('send')
             ->andReturn(true);
 

@@ -11,7 +11,7 @@ use Illuminate\Support\Facades\Route;
 Route::prefix('v1')->group(function () {
     Route::prefix('auth')->group(function () {
         Route::post('/send-otp', [AuthController::class, 'sendOtp'])
-            ->middleware('throttle:5,1')
+            ->middleware(['throttle:5,1', 'throttle:otp-phone'])
             ->name('api.v1.auth.send-otp');
 
         Route::post('/verify-otp', [AuthController::class, 'verifyOtp'])
@@ -39,7 +39,7 @@ Route::prefix('v1')->group(function () {
             ->name('api.v1.auth.push-token');
 
         Route::post('/change-phone/send-otp', [AuthController::class, 'changePhoneSendOtp'])
-            ->middleware(['auth:sanctum', 'throttle:5,1'])
+            ->middleware(['auth:sanctum', 'throttle:5,1', 'throttle:otp-phone'])
             ->name('api.v1.auth.change-phone.send-otp');
 
         Route::post('/change-phone/verify', [AuthController::class, 'changePhoneVerify'])

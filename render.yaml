@@ -69,13 +69,17 @@ services:
         sync: false
       - key: PUSHER_APP_CLUSTER
         value: ap1
-      - key: NIKITA_LOGIN
+      - key: WHATSAPP_ACCESS_TOKEN
         sync: false
-      - key: NIKITA_PASSWORD
+      - key: WHATSAPP_PHONE_NUMBER_ID
         sync: false
-      - key: NIKITA_SENDER
-        sync: false
-      - key: NIKITA_ENABLED
+      - key: WHATSAPP_TEMPLATE_NAME
+        value: otp_login
+      - key: WHATSAPP_LANGUAGE_CODE
+        value: ru
+      - key: WHATSAPP_API_VERSION
+        value: v21.0
+      - key: WHATSAPP_ENABLED
         value: "false"
       - key: ADMIN_NAME
         sync: false

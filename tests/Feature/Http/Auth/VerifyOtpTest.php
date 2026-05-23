@@ -5,7 +5,7 @@ namespace Tests\Feature\Http\Auth;
 use App\Enums\UserRole;
 use App\Models\OtpCode;
 use App\Models\User;
-use App\Services\NikitaSmsService;
+use App\Services\OtpDispatcher;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use PHPUnit\Framework\Attributes\Test;
 use Tests\TestCase;
@@ -18,7 +18,7 @@ class VerifyOtpTest extends TestCase
     {
         parent::setUp();
 
-        $this->mock(NikitaSmsService::class)
+        $this->mock(OtpDispatcher::class)
             ->shouldReceive('send')
             ->andReturn(true);
     }

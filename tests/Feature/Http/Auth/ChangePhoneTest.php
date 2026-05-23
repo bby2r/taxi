@@ -4,7 +4,7 @@ namespace Tests\Feature\Http\Auth;
 
 use App\Models\OtpCode;
 use App\Models\User;
-use App\Services\NikitaSmsService;
+use App\Services\OtpDispatcher;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Laravel\Sanctum\Sanctum;
 use PHPUnit\Framework\Attributes\Test;
@@ -22,7 +22,7 @@ class ChangePhoneTest extends TestCase
     {
         parent::setUp();
 
-        $this->mock(NikitaSmsService::class)
+        $this->mock(OtpDispatcher::class)
             ->shouldReceive('send')
             ->andReturn(true);
     }
