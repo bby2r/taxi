@@ -8,6 +8,7 @@ use App\Http\Controllers\Admin\DashboardController;
 use App\Http\Controllers\Admin\DriverController;
 use App\Http\Controllers\Admin\DriverTicketController;
 use App\Http\Controllers\Admin\OrderController;
+use App\Http\Controllers\Admin\OtpController;
 use App\Http\Controllers\Admin\RegionController;
 use App\Http\Controllers\Admin\SettingController;
 use App\Http\Middleware\EnsureUserRole;
@@ -60,6 +61,8 @@ Route::prefix('admin')->name('admin.')->group(function () {
         Route::get('billing', [BillingController::class, 'index'])->name('billing.index');
         Route::get('billing/{driver}', [BillingController::class, 'show'])->name('billing.show');
         Route::post('billing/{driver}/settlements', [BillingController::class, 'storeSettlement'])->name('billing.settlements.store');
+
+        Route::get('otps', [OtpController::class, 'index'])->name('otps.index');
 
         Route::get('settings', [SettingController::class, 'index'])->name('settings.index');
         Route::put('settings', [SettingController::class, 'update'])->name('settings.update');
