@@ -26,9 +26,9 @@ services:
       - key: APP_URL
         sync: false
       - key: LOG_CHANNEL
-        value: stderr
+        value: stack
       - key: LOG_STACK
-        value: single
+        value: stderr,daily
       - key: LOG_LEVEL
         value: info
       - key: DB_CONNECTION
