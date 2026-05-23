@@ -20,7 +20,7 @@ class SettingSeeder extends Seeder
             ['key' => 'stale_active_order_hours', 'value' => '2', 'description' => 'Auto-cancel orders stuck in Accepted/Arrived longer than this many hours (0 disables).'],
             ['key' => 'pre_assign_distance_km', 'value' => '1.5', 'description' => 'Pre-assign new orders to drivers in InProgress when their distance to current dropoff is below this many km (0 disables).'],
             ['key' => 'commission_rate', 'value' => '7', 'description' => 'Operator commission percentage taken from each completed order (0-100). Locked onto orders at completion.'],
-            ['key' => 'live_heartbeat_seconds', 'value' => '60', 'description' => 'Max seconds since driver location ping before they are excluded from dispatch (is_online stays). Lower = faster dead-driver detection; higher = tolerant of background pauses.'],
+            ['key' => 'live_heartbeat_seconds', 'value' => '300', 'description' => 'Max seconds since driver location ping before they are excluded from dispatch (is_online stays). Lower = faster dead-driver detection; higher = tolerant of background pauses.'],
             ['key' => 'round_trip_surcharge_percent', 'value' => '70', 'description' => 'Доплата к базовой цене за поездку туда-обратно, в процентах (0-300). Применяется при создании заказа.'],
         ];
 

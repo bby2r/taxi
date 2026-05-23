@@ -32,13 +32,15 @@ class MonitorStaleDriversCommand extends Command
      */
     public function handle(ExpoPushService $push): int
     {
-        $heartbeat = (int) Setting::getValue('live_heartbeat_seconds', 60);
+        $heartbeat = (int) Setting::getValue('live_heartbeat_seconds', 300);
 
-        // Silent push window: more than (heartbeat) seconds stale,
-        // less than (heartbeat + 60) seconds — start gentle.
+        // Three windows, escalating in patience. Tuned for the 5-min
+        // default heartbeat — give silent recovery two full minutes
+        // to take effect before bothering the driver with a visible
+        // nudge, and 15 minutes total before assuming they're gone.
         $silentCutoff = now()->subSeconds($heartbeat);
-        $nudgeCutoff = now()->subSeconds($heartbeat + 60);
-        $offlineCutoff = now()->subMinutes(10);
+        $nudgeCutoff = now()->subSeconds($heartbeat + 120);
+        $offlineCutoff = now()->subMinutes(15);
 
         $silent = 0;
         $nudge = 0;

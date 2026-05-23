@@ -21,7 +21,7 @@ class DashboardController extends Controller
      */
     public function index(): View
     {
-        $heartbeatSeconds = (int) Setting::getValue('live_heartbeat_seconds', 60);
+        $heartbeatSeconds = (int) Setting::getValue('live_heartbeat_seconds', 300);
         $liveCutoff = now()->subSeconds($heartbeatSeconds);
 
         // Operational health (right now).

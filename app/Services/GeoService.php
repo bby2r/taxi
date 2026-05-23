@@ -65,14 +65,12 @@ class GeoService
         $fairnessRadiusKm = (float) Setting::getValue('fairness_radius_km', 0.5);
         // Liveness heartbeat — a driver whose location_updated_at hasn't
         // been bumped in this many seconds is treated as offline for
-        // dispatch even if their is_online flag is still true. The
-        // driver app pings every ~3 s in foreground, but JS timers
-        // pause when the app is backgrounded (RN limitation — true
-        // background tracking via expo-task-manager is on the TODO).
-        // 60 s gives drivers room to briefly check WhatsApp / map etc.
-        // without dropping out of dispatch, while still catching
-        // OEM-killed processes (Xiaomi / Vivo) that leave the flag stuck.
-        $liveHeartbeatSeconds = (int) Setting::getValue('live_heartbeat_seconds', 60);
+        // dispatch even if their is_online flag is still true. 5 min
+        // default gives plenty of room for Doze and short network
+        // hiccups; the stale-recovery scheduler (MonitorStaleDrivers)
+        // wakes the app silently at this boundary, escalates to a
+        // visible nudge at +2 min, and auto-offlines at 15 min total.
+        $liveHeartbeatSeconds = (int) Setting::getValue('live_heartbeat_seconds', 300);
         $liveCutoff = now()->subSeconds($liveHeartbeatSeconds);
 
         $drivers = DriverProfile::online()
