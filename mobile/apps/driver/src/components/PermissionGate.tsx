@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
   Modal,
   Platform,
@@ -97,9 +97,20 @@ export default function PermissionGate({
 
   const allGranted = status.overlay && status.notifications && status.battery;
 
-  // Auto-dismiss + proceed once everything is green
+  // Auto-dismiss + proceed once everything is green.
+  // Ref guard: callers pass an inline arrow as onResolved, so its
+  // identity changes every parent render. Without the ref, this effect
+  // re-fired on every render while the gate stayed mounted → onResolved
+  // → performToggle → multiple back-to-back POSTs to /driver/go-online,
+  // which the server rate-limited and the driver saw as flash errors.
+  const resolvedRef = useRef(false);
   useEffect(() => {
-    if (visible && allGranted) {
+    if (!visible) {
+      resolvedRef.current = false;
+      return;
+    }
+    if (allGranted && !resolvedRef.current) {
+      resolvedRef.current = true;
       onResolved();
     }
   }, [visible, allGranted, onResolved]);

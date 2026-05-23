@@ -282,10 +282,10 @@ export default function HomeScreen(): React.ReactNode {
             <TouchableOpacity
               style={[
                 styles.heroButton,
-                (location.loading || loading) && styles.heroButtonDisabled,
+                (location.loading || loading || !location.hasRealFix) && styles.heroButtonDisabled,
               ]}
               onPress={handleCallTaxi}
-              disabled={location.loading || loading}
+              disabled={location.loading || loading || !location.hasRealFix}
               activeOpacity={0.9}
             >
               {loading ? (
@@ -298,9 +298,21 @@ export default function HomeScreen(): React.ReactNode {
               )}
             </TouchableOpacity>
             <View style={styles.helperRow}>
-              <Icon name="pin" size={13} color={ClientColors.textMuted} strokeWidth={2} />
-              <Text style={styles.helperText}>
-                Подача — ваше текущее местоположение
+              <Icon
+                name={location.hasRealFix ? 'pin' : 'alert'}
+                size={13}
+                color={location.hasRealFix ? ClientColors.textMuted : ClientColors.danger}
+                strokeWidth={2}
+              />
+              <Text
+                style={[
+                  styles.helperText,
+                  !location.hasRealFix && { color: ClientColors.danger },
+                ]}
+              >
+                {location.hasRealFix
+                  ? 'Подача — ваше текущее местоположение'
+                  : location.error ?? 'Определяем ваше местоположение…'}
               </Text>
             </View>
           </>

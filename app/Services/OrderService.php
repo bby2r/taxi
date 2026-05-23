@@ -521,17 +521,24 @@ class OrderService
      */
     public function cancelByDriver(Order $order, User $driver, string $reason): Order
     {
-        $order = Order::findOrFail($order->id);
+        // lockForUpdate inside the transaction so the ownership +
+        // status check sees the same row that cancelOrder will mutate.
+        // Before the lock, a concurrent acceptOrder / startRide could
+        // win between the check and the write — driver gets a clean
+        // 422 instead of a 500 race.
+        return DB::transaction(function () use ($order, $driver, $reason) {
+            $fresh = Order::lockForUpdate()->findOrFail($order->id);
 
-        if ($order->driver_id !== $driver->id) {
-            throw new \RuntimeException('Not assigned to this driver.');
-        }
+            if ($fresh->driver_id !== $driver->id) {
+                throw new \RuntimeException('Not assigned to this driver.');
+            }
 
-        if (! in_array($order->status, [OrderStatus::Accepted, OrderStatus::Arrived], true)) {
-            throw new \RuntimeException('Order cannot be cancelled in its current state.');
-        }
+            if (! in_array($fresh->status, [OrderStatus::Accepted, OrderStatus::Arrived], true)) {
+                throw new \RuntimeException('Order cannot be cancelled in its current state.');
+            }
 
-        return $this->cancelOrder($order, 'driver', $reason);
+            return $this->cancelOrder($fresh, 'driver', $reason);
+        });
     }
 
     /**

@@ -23,7 +23,10 @@ class UpdatePushTokenRequest extends FormRequest
     public function rules(): array
     {
         return [
-            'expo_push_token' => ['required', 'string', 'regex:/^ExponentPushToken\[.+\]$/'],
+            // max:200 guards against an attacker POSTing a multi-MB
+            // token to bloat the DB and break downstream Expo POST
+            // payloads. Real Expo tokens are ~50 chars.
+            'expo_push_token' => ['required', 'string', 'max:200', 'regex:/^ExponentPushToken\[.+\]$/'],
         ];
     }
 

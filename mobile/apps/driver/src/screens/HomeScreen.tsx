@@ -176,7 +176,14 @@ export default function HomeScreen(): React.ReactNode {
     }
   }, [state.phase, oemWizardVisible]);
 
-  // Navigate to OrderActive when in any active phase
+  // Navigate to OrderActive when we transition INTO an active phase.
+  // Keyed on phase only, not on order.id, because:
+  //   1. Order updates from Pusher (driver location, ETA tweaks) used
+  //      to re-fire this effect and re-navigate, building up a stack
+  //      of duplicate OrderActive screens — back button then had to
+  //      tap through them one at a time.
+  //   2. The active-phase order.id can only change by going through
+  //      online_idle first, which retriggers phase change anyway.
   useEffect(() => {
     if (
       state.phase === 'active' ||
@@ -185,13 +192,8 @@ export default function HomeScreen(): React.ReactNode {
     ) {
       navigation.navigate('OrderActive', { orderId: state.order.id });
     }
-  }, [
-    state.phase,
-    state.phase === 'active' || state.phase === 'arrived' || state.phase === 'in_progress'
-      ? state.order.id
-      : null,
-    navigation,
-  ]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [state.phase]);
 
   // Re-center map when the driver actually moves, not only on
   // loading / error transitions. The previous effect read `latitude` and

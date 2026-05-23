@@ -47,7 +47,17 @@
                     @forelse ($otps as $otp)
                         <tr class="hover:bg-gray-50">
                             <td class="whitespace-nowrap px-6 py-4 font-medium text-gray-900">{{ $otp->phone }}</td>
-                            <td class="whitespace-nowrap px-6 py-4 font-mono text-lg tracking-widest text-gray-900">{{ $otp->code }}</td>
+                            {{-- Code intentionally masked. Before masking, any admin
+                                 (or anyone who phished an admin session) could read a
+                                 live unused OTP and impersonate any user by triggering
+                                 send-OTP for that phone and reading the code here. --}}
+                            <td class="whitespace-nowrap px-6 py-4 font-mono text-sm tracking-widest text-gray-400">
+                                @if ($otp->isVerified())
+                                    ••••
+                                @else
+                                    ••{{ substr($otp->code, -2) }}
+                                @endif
+                            </td>
                             <td class="whitespace-nowrap px-6 py-4">
                                 @if ($otp->isVerified())
                                     <span class="inline-flex items-center rounded-full bg-emerald-100 px-2.5 py-0.5 text-xs font-medium text-emerald-700">Использован</span>

@@ -7,6 +7,7 @@ import android.app.Service
 import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
+import android.content.pm.ServiceInfo
 import android.location.Location
 import android.os.Build
 import android.os.HandlerThread
@@ -88,7 +89,22 @@ class LocationPingService : Service() {
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
-        startForeground(NOTIFICATION_ID, buildNotification(this, lastTickStatus))
+        // Android 14 (API 34) requires the foreground-service type to be
+        // passed explicitly to startForeground when the service has
+        // android:foregroundServiceType in the manifest. Without this
+        // the OS throws MissingForegroundServiceTypeException the moment
+        // the driver goes online — Play Console pre-launch test would
+        // catch this and fail review. The Q+ overload accepts the type
+        // bitmask; older OS versions use the 2-arg variant.
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            startForeground(
+                NOTIFICATION_ID,
+                buildNotification(this, lastTickStatus),
+                ServiceInfo.FOREGROUND_SERVICE_TYPE_LOCATION,
+            )
+        } else {
+            startForeground(NOTIFICATION_ID, buildNotification(this, lastTickStatus))
+        }
         startLocationUpdates()
         return START_STICKY
     }

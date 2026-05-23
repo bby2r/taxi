@@ -7,6 +7,14 @@ interface LocationState {
   heading: number | null;
   loading: boolean;
   error: string | null;
+  // True once we've seen a real GPS/Wi-Fi fix from the device. Callers
+  // that POST orders / locations to the server MUST gate on this — the
+  // initial (42.87, 74.59) coordinates are a Bishkek-center fallback
+  // only meant to keep the map from blank-screening before the first
+  // fix lands. Without this guard, denying location permission still
+  // flipped loading=false → "Order taxi" button enabled → ghost orders
+  // 30+ km from the village were getting created.
+  hasRealFix: boolean;
 }
 
 export function useLocation(): LocationState {
@@ -16,6 +24,7 @@ export function useLocation(): LocationState {
     heading: null,
     loading: true,
     error: null,
+    hasRealFix: false,
   });
 
   useEffect(() => {
@@ -37,6 +46,7 @@ export function useLocation(): LocationState {
             heading: last.coords.heading,
             loading: false,
             error: null,
+            hasRealFix: true,
           });
         }
 
@@ -58,6 +68,7 @@ export function useLocation(): LocationState {
             heading: current.coords.heading,
             loading: false,
             error: null,
+            hasRealFix: true,
           });
         } else {
           setState((prev) => ({ ...prev, loading: false }));
@@ -72,6 +83,7 @@ export function useLocation(): LocationState {
               heading: loc.coords.heading,
               loading: false,
               error: null,
+              hasRealFix: true,
             });
           },
         );
