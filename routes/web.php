@@ -43,6 +43,9 @@ Route::prefix('admin')->name('admin.')->group(function () {
         Route::resource('drivers', DriverController::class)->except(['show']);
         Route::post('drivers/{driver}/test-push', [DriverController::class, 'sendTestPush'])->name('drivers.test-push');
         Route::post('drivers/{driver}/unblock', [DriverController::class, 'unblock'])->name('drivers.unblock');
+        Route::get('drivers/{driver}/docs/{type}', [DriverController::class, 'showDocument'])
+            ->whereIn('type', ['passport_front', 'passport_back', 'license', 'driver_photo', 'car_photo', 'insurance'])
+            ->name('drivers.doc');
 
         Route::get('clients', [ClientController::class, 'index'])->name('clients.index');
 

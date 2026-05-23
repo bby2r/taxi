@@ -6,7 +6,7 @@
 @section('content')
     <div class="mx-auto max-w-2xl">
         <div class="rounded-xl border border-gray-200 bg-white p-6 shadow-sm">
-            <form method="POST" action="{{ route('admin.drivers.update', $driver) }}">
+            <form method="POST" action="{{ route('admin.drivers.update', $driver) }}" enctype="multipart/form-data">
                 @csrf
                 @method('PUT')
 
@@ -85,8 +85,77 @@
                     @enderror
                 </div>
 
+                {{-- Documents (KYC) — each slot is independent: leaving
+                     a field empty keeps the existing file untouched. --}}
+                <div class="mb-2 mt-8 border-t border-gray-200 pt-6">
+                    <h3 class="mb-1 text-base font-semibold text-gray-900">Документы</h3>
+                    <p class="mb-5 text-xs text-gray-500">
+                        Фото или сканы. JPG / PNG до 5&nbsp;МБ. Видны только администраторам.
+                        Загрузите новое фото чтобы заменить.
+                    </p>
+
+                    @php
+                        $docs = [
+                            'passport_front' => ['label' => 'Паспорт (лицевая)', 'path' => $driver->driverProfile?->passport_front_path],
+                            'passport_back' => ['label' => 'Паспорт (обратная)', 'path' => $driver->driverProfile?->passport_back_path],
+                            'license' => ['label' => 'Водительское удостоверение', 'path' => $driver->driverProfile?->license_path],
+                            'driver_photo' => ['label' => 'Фото водителя', 'path' => $driver->driverProfile?->driver_photo_path],
+                            'car_photo' => ['label' => 'Фото автомобиля', 'path' => $driver->driverProfile?->car_photo_path],
+                            'insurance' => ['label' => 'ОСАГО (страховка)', 'path' => $driver->driverProfile?->insurance_path],
+                        ];
+                    @endphp
+
+                    <div class="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                        @foreach ($docs as $field => $doc)
+                            <div class="rounded-xl border border-gray-200 bg-gray-50 p-4">
+                                <div class="mb-3 flex items-start justify-between gap-2">
+                                    <label for="{{ $field }}" class="text-sm font-medium text-gray-700">
+                                        {{ $doc['label'] }}
+                                    </label>
+                                    @if ($doc['path'])
+                                        <span class="inline-flex items-center rounded-full bg-emerald-100 px-2 py-0.5 text-xs font-medium text-emerald-700">
+                                            Загружено
+                                        </span>
+                                    @else
+                                        <span class="inline-flex items-center rounded-full bg-gray-200 px-2 py-0.5 text-xs font-medium text-gray-600">
+                                            Нет
+                                        </span>
+                                    @endif
+                                </div>
+
+                                @if ($doc['path'])
+                                    <a
+                                        href="{{ route('admin.drivers.doc', ['driver' => $driver, 'type' => $field]) }}"
+                                        target="_blank"
+                                        rel="noopener"
+                                        class="mb-3 block overflow-hidden rounded-lg border border-gray-200"
+                                    >
+                                        <img
+                                            src="{{ route('admin.drivers.doc', ['driver' => $driver, 'type' => $field]) }}"
+                                            alt="{{ $doc['label'] }}"
+                                            class="h-32 w-full object-cover transition hover:opacity-85"
+                                            loading="lazy"
+                                        >
+                                    </a>
+                                @endif
+
+                                <input
+                                    type="file"
+                                    id="{{ $field }}"
+                                    name="{{ $field }}"
+                                    accept="image/jpeg,image/png,image/webp"
+                                    class="block w-full text-xs text-gray-600 file:mr-3 file:rounded-lg file:border-0 file:bg-amber-500 file:px-3 file:py-1.5 file:text-xs file:font-medium file:text-white file:hover:bg-amber-600"
+                                >
+                                @error($field)
+                                    <p class="mt-1 text-xs text-red-600">{{ $message }}</p>
+                                @enderror
+                            </div>
+                        @endforeach
+                    </div>
+                </div>
+
                 {{-- Actions --}}
-                <div class="flex items-center gap-4">
+                <div class="mt-8 flex items-center gap-4">
                     <button
                         type="submit"
                         class="rounded-lg bg-amber-500 px-5 py-2.5 text-sm font-medium text-white shadow-sm hover:bg-amber-600"

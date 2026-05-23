@@ -20,6 +20,12 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
     'location_updated_at',
     'shift_declines_count',
     'blocked_until',
+    'passport_front_path',
+    'passport_back_path',
+    'license_path',
+    'driver_photo_path',
+    'car_photo_path',
+    'insurance_path',
 ])]
 class DriverProfile extends Model
 {

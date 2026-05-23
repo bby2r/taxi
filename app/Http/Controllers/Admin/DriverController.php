@@ -9,8 +9,11 @@ use App\Models\User;
 use App\Services\ExpoPushService;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Http\Response;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Storage;
 use Illuminate\View\View;
+use Symfony\Component\HttpFoundation\StreamedResponse;
 
 class DriverController extends Controller
 {
@@ -91,9 +94,15 @@ class DriverController extends Controller
             'password' => 'nullable|string|min:6',
             'car_model' => 'required|string|max:255',
             'car_number' => 'required|string|max:20',
+            'passport_front' => 'nullable|image|max:5120',
+            'passport_back' => 'nullable|image|max:5120',
+            'license' => 'nullable|image|max:5120',
+            'driver_photo' => 'nullable|image|max:5120',
+            'car_photo' => 'nullable|image|max:5120',
+            'insurance' => 'nullable|image|max:5120',
         ]);
 
-        DB::transaction(function () use ($driver, $validated) {
+        DB::transaction(function () use ($driver, $validated, $request) {
             $userData = [
                 'name' => $validated['name'],
                 'phone' => $validated['phone'],
@@ -105,17 +114,70 @@ class DriverController extends Controller
 
             $driver->update($userData);
 
+            // Store new doc uploads on the local (private) disk, organised
+            // by driver id. Old file for the same slot is deleted so we
+            // don't accumulate orphans every time the admin replaces a
+            // scan with a clearer one.
+            $profileData = [
+                'car_model' => $validated['car_model'],
+                'car_number' => $validated['car_number'],
+            ];
+
+            $docMap = [
+                'passport_front' => 'passport_front_path',
+                'passport_back' => 'passport_back_path',
+                'license' => 'license_path',
+                'driver_photo' => 'driver_photo_path',
+                'car_photo' => 'car_photo_path',
+                'insurance' => 'insurance_path',
+            ];
+
+            foreach ($docMap as $field => $column) {
+                if ($request->hasFile($field)) {
+                    $oldPath = $driver->driverProfile?->$column;
+                    if ($oldPath && Storage::disk('local')->exists($oldPath)) {
+                        Storage::disk('local')->delete($oldPath);
+                    }
+                    $profileData[$column] = $request->file($field)->store(
+                        'driver-docs/'.$driver->id,
+                        'local',
+                    );
+                }
+            }
+
             $driver->driverProfile()->updateOrCreate(
                 ['user_id' => $driver->id],
-                [
-                    'car_model' => $validated['car_model'],
-                    'car_number' => $validated['car_number'],
-                ]
+                $profileData,
             );
         });
 
         return redirect()->route('admin.drivers.index')
             ->with('success', 'Driver updated successfully.');
+    }
+
+    /**
+     * Stream a driver KYC document. Lives behind admin auth so the
+     * scans never leak via a guessable URL — the storage path itself
+     * is the only thing exposed (driver-docs/{id}/{filename}), the
+     * file content stays out of public/ entirely.
+     */
+    public function showDocument(User $driver, string $type): StreamedResponse|Response
+    {
+        abort_unless($driver->isDriver(), 404);
+
+        $column = [
+            'passport_front' => 'passport_front_path',
+            'passport_back' => 'passport_back_path',
+            'license' => 'license_path',
+            'driver_photo' => 'driver_photo_path',
+            'car_photo' => 'car_photo_path',
+            'insurance' => 'insurance_path',
+        ][$type] ?? abort(404);
+
+        $path = $driver->driverProfile?->$column;
+        abort_unless($path && Storage::disk('local')->exists($path), 404);
+
+        return Storage::disk('local')->response($path);
     }
 
     /**
