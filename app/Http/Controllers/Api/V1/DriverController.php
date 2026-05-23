@@ -50,6 +50,10 @@ class DriverController extends Controller
             'longitude' => $request->validated('longitude'),
             'location_updated_at' => now(),
             'shift_declines_count' => 0,
+            // Reset stale-recovery tracking so the next stale episode
+            // starts from stage-1 (silent push) again.
+            'stale_silent_pinged_at' => null,
+            'stale_nudge_sent_at' => null,
         ]);
 
         $request->user()->load('driverProfile');

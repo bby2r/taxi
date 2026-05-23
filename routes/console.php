@@ -11,3 +11,10 @@ Artisan::command('inspire', function () {
 Schedule::command('orders:cancel-stale')
     ->everyTenMinutes()
     ->withoutOverlapping();
+
+// Stale-driver recovery — see MonitorStaleDriversCommand for the
+// three-stage escalation. Runs every minute; withoutOverlapping
+// guards against a slow run getting double-fired.
+Schedule::command('drivers:monitor-stale')
+    ->everyMinute()
+    ->withoutOverlapping();

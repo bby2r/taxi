@@ -26,6 +26,54 @@ class ExpoPushService
     }
 
     /**
+     * Silent wake-up push to a driver — no title/body, no UI on
+     * device. The native OfferFirebaseMessagingService picks up the
+     * type=wake_driver hint and force-pings location to bring the
+     * driver back into the dispatch pool. Used by MonitorStaleDrivers
+     * as the first (least-intrusive) escalation when location stops
+     * arriving.
+     */
+    public function sendSilentWakeToDriver(User $driver): bool
+    {
+        if (! $driver->expo_push_token) {
+            return false;
+        }
+
+        $payload = [
+            'to' => $driver->expo_push_token,
+            'data' => ['type' => 'wake_driver'],
+            'priority' => 'high',
+            'ttl' => 30,
+            '_contentAvailable' => true,
+        ];
+
+        try {
+            $response = Http::acceptJson()->post(self::EXPO_PUSH_URL, [$payload]);
+
+            return $response->successful();
+        } catch (\Throwable $e) {
+            Log::error('Expo silent wake push exception.', ['message' => $e->getMessage()]);
+
+            return false;
+        }
+    }
+
+    /**
+     * Visible nudge for a driver whose silent wake didn't recover the
+     * heartbeat — tells them to open the app manually.
+     */
+    public function sendStaleNudgeToDriver(User $driver): bool
+    {
+        return $this->sendToUser(
+            $driver,
+            'AIYL Taxi',
+            'Приложение перестало принимать заказы. Откройте чтобы вернуться на линию.',
+            ['type' => 'stale_nudge'],
+            ['priority' => 'high', 'ttl' => 600],
+        );
+    }
+
+    /**
      * Send a high-priority offer push to a driver as a data-only message.
      *
      * On Android, FCM messages that include a notification block

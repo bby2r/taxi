@@ -20,6 +20,8 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
     'location_updated_at',
     'shift_declines_count',
     'blocked_until',
+    'stale_silent_pinged_at',
+    'stale_nudge_sent_at',
     'passport_front_path',
     'passport_back_path',
     'license_path',
@@ -46,6 +48,8 @@ class DriverProfile extends Model
             'location_updated_at' => 'datetime',
             'shift_declines_count' => 'integer',
             'blocked_until' => 'datetime',
+            'stale_silent_pinged_at' => 'datetime',
+            'stale_nudge_sent_at' => 'datetime',
         ];
     }
 

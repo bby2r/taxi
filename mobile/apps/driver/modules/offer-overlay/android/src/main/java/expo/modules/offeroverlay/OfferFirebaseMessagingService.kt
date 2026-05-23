@@ -43,6 +43,20 @@ class OfferFirebaseMessagingService : FirebaseMessagingService() {
             handleOffer(payload)
             return
         }
+        if (type == "wake_driver") {
+            // Silent recovery push from MonitorStaleDriversCommand —
+            // server thinks our location stopped arriving. Restart the
+            // native ping service if it died; if it's already alive
+            // startForegroundService is a cheap no-op and the next 3-s
+            // tick will land at the server. No UI shown on purpose.
+            try {
+                OfferOverlayManager.startNativeLocationPings(applicationContext)
+            } catch (_: Exception) {
+                // Best effort — the visible nudge will follow in a
+                // minute if this didn't recover us.
+            }
+            return
+        }
 
         // Generic FCM message — preserve title/body so trip-completed,
         // cancellation, admin broadcasts etc. still surface.
