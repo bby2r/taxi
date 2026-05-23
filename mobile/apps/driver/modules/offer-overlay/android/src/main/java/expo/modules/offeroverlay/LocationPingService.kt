@@ -11,6 +11,7 @@ import android.location.Location
 import android.os.Build
 import android.os.HandlerThread
 import android.os.IBinder
+import android.os.PowerManager
 import androidx.core.app.NotificationCompat
 import com.google.android.gms.location.FusedLocationProviderClient
 import com.google.android.gms.location.LocationCallback
@@ -49,6 +50,15 @@ class LocationPingService : Service() {
     // the main looper while keeping the service alive — using
     // getMainLooper() then meant callbacks silently stopped firing).
     private var callbackThread: HandlerThread? = null
+    // Partial wake lock holds the CPU on while the driver is on shift.
+    // Without this, Android Doze suspends the CPU a few seconds after
+    // the screen turns off, FusedLocationProvider stops delivering, and
+    // we drop back into Stale even though the service itself is alive.
+    // Battery cost is real (~30 % faster drain) but acceptable for
+    // taxi drivers who usually have a car charger going. Released on
+    // onDestroy so going off shift / killing the service returns the
+    // CPU to normal Doze behaviour.
+    private var wakeLock: PowerManager.WakeLock? = null
     @Volatile private var lastTickStatus: String = "ожидание GPS"
 
     override fun onBind(intent: Intent?): IBinder? = null
@@ -58,6 +68,23 @@ class LocationPingService : Service() {
         fusedClient = LocationServices.getFusedLocationProviderClient(this)
         ensureChannel(this)
         callbackThread = HandlerThread("aiyl-location-cb").apply { start() }
+
+        // Acquire PARTIAL wake lock — CPU stays on, screen can still
+        // sleep (we only need compute, not display). Tagged with our
+        // app id so the OS power profiler attributes battery use to us.
+        try {
+            val pm = getSystemService(Context.POWER_SERVICE) as? PowerManager
+            wakeLock = pm?.newWakeLock(
+                PowerManager.PARTIAL_WAKE_LOCK,
+                "aiyl-taxi:LocationPingService",
+            )?.apply {
+                setReferenceCounted(false)
+                acquire()
+            }
+        } catch (_: Exception) {
+            // Best effort — without the wake lock we just fall back to
+            // the silent-push recovery loop. Not fatal.
+        }
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
@@ -72,6 +99,12 @@ class LocationPingService : Service() {
         callbackThread?.quitSafely()
         callbackThread = null
         uploadExecutor.shutdown()
+        try {
+            if (wakeLock?.isHeld == true) wakeLock?.release()
+        } catch (_: Exception) {
+            // ignore — wake lock release errors are non-fatal
+        }
+        wakeLock = null
         super.onDestroy()
     }
 
