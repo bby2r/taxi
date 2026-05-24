@@ -1,52 +1,66 @@
 import { apiClient, Region } from '@taxi/shared';
 
-export async function getRegions(latitude?: number, longitude?: number): Promise<Region[]> {
-  const params: Record<string, number> = {};
-  if (typeof latitude === 'number' && typeof longitude === 'number') {
-    params.latitude = latitude;
-    params.longitude = longitude;
-  }
-  const { data } = await apiClient.get<{ data: Region[] }>('/api/v1/client/regions', { params });
+export async function getRegions(): Promise<Region[]> {
+  const { data } = await apiClient.get<{ data: Region[] }>('/api/v1/client/regions');
   return data.data;
 }
 
-export async function getCurrentPrice(): Promise<number> {
-  const { data } = await apiClient.get<{ price: number }>('/api/v1/client/price');
-  return data.price;
-}
+export type TariffRoute = {
+  fromRegionId: number;
+  toRegionId: number;
+  dayPrice: number;
+  nightPrice: number;
+};
 
 export type TariffSnapshot = {
-  price: number;
+  routes: TariffRoute[];
   roundTripSurchargePercent: number;
-  district: { id: number; name: string } | null;
-  inVillageAvailable: boolean;
 };
 
 /**
- * Full tariff snapshot — base price + round-trip surcharge percent +
- * detected district. When latitude/longitude are provided the server
- * resolves the nearest district centre and returns that district's
- * in-village price; without coords it falls back to the global tariff.
+ * Матрица всех цен «откуда → куда». Клиент получает её один раз и
+ * вычисляет цену любой пары локально — без сетевого вызова на каждый
+ * тап пикера.
  */
-export async function getTariff(
-  latitude?: number,
-  longitude?: number,
-): Promise<TariffSnapshot> {
-  const params: Record<string, number> = {};
-  if (typeof latitude === 'number' && typeof longitude === 'number') {
-    params.latitude = latitude;
-    params.longitude = longitude;
-  }
+export async function getTariffs(): Promise<TariffSnapshot> {
   const { data } = await apiClient.get<{
-    price: number;
+    routes: Array<{
+      from_region_id: number;
+      to_region_id: number;
+      day_price: number;
+      night_price: number;
+    }>;
     round_trip_surcharge_percent: number;
-    district: { id: number; name: string } | null;
-    in_village_available: boolean;
-  }>('/api/v1/client/price', { params });
+  }>('/api/v1/client/tariffs');
+
   return {
-    price: data.price,
+    routes: data.routes.map((r) => ({
+      fromRegionId: r.from_region_id,
+      toRegionId: r.to_region_id,
+      dayPrice: r.day_price,
+      nightPrice: r.night_price,
+    })),
     roundTripSurchargePercent: data.round_trip_surcharge_percent,
-    district: data.district,
-    inVillageAvailable: data.in_village_available,
   };
+}
+
+/**
+ * Цена пары (from, to) на момент времени `at` (Asia/Bishkek). Возвращает
+ * 0 если пары в матрице нет — UI должен подсветить «тариф не настроен».
+ */
+export function priceFor(
+  routes: TariffRoute[],
+  fromRegionId: number,
+  toRegionId: number,
+  at: Date = new Date(),
+): number {
+  const route = routes.find(
+    (r) => r.fromRegionId === fromRegionId && r.toRegionId === toRegionId,
+  );
+  if (!route) return 0;
+
+  // Asia/Bishkek = UTC+6. Простое смещение часа достаточно — DST там нет.
+  const bishkekHour = (at.getUTCHours() + 6) % 24;
+  const isDay = bishkekHour >= 7 && bishkekHour <= 20;
+  return isDay ? route.dayPrice : route.nightPrice;
 }

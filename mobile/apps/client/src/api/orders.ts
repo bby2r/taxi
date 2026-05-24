@@ -3,6 +3,8 @@ import { apiClient, Order, PaginatedResponse } from '@taxi/shared';
 export async function createOrder(
   latitude: number,
   longitude: number,
+  fromRegionId: number,
+  toRegionId: number,
   address?: string,
   comment?: string,
   isRoundTrip?: boolean,
@@ -10,6 +12,8 @@ export async function createOrder(
   const { data } = await apiClient.post<{ data: Order }>('/api/v1/client/orders', {
     pickup_latitude: latitude,
     pickup_longitude: longitude,
+    from_region_id: fromRegionId,
+    to_region_id: toRegionId,
     pickup_address: address,
     client_comment: comment,
     is_round_trip: isRoundTrip,
@@ -36,25 +40,6 @@ export async function getOrder(id: number): Promise<Order> {
 
 export async function cancelOrder(id: number): Promise<Order> {
   const { data } = await apiClient.post<{ data: Order }>(`/api/v1/client/orders/${id}/cancel`);
-  return data.data;
-}
-
-export async function createRegionalOrder(
-  latitude: number,
-  longitude: number,
-  regionId: number,
-  address?: string,
-  comment?: string,
-  isRoundTrip?: boolean,
-): Promise<Order> {
-  const { data } = await apiClient.post<{ data: Order }>('/api/v1/client/orders/regional', {
-    pickup_latitude: latitude,
-    pickup_longitude: longitude,
-    region_id: regionId,
-    pickup_address: address,
-    client_comment: comment,
-    is_round_trip: isRoundTrip,
-  });
   return data.data;
 }
 

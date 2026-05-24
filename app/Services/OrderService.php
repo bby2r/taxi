@@ -28,17 +28,22 @@ class OrderService
     ) {}
 
     /**
-     * Create a new order for the given client and begin driver search.
+     * Создание заказа. Клиент явно указывает откуда (fromRegionId) и
+     * куда (toRegionId) — без GPS-автоопределения. from == to ⇒ заказ
+     * внутри одного села, from != to ⇒ межсёлами. Цена берётся из
+     * матрицы region_routes; если пары в матрице нет — кидаем ошибку,
+     * чтобы заказ не ушёл в работу с ценой 0.
      */
     public function createOrder(
         User $client,
         float $pickupLat,
         float $pickupLon,
+        int $fromRegionId,
+        int $toRegionId,
         ?string $pickupAddress = null,
         ?float $dropoffLat = null,
         ?float $dropoffLon = null,
         ?string $dropoffAddress = null,
-        ?int $regionId = null,
         ?string $clientComment = null,
         bool $isRoundTrip = false,
     ): Order {
@@ -47,39 +52,14 @@ class OrderService
             throw new \RuntimeException('Client already has an active order.');
         }
 
-        // Inter-district = explicit regionId chosen by the client (Talas → Bishkek).
-        // In-district = no regionId; we map pickup GPS to the nearest configured
-        // district centre within district_detection_max_km radius (geofence).
-        // No district in range = client is outside any served village —
-        // в-селе flow is BLOCKED (would assign Бакаирца к таласскому тарифу
-        // и водитель бы ушёл в минус за подачу). Они должны использовать
-        // межсёлами и явно выбрать направление.
-        // pickup_region_id записывается всегда когда район определён —
-        // информационно для админки. region_id остаётся «направление при
-        // межсёлами» чтобы is_inter_district и FCM-payload не сломались.
-        $pickupRegionId = null;
-        if ($regionId !== null) {
-            // Inter-village: detect pickup district (no radius limit — позволяем
-            // межсёлами даже из неотмеченных мест) и применяем pair-цену.
-            // Без определения pickup → fallback на destination.getCurrentPrice
-            // (старое поведение). Pickup пишем всегда — для отчётности.
-            $destination = Region::findOrFail($regionId);
-            $pickupRegion = Region::findNearestByCoordinates($pickupLat, $pickupLon);
-            $pickupRegionId = $pickupRegion?->id;
-            $basePrice = $destination->priceFrom($pickupRegion);
-        } else {
-            $detectedRegion = Region::findNearestByCoordinates(
-                $pickupLat,
-                $pickupLon,
-                Region::detectionMaxKm(),
+        $from = Region::findOrFail($fromRegionId);
+        $to = Region::findOrFail($toRegionId);
+
+        $basePrice = $to->priceFrom($from);
+        if ($basePrice <= 0) {
+            throw new \RuntimeException(
+                'Тариф для этого направления не настроен. Обратитесь в поддержку.'
             );
-            if ($detectedRegion === null) {
-                throw new \RuntimeException(
-                    'Вы вне зон обслуживания внутри села. Используйте «Межсёлами» и выберите направление.'
-                );
-            }
-            $pickupRegionId = $detectedRegion->id;
-            $basePrice = $detectedRegion->getCurrentInDistrictPrice();
         }
 
         // Round-trip = driver waits at the destination and brings the
@@ -94,6 +74,12 @@ class OrderService
             $surchargePct = (int) Setting::getValue('round_trip_surcharge_percent', 70);
             $price = (int) round($basePrice * (1 + $surchargePct / 100));
         }
+
+        // region_id хранит TO (направление) — совместимость с историей
+        // и is_inter_district (region_id != null = межсёлами).
+        // pickup_region_id хранит FROM. Для in-village оба совпадают;
+        // is_inter_district становится (from != to), а не «есть region_id».
+        $isInterVillage = $from->id !== $to->id;
 
         $order = Order::create([
             'client_id' => $client->id,
@@ -111,8 +97,8 @@ class OrderService
             'client_comment' => $clientComment,
             'is_round_trip' => $isRoundTrip,
             'price' => $price,
-            'region_id' => $regionId,
-            'pickup_region_id' => $pickupRegionId,
+            'region_id' => $isInterVillage ? $to->id : null,
+            'pickup_region_id' => $from->id,
             'declined_drivers' => [],
         ]);
 

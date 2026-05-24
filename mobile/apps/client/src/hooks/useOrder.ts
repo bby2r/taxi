@@ -30,8 +30,15 @@ type ClientOrderState =
 
 export interface UseOrderReturn {
   state: ClientOrderState;
-  callTaxi: (latitude: number, longitude: number, address?: string, comment?: string, isRoundTrip?: boolean) => Promise<void>;
-  callRegionalTaxi: (latitude: number, longitude: number, regionId: number, address?: string, comment?: string, isRoundTrip?: boolean) => Promise<void>;
+  callTaxi: (
+    latitude: number,
+    longitude: number,
+    fromRegionId: number,
+    toRegionId: number,
+    address?: string,
+    comment?: string,
+    isRoundTrip?: boolean,
+  ) => Promise<void>;
   cancelOrder: () => Promise<void>;
   dismissCompleted: () => void;
   loading: boolean;
@@ -249,11 +256,27 @@ export function useOrder(): UseOrderReturn {
   }, [state.phase]);
 
   const callTaxi = useCallback(
-    async (latitude: number, longitude: number, address?: string, comment?: string, isRoundTrip?: boolean) => {
+    async (
+      latitude: number,
+      longitude: number,
+      fromRegionId: number,
+      toRegionId: number,
+      address?: string,
+      comment?: string,
+      isRoundTrip?: boolean,
+    ) => {
       setLoading(true);
       setError(null);
       try {
-        const order = await ordersApi.createOrder(latitude, longitude, address, comment, isRoundTrip);
+        const order = await ordersApi.createOrder(
+          latitude,
+          longitude,
+          fromRegionId,
+          toRegionId,
+          address,
+          comment,
+          isRoundTrip,
+        );
         orderRef.current = order;
         setState({ phase: 'searching', order });
       } catch (e: unknown) {
@@ -264,24 +287,6 @@ export function useOrder(): UseOrderReturn {
       }
     },
     [],
-  );
-
-  const callRegionalTaxi = useCallback(
-    async (latitude: number, longitude: number, regionId: number, address?: string, comment?: string, isRoundTrip?: boolean) => {
-      setLoading(true);
-      setError(null);
-      try {
-        const order = await ordersApi.createRegionalOrder(latitude, longitude, regionId, address, comment, isRoundTrip);
-        orderRef.current = order;
-        setState({ phase: 'searching', order });
-      } catch (e: unknown) {
-        const axiosError = e as { response?: { data?: { message?: string } } };
-        setError(axiosError.response?.data?.message || 'Не удалось создать заказ');
-      } finally {
-        setLoading(false);
-      }
-    },
-    []
   );
 
   const cancelOrder = useCallback(async () => {
@@ -310,5 +315,5 @@ export function useOrder(): UseOrderReturn {
     setState({ phase: 'idle' });
   }, []);
 
-  return { state, callTaxi, callRegionalTaxi, cancelOrder, dismissCompleted, loading, error };
+  return { state, callTaxi, cancelOrder, dismissCompleted, loading, error };
 }

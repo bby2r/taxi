@@ -9,6 +9,8 @@ use App\Events\OrderCancelled;
 use App\Jobs\SearchDriversJob;
 use App\Models\DriverProfile;
 use App\Models\Order;
+use App\Models\Region;
+use App\Models\RegionRoute;
 use App\Models\User;
 use App\Services\OrderService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -26,6 +28,8 @@ class OrderServiceTest extends TestCase
 
     private User $client;
 
+    private Region $village;
+
     /** Pickup coordinates near Bishkek center */
     private float $pickupLat = 42.8746;
 
@@ -40,6 +44,27 @@ class OrderServiceTest extends TestCase
 
         $this->service = app(OrderService::class);
         $this->client = User::factory()->create(['role' => UserRole::Client]);
+        // Один район + in-village цена (80 день / 120 ночь). Все тесты
+        // ниже создают заказ внутри этого района — это базовый сценарий;
+        // тесты конкретных межсельных цен живут в DistrictPricingTest.
+        $this->village = Region::factory()->create(['name' => 'TestVillage']);
+        RegionRoute::create([
+            'from_region_id' => $this->village->id,
+            'to_region_id' => $this->village->id,
+            'day_price' => 80,
+            'night_price' => 120,
+        ]);
+    }
+
+    private function createOrder(?User $client = null): Order
+    {
+        return $this->service->createOrder(
+            client: $client ?? $this->client,
+            pickupLat: $this->pickupLat,
+            pickupLon: $this->pickupLon,
+            fromRegionId: $this->village->id,
+            toRegionId: $this->village->id,
+        );
     }
 
     // ──────────────────────────────────────────────────────────────
@@ -50,7 +75,7 @@ class OrderServiceTest extends TestCase
     {
         $this->createNearbyDriver();
 
-        $order = $this->service->createOrder($this->client, $this->pickupLat, $this->pickupLon);
+        $order = $this->createOrder();
 
         $this->assertSame(OrderStatus::Searching, $order->status);
     }
@@ -61,7 +86,7 @@ class OrderServiceTest extends TestCase
 
         Carbon::setTestNow(Carbon::create(2026, 4, 7, 4, 0, 0, 'UTC')); // 10:00 Asia/Bishkek (UTC+6)
 
-        $order = $this->service->createOrder($this->client, $this->pickupLat, $this->pickupLon);
+        $order = $this->createOrder();
 
         $this->assertSame(80, $order->price);
     }
@@ -72,7 +97,7 @@ class OrderServiceTest extends TestCase
 
         Carbon::setTestNow(Carbon::create(2026, 4, 7, 16, 0, 0, 'UTC')); // 22:00 Asia/Bishkek (UTC+6)
 
-        $order = $this->service->createOrder($this->client, $this->pickupLat, $this->pickupLon);
+        $order = $this->createOrder();
 
         $this->assertSame(120, $order->price);
     }
@@ -90,7 +115,7 @@ class OrderServiceTest extends TestCase
         $this->expectException(RuntimeException::class);
         $this->expectExceptionMessage('Client already has an active order.');
 
-        $this->service->createOrder($this->client, $this->pickupLat, $this->pickupLon);
+        $this->createOrder();
     }
 
     public function test_create_order_offers_to_nearest_driver(): void
@@ -102,7 +127,7 @@ class OrderServiceTest extends TestCase
             ->atLocation($this->pickupLat + 0.001, $this->pickupLon + 0.001)
             ->create();
 
-        $order = $this->service->createOrder($this->client, $this->pickupLat, $this->pickupLon);
+        $order = $this->createOrder();
 
         $this->assertSame($driverUser->id, $order->offered_driver_id);
     }
@@ -111,7 +136,7 @@ class OrderServiceTest extends TestCase
     {
         Queue::fake();
 
-        $order = $this->service->createOrder($this->client, $this->pickupLat, $this->pickupLon);
+        $order = $this->createOrder();
 
         $this->assertSame(OrderStatus::Searching, $order->status);
         $this->assertSame(1, $order->fresh()->search_attempts);
@@ -123,7 +148,7 @@ class OrderServiceTest extends TestCase
 
     public function test_create_order_cancels_after_max_search_attempts(): void
     {
-        $order = $this->service->createOrder($this->client, $this->pickupLat, $this->pickupLon);
+        $order = $this->createOrder();
         $order->update(['search_attempts' => 3]);
 
         $this->service->offerToNextDriver($order);
@@ -152,7 +177,7 @@ class OrderServiceTest extends TestCase
     {
         $this->createNearbyDriver();
 
-        $order = $this->service->createOrder($this->client, $this->pickupLat, $this->pickupLon);
+        $order = $this->createOrder();
 
         $this->assertIsArray($order->client_snapshot);
         $this->assertSame($this->client->name, $order->client_snapshot['name']);
@@ -253,7 +278,7 @@ class OrderServiceTest extends TestCase
             ->atLocation($this->pickupLat + 0.01, $this->pickupLon + 0.01)
             ->create();
 
-        $order = $this->service->createOrder($this->client, $this->pickupLat, $this->pickupLon);
+        $order = $this->createOrder();
 
         // Should be offered to the nearest driver first
         $this->assertSame($nearDriver->id, $order->offered_driver_id);
@@ -488,7 +513,7 @@ class OrderServiceTest extends TestCase
         [$driverUser] = $this->createNearbyDriver();
         $driverUser->driverProfile->update(['shift_declines_count' => 4]);
 
-        $order = $this->service->createOrder($this->client, $this->pickupLat, $this->pickupLon);
+        $order = $this->createOrder();
         $this->service->declineOrder($order, $driverUser, 'too_far');
 
         $profile = $driverUser->driverProfile->fresh();
@@ -509,7 +534,7 @@ class OrderServiceTest extends TestCase
             ->atLocation($this->pickupLat + 0.01, $this->pickupLon + 0.01)
             ->create();
 
-        $order = $this->service->createOrder($this->client, $this->pickupLat, $this->pickupLon);
+        $order = $this->createOrder();
 
         $this->assertSame($fallbackDriver->id, $order->offered_driver_id);
     }
@@ -533,7 +558,7 @@ class OrderServiceTest extends TestCase
             ->create();
 
         $otherClient = User::factory()->create(['role' => UserRole::Client]);
-        $order = $this->service->createOrder($otherClient, $this->pickupLat, $this->pickupLon);
+        $order = $this->createOrder($otherClient);
 
         $this->assertSame($freeDriver->id, $order->offered_driver_id);
     }
@@ -568,7 +593,7 @@ class OrderServiceTest extends TestCase
     {
         [$driverUser] = $this->createNearbyDriver();
 
-        $order = $this->service->createOrder($this->client, $this->pickupLat, $this->pickupLon);
+        $order = $this->createOrder();
 
         return [$order, $driverUser];
     }

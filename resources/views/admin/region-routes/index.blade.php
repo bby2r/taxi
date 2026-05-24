@@ -1,16 +1,17 @@
 @extends('layouts.admin')
 
-@section('title', 'Тарифы межрайон')
-@section('heading', 'Тарифы межсёлами')
+@section('title', 'Тарифы поездок')
+@section('heading', 'Тарифы поездок')
 
 @section('content')
     <div class="mb-6 rounded-xl border border-blue-100 bg-blue-50 p-4 text-sm text-blue-900">
-        <p class="font-medium">Это единственное место где задаются межсельные цены</p>
+        <p class="font-medium">Это единственное место где задаются все цены поездок</p>
         <ul class="mt-2 list-disc space-y-1 pl-5 leading-relaxed">
             <li>Строки — <strong>откуда</strong> едет клиент. Колонки — <strong>куда</strong> едет.</li>
-            <li>Заполняйте обе цены: <strong>день</strong> (07–20) и <strong>ночь</strong> (21–06).</li>
-            <li>Незаполненные ячейки → клиенту покажется цена <strong>0 сом</strong> и заказ работать не будет.</li>
-            <li>Чтобы убрать маршрут — очистите оба поля и сохраните.</li>
+            <li><strong>Диагональ</strong> (например, Талас → Талас) — это цена поездки <em>внутри</em> района.</li>
+            <li>Заполняйте <strong>обе</strong> цены: день (07–20) и ночь (21–06).</li>
+            <li>Незаполненные ячейки → клиенту покажется <strong>0 сом</strong> и заказ работать не будет.</li>
+            <li>Чтобы убрать тариф — очистите оба поля и сохраните.</li>
         </ul>
     </div>
 
@@ -45,34 +46,34 @@
                             <tr class="hover:bg-gray-50/50">
                                 <td class="px-4 py-3 font-medium text-gray-900">{{ $from->name }}</td>
                                 @foreach ($regions as $to)
-                                    <td class="px-4 py-3">
-                                        @if ($from->id === $to->id)
-                                            <span class="block text-center text-xs text-gray-400">в селе</span>
-                                        @else
-                                            @php
-                                                $route = $routes[$from->id][$to->id] ?? null;
-                                            @endphp
-                                            <div class="flex items-center gap-1">
-                                                <input
-                                                    type="number"
-                                                    name="routes[{{ $from->id }}][{{ $to->id }}][day]"
-                                                    value="{{ old("routes.{$from->id}.{$to->id}.day", $route?->day_price) }}"
-                                                    placeholder="день"
-                                                    step="1"
-                                                    min="0"
-                                                    class="w-20 rounded-md border border-gray-300 px-2 py-1 text-center text-sm focus:border-amber-400 focus:ring-1 focus:ring-amber-400"
-                                                >
-                                                <span class="text-gray-300">/</span>
-                                                <input
-                                                    type="number"
-                                                    name="routes[{{ $from->id }}][{{ $to->id }}][night]"
-                                                    value="{{ old("routes.{$from->id}.{$to->id}.night", $route?->night_price) }}"
-                                                    placeholder="ночь"
-                                                    step="1"
-                                                    min="0"
-                                                    class="w-20 rounded-md border border-gray-300 px-2 py-1 text-center text-sm focus:border-amber-400 focus:ring-1 focus:ring-amber-400"
-                                                >
-                                            </div>
+                                    @php
+                                        $route = $routes[$from->id][$to->id] ?? null;
+                                        $isDiagonal = $from->id === $to->id;
+                                    @endphp
+                                    <td class="px-4 py-3 {{ $isDiagonal ? 'bg-amber-50' : '' }}">
+                                        <div class="flex items-center gap-1">
+                                            <input
+                                                type="number"
+                                                name="routes[{{ $from->id }}][{{ $to->id }}][day]"
+                                                value="{{ old("routes.{$from->id}.{$to->id}.day", $route?->day_price) }}"
+                                                placeholder="день"
+                                                step="1"
+                                                min="0"
+                                                class="w-20 rounded-md border border-gray-300 px-2 py-1 text-center text-sm focus:border-amber-400 focus:ring-1 focus:ring-amber-400"
+                                            >
+                                            <span class="text-gray-300">/</span>
+                                            <input
+                                                type="number"
+                                                name="routes[{{ $from->id }}][{{ $to->id }}][night]"
+                                                value="{{ old("routes.{$from->id}.{$to->id}.night", $route?->night_price) }}"
+                                                placeholder="ночь"
+                                                step="1"
+                                                min="0"
+                                                class="w-20 rounded-md border border-gray-300 px-2 py-1 text-center text-sm focus:border-amber-400 focus:ring-1 focus:ring-amber-400"
+                                            >
+                                        </div>
+                                        @if ($isDiagonal)
+                                            <p class="mt-1 text-center text-[10px] uppercase tracking-wider text-amber-700">внутри села</p>
                                         @endif
                                     </td>
                                 @endforeach

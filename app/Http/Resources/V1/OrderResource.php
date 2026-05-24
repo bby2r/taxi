@@ -37,6 +37,10 @@ class OrderResource extends JsonResource
                 'id' => $this->region->id,
                 'name' => $this->region->name,
             ]),
+            'pickup_region' => $this->when($this->pickup_region_id, fn () => [
+                'id' => $this->pickupRegion->id,
+                'name' => $this->pickupRegion->name,
+            ]),
             'client' => [
                 'id' => $this->client->id,
                 'name' => $this->client->name,

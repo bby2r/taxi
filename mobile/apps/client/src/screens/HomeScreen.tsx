@@ -12,15 +12,15 @@ import {
   Platform,
   StatusBar,
   TouchableOpacity,
+  ScrollView,
 } from 'react-native';
-import MapView, { Region } from 'react-native-maps';
-import { useLocation, ActionButton, ClientColors, Typography, reverseGeocode } from '@taxi/shared';
+import MapView, { Region as MapRegion } from 'react-native-maps';
+import { useLocation, ActionButton, ClientColors, Typography, reverseGeocode, Region } from '@taxi/shared';
 import { useOrder } from '../hooks/useOrder';
 import DriverCard from '../components/DriverCard';
-import RegionSelector from '../components/RegionSelector';
 import AnimatedDriverMarker from '../components/AnimatedDriverMarker';
 import Icon from '../components/Icon';
-import { getTariff } from '../api/regions';
+import { getRegions, getTariffs, priceFor, type TariffRoute } from '../api/regions';
 
 function PulsingDot(): React.ReactNode {
   const scale = useRef(new Animated.Value(1)).current;
@@ -70,52 +70,75 @@ function PulsingDot(): React.ReactNode {
   );
 }
 
+interface RegionPickerProps {
+  label: string;
+  regions: Region[];
+  selectedId: number | null;
+  onSelect: (id: number) => void;
+}
+
+function RegionPicker({ label, regions, selectedId, onSelect }: RegionPickerProps): React.ReactNode {
+  return (
+    <View style={styles.pickerBlock}>
+      <Text style={styles.pickerLabel}>{label}</Text>
+      <ScrollView
+        horizontal
+        showsHorizontalScrollIndicator={false}
+        contentContainerStyle={styles.pickerChips}
+      >
+        {regions.map((r) => {
+          const active = r.id === selectedId;
+          return (
+            <TouchableOpacity
+              key={r.id}
+              style={[styles.pickerChip, active && styles.pickerChipActive]}
+              onPress={() => onSelect(r.id)}
+              activeOpacity={0.85}
+            >
+              <Text
+                style={[styles.pickerChipText, active && styles.pickerChipTextActive]}
+              >
+                {r.name}
+              </Text>
+            </TouchableOpacity>
+          );
+        })}
+      </ScrollView>
+    </View>
+  );
+}
+
 export default function HomeScreen(): React.ReactNode {
   const location = useLocation();
-  const { state, callTaxi, callRegionalTaxi, cancelOrder, dismissCompleted, loading, error } = useOrder();
+  const { state, callTaxi, cancelOrder, dismissCompleted, loading, error } = useOrder();
   const mapRef = useRef<MapView>(null);
-  const [regionSelectorVisible, setRegionSelectorVisible] = useState(false);
-  const [currentPrice, setCurrentPrice] = useState<number>(80);
-  // Surcharge fetched alongside base price so the toggle preview is
-  // instant — no API call per checkbox tap. Default 70 % matches the
-  // server-side default seeded into Settings.
+
+  const [regions, setRegions] = useState<Region[]>([]);
+  const [tariffs, setTariffs] = useState<TariffRoute[]>([]);
   const [roundTripPct, setRoundTripPct] = useState<number>(70);
-  // District detected server-side from current GPS (Гео-A+). null when
-  // GPS isn't ready or no region has centre coords configured —
-  // hiding the badge in that case is intentional; falling back to
-  // "Талас" would mislead a client physically in another village.
-  const [district, setDistrict] = useState<{ id: number; name: string } | null>(null);
-  // Геозабор: false ⇒ клиент вне радиуса 2 км от любого района.
-  // Скрываем кнопку «Заказ внутри села» полностью — без неё сервер
-  // всё равно отклонит создание, а спрятанная кнопка честнее, чем
-  // дать тапнуть и показать ошибку.
-  const [inVillageAvailable, setInVillageAvailable] = useState(true);
+  const [fromRegionId, setFromRegionId] = useState<number | null>(null);
+  const [toRegionId, setToRegionId] = useState<number | null>(null);
   const [isRoundTrip, setIsRoundTrip] = useState(false);
   const cardAnim = useRef(new Animated.Value(0)).current;
 
-  // Re-fetch the in-village price every time the home tab regains
-  // focus (and on first mount). Previously this was a one-shot
-  // useEffect — operator would change the price in /admin/settings,
-  // but every client app with HomeScreen already mounted kept the
-  // stale value forever. Now the fresh value lands when the user
-  // switches back from another tab, returns from background, or
-  // simply taps the tab bar.
+  // Загружаем список районов + матрицу тарифов при каждом фокусе. Если
+  // оператор поменял цену в админке — клиент увидит её при следующем
+  // переходе на эту вкладку, без перезапуска приложения.
   useFocusEffect(
     useCallback(() => {
-      // Pass GPS only when we have a real fix — without it the server
-      // can't resolve a district and we'd burn a request on the global
-      // fallback that returns the same answer.
-      const lat = location.hasRealFix ? location.latitude : undefined;
-      const lng = location.hasRealFix ? location.longitude : undefined;
-      getTariff(lat, lng)
-        .then((t) => {
-          setCurrentPrice(t.price);
+      Promise.all([getRegions(), getTariffs()])
+        .then(([rs, t]) => {
+          setRegions(rs);
+          setTariffs(t.routes);
           setRoundTripPct(t.roundTripSurchargePercent);
-          setDistrict(t.district);
-          setInVillageAvailable(t.inVillageAvailable);
+
+          // Если пикеры ещё пустые — выставляем дефолт на первый район
+          // (одинаково и для from, и для to, значит «внутри села»).
+          setFromRegionId((prev) => prev ?? rs[0]?.id ?? null);
+          setToRegionId((prev) => prev ?? rs[0]?.id ?? null);
         })
         .catch(() => undefined);
-    }, [location.hasRealFix, location.latitude, location.longitude]),
+    }, []),
   );
 
   // Slide the bottom card up on first mount for a more "alive" feel.
@@ -128,19 +151,15 @@ export default function HomeScreen(): React.ReactNode {
     }).start();
   }, [cardAnim]);
 
-  const initialRegion: Region = {
+  const initialRegion: MapRegion = {
     latitude: location.latitude,
     longitude: location.longitude,
     latitudeDelta: 0.015,
     longitudeDelta: 0.015,
   };
 
-  // Wraps the actual order call in a "wait time" confirmation when
-  // round-trip is on. Drivers won't sit at the destination for 2-3
-  // hours — the surcharge prices in ~15-20 min, not a half-day. We
-  // surface this expectation BEFORE the order goes out so neither
-  // side ends up surprised. Returns a promise that resolves to true
-  // if the user wants to proceed.
+  // Round-trip требует подтверждения: водитель не сидит 2-3 часа,
+  // ценник посчитан под 15-20 мин ожидания на месте.
   const confirmRoundTripIfNeeded = (): Promise<boolean> => {
     if (!isRoundTrip) return Promise.resolve(true);
     return new Promise((resolve) => {
@@ -159,32 +178,34 @@ export default function HomeScreen(): React.ReactNode {
   };
 
   const handleCallTaxi = async (): Promise<void> => {
+    if (fromRegionId === null || toRegionId === null) return;
     if (!(await confirmRoundTripIfNeeded())) return;
     const address = await reverseGeocode(location.latitude, location.longitude);
-    await callTaxi(location.latitude, location.longitude, address, undefined, isRoundTrip);
-  };
-
-  const handleRegionSelect = async (regionId: number): Promise<void> => {
-    setRegionSelectorVisible(false);
-    if (!(await confirmRoundTripIfNeeded())) return;
-    const address = await reverseGeocode(location.latitude, location.longitude);
-    await callRegionalTaxi(
+    await callTaxi(
       location.latitude,
       location.longitude,
-      regionId,
+      fromRegionId,
+      toRegionId,
       address,
       undefined,
       isRoundTrip,
     );
   };
 
-  // Live preview price including the round-trip surcharge when toggled.
-  // Math runs locally so the chip updates the moment the user taps the
-  // checkbox; final price the server records uses the same formula so
-  // there's no mismatch between displayed and charged amounts.
+  const basePrice =
+    fromRegionId !== null && toRegionId !== null
+      ? priceFor(tariffs, fromRegionId, toRegionId)
+      : 0;
   const displayedPrice = isRoundTrip
-    ? Math.round(currentPrice * (1 + roundTripPct / 100))
-    : currentPrice;
+    ? Math.round(basePrice * (1 + roundTripPct / 100))
+    : basePrice;
+
+  const fromName = regions.find((r) => r.id === fromRegionId)?.name ?? '';
+  const toName = regions.find((r) => r.id === toRegionId)?.name ?? '';
+  const isInVillage = fromRegionId !== null && fromRegionId === toRegionId;
+  const tripLabel = isInVillage ? `Внутри ${fromName}` : `${fromName} → ${toName}`;
+  const buttonLabel = isInVillage ? 'Заказ внутри села' : 'Заказ межсёлами';
+  const tariffMissing = basePrice <= 0 && fromRegionId !== null && toRegionId !== null;
 
   const driverCoords =
     state.phase !== 'idle' &&
@@ -222,8 +243,6 @@ export default function HomeScreen(): React.ReactNode {
         )}
       </MapView>
 
-      {/* Floating cancelled banner — slides from the top, replaces the
-          previous raw red toast. */}
       {state.phase === 'cancelled' && (
         <View style={styles.cancelledToast}>
           <Icon name="ban" size={20} color={ClientColors.white} strokeWidth={2.2} />
@@ -235,11 +254,9 @@ export default function HomeScreen(): React.ReactNode {
         </View>
       )}
 
-      {/* Bottom card */}
       <Animated.View
         style={[styles.bottomCard, { transform: [{ translateY: cardTranslate }] }]}
       >
-        {/* Pull tab */}
         <View style={styles.handle} />
 
         {error && (
@@ -251,108 +268,105 @@ export default function HomeScreen(): React.ReactNode {
 
         {state.phase === 'idle' && (
           <>
-            {district && (
-              <View style={styles.districtBadge}>
-                <Icon name="pin" size={14} color={ClientColors.primaryDark} strokeWidth={2.2} />
-                <Text style={styles.districtBadgeLabel}>Вы сейчас в:</Text>
-                <Text style={styles.districtBadgeValue}>{district.name}</Text>
-              </View>
-            )}
             <Text style={styles.greeting}>Куда поедем?</Text>
-            {!inVillageAvailable && (
-              <View style={styles.outOfZoneNotice}>
-                <Icon name="alert" size={18} color={ClientColors.secondaryDark} strokeWidth={2.2} />
-                <Text style={styles.outOfZoneText}>
-                  Вы вне зон обслуживания внутри села. Выберите направление через «Межсёлами».
-                </Text>
-              </View>
-            )}
-            <View style={styles.priceRow}>
-              {inVillageAvailable && (
-                <View style={styles.priceChip}>
-                  <Text style={styles.priceChipLabel}>в селе</Text>
-                  <Text style={styles.priceChipValue}>{displayedPrice} сом</Text>
-                </View>
-              )}
-              <TouchableOpacity
-                style={styles.regionChip}
-                onPress={() => setRegionSelectorVisible(true)}
-                activeOpacity={0.85}
-              >
-                <Icon name="route" size={20} color={ClientColors.secondaryDark} strokeWidth={2.2} />
-                <Text style={styles.regionChipText}>Межсёлами</Text>
-              </TouchableOpacity>
-            </View>
 
-            {/* Round-trip toggle. Tapping flips isRoundTrip → displayedPrice
-                re-renders with the surcharge applied immediately. State
-                travels into both callTaxi / callRegionalTaxi so the order
-                lands on the server with the matching is_round_trip flag
-                and final price. */}
-            <TouchableOpacity
-              style={[styles.roundTripRow, isRoundTrip && styles.roundTripRowActive]}
-              onPress={() => setIsRoundTrip((v) => !v)}
-              activeOpacity={0.7}
-            >
-              <View style={[styles.checkbox, isRoundTrip && styles.checkboxActive]}>
+            {regions.length === 0 ? (
+              <ActivityIndicator color={ClientColors.primary} style={{ marginVertical: 24 }} />
+            ) : (
+              <>
+                <RegionPicker
+                  label="Откуда"
+                  regions={regions}
+                  selectedId={fromRegionId}
+                  onSelect={setFromRegionId}
+                />
+                <RegionPicker
+                  label="Куда"
+                  regions={regions}
+                  selectedId={toRegionId}
+                  onSelect={setToRegionId}
+                />
+
+                <View style={styles.priceCard}>
+                  <Text style={styles.priceCardLabel}>{tripLabel}</Text>
+                  {tariffMissing ? (
+                    <Text style={styles.priceCardMissing}>Тариф не настроен</Text>
+                  ) : (
+                    <Text style={styles.priceCardValue}>{displayedPrice} сом</Text>
+                  )}
+                </View>
+
+                <TouchableOpacity
+                  style={[styles.roundTripRow, isRoundTrip && styles.roundTripRowActive]}
+                  onPress={() => setIsRoundTrip((v) => !v)}
+                  activeOpacity={0.7}
+                >
+                  <View style={[styles.checkbox, isRoundTrip && styles.checkboxActive]}>
+                    {isRoundTrip && (
+                      <Icon name="check" size={16} color={ClientColors.white} strokeWidth={3} />
+                    )}
+                  </View>
+                  <Text style={styles.roundTripLabel}>Туда и обратно</Text>
+                  {isRoundTrip && (
+                    <View style={styles.roundTripBadge}>
+                      <Text style={styles.roundTripBadgeText}>+{roundTripPct}%</Text>
+                    </View>
+                  )}
+                </TouchableOpacity>
                 {isRoundTrip && (
-                  <Icon name="check" size={16} color={ClientColors.white} strokeWidth={3} />
+                  <Text style={styles.roundTripHint}>
+                    Водитель ждёт на месте 15-20 минут и везёт обратно
+                  </Text>
                 )}
-              </View>
-              <Text style={styles.roundTripLabel}>Туда и обратно</Text>
-              {isRoundTrip && (
-                <View style={styles.roundTripBadge}>
-                  <Text style={styles.roundTripBadgeText}>+{roundTripPct}%</Text>
-                </View>
-              )}
-            </TouchableOpacity>
-            {isRoundTrip && (
-              <Text style={styles.roundTripHint}>
-                Водитель ждёт на месте 15-20 минут и везёт обратно
-              </Text>
-            )}
 
-            {/* Hero call button — large, primary teal, pill-shaped.
-                Скрыт когда клиент вне геозабора: сервер отклонит создание,
-                межсёлами остаётся единственным вариантом. */}
-            {inVillageAvailable && (
-              <TouchableOpacity
-                style={[
-                  styles.heroButton,
-                  (location.loading || loading || !location.hasRealFix) && styles.heroButtonDisabled,
-                ]}
-                onPress={handleCallTaxi}
-                disabled={location.loading || loading || !location.hasRealFix}
-                activeOpacity={0.9}
-              >
-                {loading ? (
-                  <ActivityIndicator color={ClientColors.white} />
-                ) : (
-                  <>
-                    <Icon name="car" size={22} color={ClientColors.white} strokeWidth={2} />
-                    <Text style={styles.heroButtonText}>Заказ внутри села</Text>
-                  </>
-                )}
-              </TouchableOpacity>
+                <TouchableOpacity
+                  style={[
+                    styles.heroButton,
+                    (location.loading ||
+                      loading ||
+                      !location.hasRealFix ||
+                      tariffMissing) &&
+                      styles.heroButtonDisabled,
+                  ]}
+                  onPress={handleCallTaxi}
+                  disabled={
+                    location.loading ||
+                    loading ||
+                    !location.hasRealFix ||
+                    tariffMissing
+                  }
+                  activeOpacity={0.9}
+                >
+                  {loading ? (
+                    <ActivityIndicator color={ClientColors.white} />
+                  ) : (
+                    <>
+                      <Icon name="car" size={22} color={ClientColors.white} strokeWidth={2} />
+                      <Text style={styles.heroButtonText}>{buttonLabel}</Text>
+                    </>
+                  )}
+                </TouchableOpacity>
+
+                <View style={styles.helperRow}>
+                  <Icon
+                    name={location.hasRealFix ? 'pin' : 'alert'}
+                    size={13}
+                    color={location.hasRealFix ? ClientColors.textMuted : ClientColors.danger}
+                    strokeWidth={2}
+                  />
+                  <Text
+                    style={[
+                      styles.helperText,
+                      !location.hasRealFix && { color: ClientColors.danger },
+                    ]}
+                  >
+                    {location.hasRealFix
+                      ? 'Подача — ваше текущее местоположение'
+                      : location.error ?? 'Определяем ваше местоположение…'}
+                  </Text>
+                </View>
+              </>
             )}
-            <View style={styles.helperRow}>
-              <Icon
-                name={location.hasRealFix ? 'pin' : 'alert'}
-                size={13}
-                color={location.hasRealFix ? ClientColors.textMuted : ClientColors.danger}
-                strokeWidth={2}
-              />
-              <Text
-                style={[
-                  styles.helperText,
-                  !location.hasRealFix && { color: ClientColors.danger },
-                ]}
-              >
-                {location.hasRealFix
-                  ? 'Подача — ваше текущее местоположение'
-                  : location.error ?? 'Определяем ваше местоположение…'}
-              </Text>
-            </View>
           </>
         )}
 
@@ -399,7 +413,6 @@ export default function HomeScreen(): React.ReactNode {
           )}
       </Animated.View>
 
-      {/* Completed Modal — refined card with checkmark badge */}
       <Modal visible={state.phase === 'completed'} transparent animationType="fade">
         <View style={styles.modalOverlay}>
           <View style={styles.modalContent}>
@@ -426,14 +439,6 @@ export default function HomeScreen(): React.ReactNode {
           </View>
         </View>
       </Modal>
-
-      <RegionSelector
-        visible={regionSelectorVisible}
-        onSelect={handleRegionSelect}
-        onClose={() => setRegionSelectorVisible(false)}
-        latitude={location.hasRealFix ? location.latitude : undefined}
-        longitude={location.hasRealFix ? location.longitude : undefined}
-      />
     </View>
   );
 }
@@ -471,84 +476,70 @@ const styles = StyleSheet.create({
     fontSize: 26,
     fontWeight: '700' as const,
     color: ClientColors.dark,
-    marginBottom: 16,
+    marginBottom: 18,
     letterSpacing: -0.3,
   },
-  districtBadge: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-    alignSelf: 'flex-start',
-    backgroundColor: ClientColors.primaryTint,
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 999,
-    marginBottom: 10,
+  pickerBlock: {
+    marginBottom: 14,
   },
-  districtBadgeLabel: {
+  pickerLabel: {
     fontSize: 12,
-    color: ClientColors.primaryDark,
-    fontWeight: '500' as const,
+    color: ClientColors.textSecondary,
+    fontWeight: '600' as const,
+    textTransform: 'uppercase',
+    letterSpacing: 0.6,
+    marginBottom: 8,
+    paddingLeft: 2,
   },
-  districtBadgeValue: {
-    fontSize: 13,
-    color: ClientColors.primaryDark,
-    fontWeight: '700' as const,
+  pickerChips: {
+    gap: 8,
+    paddingRight: 4,
   },
-  outOfZoneNotice: {
-    flexDirection: 'row',
-    alignItems: 'flex-start',
-    gap: 10,
-    backgroundColor: ClientColors.secondaryTint,
-    borderRadius: 14,
-    paddingHorizontal: 14,
-    paddingVertical: 12,
+  pickerChip: {
+    paddingHorizontal: 18,
+    paddingVertical: 10,
+    borderRadius: 999,
+    backgroundColor: ClientColors.cardBackground,
+    borderWidth: 1.5,
+    borderColor: ClientColors.border,
+  },
+  pickerChipActive: {
+    backgroundColor: ClientColors.primary,
+    borderColor: ClientColors.primary,
+  },
+  pickerChipText: {
+    fontSize: 14,
+    fontWeight: '600' as const,
+    color: ClientColors.dark,
+  },
+  pickerChipTextActive: {
+    color: ClientColors.white,
+  },
+  priceCard: {
+    backgroundColor: ClientColors.primaryTint,
+    borderRadius: 18,
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+    marginTop: 4,
     marginBottom: 16,
   },
-  outOfZoneText: {
-    flex: 1,
+  priceCardLabel: {
     fontSize: 13,
-    lineHeight: 18,
-    color: ClientColors.secondaryDark,
-    fontWeight: '500' as const,
-  },
-  priceRow: {
-    flexDirection: 'row',
-    gap: 10,
-    marginBottom: 22,
-  },
-  priceChip: {
-    flex: 1,
-    backgroundColor: ClientColors.primaryTint,
-    borderRadius: 16,
-    paddingHorizontal: 14,
-    paddingVertical: 12,
-  },
-  priceChipLabel: {
-    fontSize: 12,
     color: ClientColors.primaryDark,
-    fontWeight: '500' as const,
+    fontWeight: '600' as const,
   },
-  priceChipValue: {
-    fontSize: 20,
-    fontWeight: '700' as const,
+  priceCardValue: {
+    fontSize: 28,
+    fontWeight: '800' as const,
     color: ClientColors.primaryDark,
-    marginTop: 2,
+    marginTop: 4,
+    letterSpacing: -0.4,
   },
-  regionChip: {
-    flex: 1,
-    backgroundColor: ClientColors.secondaryTint,
-    borderRadius: 16,
-    paddingHorizontal: 14,
-    paddingVertical: 12,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 10,
-  },
-  regionChipText: {
+  priceCardMissing: {
     fontSize: 15,
     fontWeight: '600' as const,
-    color: ClientColors.secondaryDark,
+    color: ClientColors.danger,
+    marginTop: 6,
   },
   roundTripRow: {
     flexDirection: 'row',

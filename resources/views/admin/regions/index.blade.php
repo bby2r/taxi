@@ -1,18 +1,18 @@
 @extends('layouts.admin')
 
-@section('title', 'Регионы')
-@section('heading', 'Регионы')
+@section('title', 'Районы')
+@section('heading', 'Районы')
 
 @section('content')
     {{-- Header --}}
     <div class="mb-6 flex items-center justify-between">
-        <p class="text-sm text-gray-600">Всего: {{ $regions->total() }} регионов</p>
+        <p class="text-sm text-gray-600">Всего: {{ $regions->total() }} районов</p>
         <div class="flex items-center gap-3">
             <a
                 href="{{ route('admin.region-routes.index') }}"
                 class="inline-flex items-center gap-2 rounded-lg border border-gray-300 bg-white px-4 py-2.5 text-sm font-medium text-gray-700 hover:bg-gray-50"
             >
-                Тарифы межсёлами →
+                Тарифы поездок →
             </a>
             <a
                 href="{{ route('admin.regions.create') }}"
@@ -22,7 +22,7 @@
                 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="h-4 w-4">
                     <path d="M10.75 4.75a.75.75 0 0 0-1.5 0v4.5h-4.5a.75.75 0 0 0 0 1.5h4.5v4.5a.75.75 0 0 0 1.5 0v-4.5h4.5a.75.75 0 0 0 0-1.5h-4.5v-4.5Z" />
                 </svg>
-                Добавить регион
+                Добавить район
             </a>
         </div>
     </div>
@@ -47,8 +47,6 @@
                 <thead class="border-b border-gray-200 bg-gray-50 text-xs uppercase tracking-wider text-gray-500">
                     <tr>
                         <th class="px-6 py-3">Название</th>
-                        <th class="px-6 py-3">Внутри района День/Ночь</th>
-                        <th class="px-6 py-3">Центр (GPS)</th>
                         <th class="px-6 py-3">Статус</th>
                         <th class="px-6 py-3">Порядок</th>
                         <th class="px-6 py-3">Действия</th>
@@ -58,21 +56,6 @@
                     @forelse ($regions as $region)
                         <tr class="hover:bg-gray-50">
                             <td class="whitespace-nowrap px-6 py-4 font-medium text-gray-900">{{ $region->name }}</td>
-                            <td class="whitespace-nowrap px-6 py-4 text-gray-700">
-                                @if ($region->in_district_day_price !== null || $region->in_district_night_price !== null)
-                                    {{ $region->in_district_day_price ?? '—' }} / {{ $region->in_district_night_price ?? '—' }} сом
-                                @else
-                                    <span class="text-gray-400">не задан</span>
-                                @endif
-                            </td>
-                            <td class="whitespace-nowrap px-6 py-4 text-xs text-gray-500">
-                                @if ($region->center_latitude !== null && $region->center_longitude !== null)
-                                    {{ number_format((float) $region->center_latitude, 4) }},
-                                    {{ number_format((float) $region->center_longitude, 4) }}
-                                @else
-                                    <span class="text-gray-400">не задан</span>
-                                @endif
-                            </td>
                             <td class="whitespace-nowrap px-6 py-4">
                                 @if ($region->is_active)
                                     <span class="inline-flex items-center rounded-full bg-green-100 px-2.5 py-0.5 text-xs font-medium text-green-700">Активен</span>
@@ -92,7 +75,7 @@
                                     <form
                                         method="POST"
                                         action="{{ route('admin.regions.destroy', $region) }}"
-                                        onsubmit="return confirm('Вы уверены, что хотите удалить этот регион?')"
+                                        onsubmit="return confirm('Удалить район? Тарифы поездок к этому району тоже удалятся.')"
                                     >
                                         @csrf
                                         @method('DELETE')
@@ -105,7 +88,7 @@
                         </tr>
                     @empty
                         <tr>
-                            <td colspan="6" class="px-6 py-8 text-center text-gray-500">Регионов нет.</td>
+                            <td colspan="4" class="px-6 py-8 text-center text-gray-500">Районов нет.</td>
                         </tr>
                     @endforelse
                 </tbody>

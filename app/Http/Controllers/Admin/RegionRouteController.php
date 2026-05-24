@@ -56,7 +56,8 @@ class RegionRouteController extends Controller
                     continue;
                 }
                 foreach ($toMap as $toId => $prices) {
-                    if (! isset($regionIdSet[$toId]) || (int) $fromId === (int) $toId) {
+                    // Диагональ (from == to) разрешена — это in-village цена.
+                    if (! isset($regionIdSet[$toId])) {
                         continue;
                     }
                     $day = $prices['day'] ?? null;

@@ -68,16 +68,10 @@ class RegionController extends Controller
     {
         $nameUnique = 'unique:regions,name'.($ignoreId ? ','.$ignoreId : '');
 
-        // day_price / night_price больше не редактируются здесь —
-        // межсельные цены задаются через матрицу /admin/region-routes.
-        // Колонки в БД остаются как технический fallback в priceFrom()
-        // (если оператор не заполнил ячейку в матрице).
+        // Все цены живут в матрице /admin/region-routes. Карточка
+        // района — только название и флаги.
         return [
             'name' => ['required', 'string', 'max:255', $nameUnique],
-            'in_district_day_price' => ['nullable', 'integer', 'min:0'],
-            'in_district_night_price' => ['nullable', 'integer', 'min:0'],
-            'center_latitude' => ['nullable', 'numeric', 'between:-90,90'],
-            'center_longitude' => ['nullable', 'numeric', 'between:-180,180'],
             'is_active' => ['boolean'],
             'sort_order' => ['integer', 'min:0'],
         ];
