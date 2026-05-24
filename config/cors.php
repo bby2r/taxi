@@ -25,7 +25,7 @@ return [
     // Sanctum token ever leaks into a malicious site. To add staging
     // / preview origins, append to this list.
     'allowed_origins' => array_filter(
-        explode(',', (string) env('CORS_ALLOWED_ORIGINS', 'https://aiyltaxi.kg'))
+        explode(',', (string) env('CORS_ALLOWED_ORIGINS', 'https://aliftaxi.kg'))
     ),
 
     'allowed_origins_patterns' => [],

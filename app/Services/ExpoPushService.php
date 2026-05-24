@@ -66,7 +66,7 @@ class ExpoPushService
     {
         return $this->sendToUser(
             $driver,
-            'AIYL Taxi',
+            'Alif Taxi',
             'Приложение перестало принимать заказы. Откройте чтобы вернуться на линию.',
             ['type' => 'stale_nudge'],
             ['priority' => 'high', 'ttl' => 600],
