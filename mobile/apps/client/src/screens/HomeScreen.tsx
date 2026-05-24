@@ -12,14 +12,16 @@ import {
   Platform,
   StatusBar,
   TouchableOpacity,
-  ScrollView,
 } from 'react-native';
 import MapView, { Region as MapRegion } from 'react-native-maps';
 import { useLocation, ActionButton, ClientColors, Typography, reverseGeocode, Region } from '@taxi/shared';
 import { useOrder } from '../hooks/useOrder';
+import { usePreferredVillage } from '../hooks/usePreferredVillage';
 import DriverCard from '../components/DriverCard';
 import AnimatedDriverMarker from '../components/AnimatedDriverMarker';
 import Icon from '../components/Icon';
+import VillageBadgeSelector from '../components/VillageBadgeSelector';
+import IntervillageModal from '../components/IntervillageModal';
 import { getRegions, getTariffs, priceFor, type TariffRoute } from '../api/regions';
 
 function PulsingDot(): React.ReactNode {
@@ -70,44 +72,6 @@ function PulsingDot(): React.ReactNode {
   );
 }
 
-interface RegionPickerProps {
-  label: string;
-  regions: Region[];
-  selectedId: number | null;
-  onSelect: (id: number) => void;
-}
-
-function RegionPicker({ label, regions, selectedId, onSelect }: RegionPickerProps): React.ReactNode {
-  return (
-    <View style={styles.pickerBlock}>
-      <Text style={styles.pickerLabel}>{label}</Text>
-      <ScrollView
-        horizontal
-        showsHorizontalScrollIndicator={false}
-        contentContainerStyle={styles.pickerChips}
-      >
-        {regions.map((r) => {
-          const active = r.id === selectedId;
-          return (
-            <TouchableOpacity
-              key={r.id}
-              style={[styles.pickerChip, active && styles.pickerChipActive]}
-              onPress={() => onSelect(r.id)}
-              activeOpacity={0.85}
-            >
-              <Text
-                style={[styles.pickerChipText, active && styles.pickerChipTextActive]}
-              >
-                {r.name}
-              </Text>
-            </TouchableOpacity>
-          );
-        })}
-      </ScrollView>
-    </View>
-  );
-}
-
 export default function HomeScreen(): React.ReactNode {
   const location = useLocation();
   const { state, callTaxi, cancelOrder, dismissCompleted, loading, error } = useOrder();
@@ -116,14 +80,16 @@ export default function HomeScreen(): React.ReactNode {
   const [regions, setRegions] = useState<Region[]>([]);
   const [tariffs, setTariffs] = useState<TariffRoute[]>([]);
   const [roundTripPct, setRoundTripPct] = useState<number>(70);
-  const [fromRegionId, setFromRegionId] = useState<number | null>(null);
-  const [toRegionId, setToRegionId] = useState<number | null>(null);
   const [isRoundTrip, setIsRoundTrip] = useState(false);
+  const [intervillageOpen, setIntervillageOpen] = useState(false);
   const cardAnim = useRef(new Animated.Value(0)).current;
 
-  // Загружаем список районов + матрицу тарифов при каждом фокусе. Если
-  // оператор поменял цену в админке — клиент увидит её при следующем
-  // переходе на эту вкладку, без перезапуска приложения.
+  // «Моё село» — id района проживания, хранится в SecureStore. Это
+  // и есть from для one-tap «Заказ внутри села», и дефолт «Откуда» в
+  // межсёлами-модалке.
+  const { id: villageId, setId: setVillageId, ready: villageReady } =
+    usePreferredVillage(regions);
+
   useFocusEffect(
     useCallback(() => {
       Promise.all([getRegions(), getTariffs()])
@@ -131,17 +97,11 @@ export default function HomeScreen(): React.ReactNode {
           setRegions(rs);
           setTariffs(t.routes);
           setRoundTripPct(t.roundTripSurchargePercent);
-
-          // Если пикеры ещё пустые — выставляем дефолт на первый район
-          // (одинаково и для from, и для to, значит «внутри села»).
-          setFromRegionId((prev) => prev ?? rs[0]?.id ?? null);
-          setToRegionId((prev) => prev ?? rs[0]?.id ?? null);
         })
         .catch(() => undefined);
     }, []),
   );
 
-  // Slide the bottom card up on first mount for a more "alive" feel.
   useEffect(() => {
     Animated.timing(cardAnim, {
       toValue: 1,
@@ -158,8 +118,6 @@ export default function HomeScreen(): React.ReactNode {
     longitudeDelta: 0.015,
   };
 
-  // Round-trip требует подтверждения: водитель не сидит 2-3 часа,
-  // ценник посчитан под 15-20 мин ожидания на месте.
   const confirmRoundTripIfNeeded = (): Promise<boolean> => {
     if (!isRoundTrip) return Promise.resolve(true);
     return new Promise((resolve) => {
@@ -167,7 +125,7 @@ export default function HomeScreen(): React.ReactNode {
         'Туда и обратно',
         'Водитель довозит вас до места, ждёт и привозит обратно.\n\n' +
           'Постарайтесь уложиться в 15-20 минут на месте — водитель не может ждать 2-3 часа.\n\n' +
-          'Если задержитесь дольше — водитель уедет на другие заказы, и вам придётся заказывать новое такси обратно.',
+          'Если задержитесь дольше — водитель уедет на другие заказы.',
         [
           { text: 'Отмена', style: 'cancel', onPress: () => resolve(false) },
           { text: 'Понятно, заказать', style: 'default', onPress: () => resolve(true) },
@@ -177,35 +135,40 @@ export default function HomeScreen(): React.ReactNode {
     });
   };
 
-  const handleCallTaxi = async (): Promise<void> => {
-    if (fromRegionId === null || toRegionId === null) return;
+  const handleInVillageCallTaxi = async (): Promise<void> => {
+    if (villageId === null) return;
     if (!(await confirmRoundTripIfNeeded())) return;
     const address = await reverseGeocode(location.latitude, location.longitude);
     await callTaxi(
       location.latitude,
       location.longitude,
-      fromRegionId,
-      toRegionId,
+      villageId,
+      villageId,
       address,
       undefined,
       isRoundTrip,
     );
   };
 
-  const basePrice =
-    fromRegionId !== null && toRegionId !== null
-      ? priceFor(tariffs, fromRegionId, toRegionId)
-      : 0;
-  const displayedPrice = isRoundTrip
-    ? Math.round(basePrice * (1 + roundTripPct / 100))
-    : basePrice;
+  const handleIntervillageOrder = async (
+    fromId: number,
+    toId: number,
+    rt: boolean,
+  ): Promise<boolean> => {
+    const address = await reverseGeocode(location.latitude, location.longitude);
+    const before = error;
+    await callTaxi(location.latitude, location.longitude, fromId, toId, address, undefined, rt);
+    // useOrder ставит error на провале; чтобы понять успех — проверяем
+    // что он не изменился (или null остался).
+    return error === before;
+  };
 
-  const fromName = regions.find((r) => r.id === fromRegionId)?.name ?? '';
-  const toName = regions.find((r) => r.id === toRegionId)?.name ?? '';
-  const isInVillage = fromRegionId !== null && fromRegionId === toRegionId;
-  const tripLabel = isInVillage ? `Внутри ${fromName}` : `${fromName} → ${toName}`;
-  const buttonLabel = isInVillage ? 'Заказ внутри села' : 'Заказ межсёлами';
-  const tariffMissing = basePrice <= 0 && fromRegionId !== null && toRegionId !== null;
+  const inVillagePrice =
+    villageId !== null ? priceFor(tariffs, villageId, villageId) : 0;
+  const displayedPrice = isRoundTrip
+    ? Math.round(inVillagePrice * (1 + roundTripPct / 100))
+    : inVillagePrice;
+  const inVillageTariffMissing = villageReady && villageId !== null && inVillagePrice <= 0;
 
   const driverCoords =
     state.phase !== 'idle' &&
@@ -268,28 +231,20 @@ export default function HomeScreen(): React.ReactNode {
 
         {state.phase === 'idle' && (
           <>
-            <Text style={styles.greeting}>Куда поедем?</Text>
-
             {regions.length === 0 ? (
               <ActivityIndicator color={ClientColors.primary} style={{ marginVertical: 24 }} />
             ) : (
               <>
-                <RegionPicker
-                  label="Откуда"
+                <VillageBadgeSelector
                   regions={regions}
-                  selectedId={fromRegionId}
-                  onSelect={setFromRegionId}
+                  selectedId={villageId}
+                  onSelect={setVillageId}
                 />
-                <RegionPicker
-                  label="Куда"
-                  regions={regions}
-                  selectedId={toRegionId}
-                  onSelect={setToRegionId}
-                />
+                <Text style={styles.greeting}>Куда поедем?</Text>
 
                 <View style={styles.priceCard}>
-                  <Text style={styles.priceCardLabel}>{tripLabel}</Text>
-                  {tariffMissing ? (
+                  <Text style={styles.priceCardLabel}>В селе</Text>
+                  {inVillageTariffMissing ? (
                     <Text style={styles.priceCardMissing}>Тариф не настроен</Text>
                   ) : (
                     <Text style={styles.priceCardValue}>{displayedPrice} сом</Text>
@@ -325,15 +280,17 @@ export default function HomeScreen(): React.ReactNode {
                     (location.loading ||
                       loading ||
                       !location.hasRealFix ||
-                      tariffMissing) &&
+                      inVillageTariffMissing ||
+                      villageId === null) &&
                       styles.heroButtonDisabled,
                   ]}
-                  onPress={handleCallTaxi}
+                  onPress={handleInVillageCallTaxi}
                   disabled={
                     location.loading ||
                     loading ||
                     !location.hasRealFix ||
-                    tariffMissing
+                    inVillageTariffMissing ||
+                    villageId === null
                   }
                   activeOpacity={0.9}
                 >
@@ -342,9 +299,25 @@ export default function HomeScreen(): React.ReactNode {
                   ) : (
                     <>
                       <Icon name="car" size={22} color={ClientColors.white} strokeWidth={2} />
-                      <Text style={styles.heroButtonText}>{buttonLabel}</Text>
+                      <Text style={styles.heroButtonText}>Заказ внутри села</Text>
                     </>
                   )}
+                </TouchableOpacity>
+
+                <TouchableOpacity
+                  style={styles.intervillageButton}
+                  onPress={() => setIntervillageOpen(true)}
+                  activeOpacity={0.85}
+                  disabled={loading}
+                >
+                  <Icon name="route" size={20} color={ClientColors.secondaryDark} strokeWidth={2.2} />
+                  <Text style={styles.intervillageButtonText}>Межсёлами</Text>
+                  <Icon
+                    name="arrow-right"
+                    size={18}
+                    color={ClientColors.secondaryDark}
+                    strokeWidth={2.2}
+                  />
                 </TouchableOpacity>
 
                 <View style={styles.helperRow}>
@@ -413,6 +386,17 @@ export default function HomeScreen(): React.ReactNode {
           )}
       </Animated.View>
 
+      <IntervillageModal
+        visible={intervillageOpen}
+        onClose={() => setIntervillageOpen(false)}
+        regions={regions}
+        tariffs={tariffs}
+        roundTripPct={roundTripPct}
+        defaultFromId={villageId}
+        loading={loading}
+        onOrder={handleIntervillageOrder}
+      />
+
       <Modal visible={state.phase === 'completed'} transparent animationType="fade">
         <View style={styles.modalOverlay}>
           <View style={styles.modalContent}>
@@ -470,58 +454,21 @@ const styles = StyleSheet.create({
     borderRadius: 2,
     backgroundColor: ClientColors.border,
     alignSelf: 'center',
-    marginBottom: 18,
+    marginBottom: 14,
   },
   greeting: {
     fontSize: 26,
     fontWeight: '700' as const,
     color: ClientColors.dark,
-    marginBottom: 18,
-    letterSpacing: -0.3,
-  },
-  pickerBlock: {
     marginBottom: 14,
-  },
-  pickerLabel: {
-    fontSize: 12,
-    color: ClientColors.textSecondary,
-    fontWeight: '600' as const,
-    textTransform: 'uppercase',
-    letterSpacing: 0.6,
-    marginBottom: 8,
-    paddingLeft: 2,
-  },
-  pickerChips: {
-    gap: 8,
-    paddingRight: 4,
-  },
-  pickerChip: {
-    paddingHorizontal: 18,
-    paddingVertical: 10,
-    borderRadius: 999,
-    backgroundColor: ClientColors.cardBackground,
-    borderWidth: 1.5,
-    borderColor: ClientColors.border,
-  },
-  pickerChipActive: {
-    backgroundColor: ClientColors.primary,
-    borderColor: ClientColors.primary,
-  },
-  pickerChipText: {
-    fontSize: 14,
-    fontWeight: '600' as const,
-    color: ClientColors.dark,
-  },
-  pickerChipTextActive: {
-    color: ClientColors.white,
+    letterSpacing: -0.3,
   },
   priceCard: {
     backgroundColor: ClientColors.primaryTint,
     borderRadius: 18,
-    paddingHorizontal: 16,
+    paddingHorizontal: 18,
     paddingVertical: 14,
-    marginTop: 4,
-    marginBottom: 16,
+    marginBottom: 14,
   },
   priceCardLabel: {
     fontSize: 13,
@@ -529,7 +476,7 @@ const styles = StyleSheet.create({
     fontWeight: '600' as const,
   },
   priceCardValue: {
-    fontSize: 28,
+    fontSize: 30,
     fontWeight: '800' as const,
     color: ClientColors.primaryDark,
     marginTop: 4,
@@ -610,13 +557,29 @@ const styles = StyleSheet.create({
     elevation: 8,
   },
   heroButtonDisabled: {
-    opacity: 0.6,
+    opacity: 0.5,
   },
   heroButtonText: {
     color: ClientColors.white,
     fontSize: 17,
     fontWeight: '700' as const,
     letterSpacing: 0.2,
+  },
+  intervillageButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 10,
+    marginTop: 12,
+    height: 50,
+    borderRadius: 24,
+    backgroundColor: ClientColors.secondaryTint,
+  },
+  intervillageButtonText: {
+    flex: 0,
+    fontSize: 15,
+    fontWeight: '700' as const,
+    color: ClientColors.secondaryDark,
   },
   helperRow: {
     flexDirection: 'row',
