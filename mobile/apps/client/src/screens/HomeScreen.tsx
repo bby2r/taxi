@@ -80,6 +80,16 @@ export default function HomeScreen(): React.ReactNode {
   // instant — no API call per checkbox tap. Default 70 % matches the
   // server-side default seeded into Settings.
   const [roundTripPct, setRoundTripPct] = useState<number>(70);
+  // District detected server-side from current GPS (Гео-A+). null when
+  // GPS isn't ready or no region has centre coords configured —
+  // hiding the badge in that case is intentional; falling back to
+  // "Талас" would mislead a client physically in another village.
+  const [district, setDistrict] = useState<{ id: number; name: string } | null>(null);
+  // Геозабор: false ⇒ клиент вне радиуса 2 км от любого района.
+  // Скрываем кнопку «Заказ внутри села» полностью — без неё сервер
+  // всё равно отклонит создание, а спрятанная кнопка честнее, чем
+  // дать тапнуть и показать ошибку.
+  const [inVillageAvailable, setInVillageAvailable] = useState(true);
   const [isRoundTrip, setIsRoundTrip] = useState(false);
   const cardAnim = useRef(new Animated.Value(0)).current;
 
@@ -92,13 +102,20 @@ export default function HomeScreen(): React.ReactNode {
   // simply taps the tab bar.
   useFocusEffect(
     useCallback(() => {
-      getTariff()
+      // Pass GPS only when we have a real fix — without it the server
+      // can't resolve a district and we'd burn a request on the global
+      // fallback that returns the same answer.
+      const lat = location.hasRealFix ? location.latitude : undefined;
+      const lng = location.hasRealFix ? location.longitude : undefined;
+      getTariff(lat, lng)
         .then((t) => {
           setCurrentPrice(t.price);
           setRoundTripPct(t.roundTripSurchargePercent);
+          setDistrict(t.district);
+          setInVillageAvailable(t.inVillageAvailable);
         })
         .catch(() => undefined);
-    }, []),
+    }, [location.hasRealFix, location.latitude, location.longitude]),
   );
 
   // Slide the bottom card up on first mount for a more "alive" feel.
@@ -234,19 +251,36 @@ export default function HomeScreen(): React.ReactNode {
 
         {state.phase === 'idle' && (
           <>
-            <Text style={styles.greeting}>Куда поедем?</Text>
-            <View style={styles.priceRow}>
-              <View style={styles.priceChip}>
-                <Text style={styles.priceChipLabel}>в селе</Text>
-                <Text style={styles.priceChipValue}>{displayedPrice} сом</Text>
+            {district && (
+              <View style={styles.districtBadge}>
+                <Icon name="pin" size={14} color={ClientColors.primaryDark} strokeWidth={2.2} />
+                <Text style={styles.districtBadgeLabel}>Вы сейчас в:</Text>
+                <Text style={styles.districtBadgeValue}>{district.name}</Text>
               </View>
+            )}
+            <Text style={styles.greeting}>Куда поедем?</Text>
+            {!inVillageAvailable && (
+              <View style={styles.outOfZoneNotice}>
+                <Icon name="alert" size={18} color={ClientColors.secondaryDark} strokeWidth={2.2} />
+                <Text style={styles.outOfZoneText}>
+                  Вы вне зон обслуживания внутри села. Выберите направление через «Межсёлами».
+                </Text>
+              </View>
+            )}
+            <View style={styles.priceRow}>
+              {inVillageAvailable && (
+                <View style={styles.priceChip}>
+                  <Text style={styles.priceChipLabel}>в селе</Text>
+                  <Text style={styles.priceChipValue}>{displayedPrice} сом</Text>
+                </View>
+              )}
               <TouchableOpacity
                 style={styles.regionChip}
                 onPress={() => setRegionSelectorVisible(true)}
                 activeOpacity={0.85}
               >
                 <Icon name="route" size={20} color={ClientColors.secondaryDark} strokeWidth={2.2} />
-                <Text style={styles.regionChipText}>Межселами</Text>
+                <Text style={styles.regionChipText}>Межсёлами</Text>
               </TouchableOpacity>
             </View>
 
@@ -278,25 +312,29 @@ export default function HomeScreen(): React.ReactNode {
               </Text>
             )}
 
-            {/* Hero call button — large, primary teal, pill-shaped */}
-            <TouchableOpacity
-              style={[
-                styles.heroButton,
-                (location.loading || loading || !location.hasRealFix) && styles.heroButtonDisabled,
-              ]}
-              onPress={handleCallTaxi}
-              disabled={location.loading || loading || !location.hasRealFix}
-              activeOpacity={0.9}
-            >
-              {loading ? (
-                <ActivityIndicator color={ClientColors.white} />
-              ) : (
-                <>
-                  <Icon name="car" size={22} color={ClientColors.white} strokeWidth={2} />
-                  <Text style={styles.heroButtonText}>Заказ внутри села</Text>
-                </>
-              )}
-            </TouchableOpacity>
+            {/* Hero call button — large, primary teal, pill-shaped.
+                Скрыт когда клиент вне геозабора: сервер отклонит создание,
+                межсёлами остаётся единственным вариантом. */}
+            {inVillageAvailable && (
+              <TouchableOpacity
+                style={[
+                  styles.heroButton,
+                  (location.loading || loading || !location.hasRealFix) && styles.heroButtonDisabled,
+                ]}
+                onPress={handleCallTaxi}
+                disabled={location.loading || loading || !location.hasRealFix}
+                activeOpacity={0.9}
+              >
+                {loading ? (
+                  <ActivityIndicator color={ClientColors.white} />
+                ) : (
+                  <>
+                    <Icon name="car" size={22} color={ClientColors.white} strokeWidth={2} />
+                    <Text style={styles.heroButtonText}>Заказ внутри села</Text>
+                  </>
+                )}
+              </TouchableOpacity>
+            )}
             <View style={styles.helperRow}>
               <Icon
                 name={location.hasRealFix ? 'pin' : 'alert'}
@@ -393,6 +431,8 @@ export default function HomeScreen(): React.ReactNode {
         visible={regionSelectorVisible}
         onSelect={handleRegionSelect}
         onClose={() => setRegionSelectorVisible(false)}
+        latitude={location.hasRealFix ? location.latitude : undefined}
+        longitude={location.hasRealFix ? location.longitude : undefined}
       />
     </View>
   );
@@ -433,6 +473,44 @@ const styles = StyleSheet.create({
     color: ClientColors.dark,
     marginBottom: 16,
     letterSpacing: -0.3,
+  },
+  districtBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    alignSelf: 'flex-start',
+    backgroundColor: ClientColors.primaryTint,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 999,
+    marginBottom: 10,
+  },
+  districtBadgeLabel: {
+    fontSize: 12,
+    color: ClientColors.primaryDark,
+    fontWeight: '500' as const,
+  },
+  districtBadgeValue: {
+    fontSize: 13,
+    color: ClientColors.primaryDark,
+    fontWeight: '700' as const,
+  },
+  outOfZoneNotice: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 10,
+    backgroundColor: ClientColors.secondaryTint,
+    borderRadius: 14,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    marginBottom: 16,
+  },
+  outOfZoneText: {
+    flex: 1,
+    fontSize: 13,
+    lineHeight: 18,
+    color: ClientColors.secondaryDark,
+    fontWeight: '500' as const,
   },
   priceRow: {
     flexDirection: 'row',

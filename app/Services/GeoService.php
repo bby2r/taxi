@@ -11,10 +11,11 @@ use Illuminate\Support\Collection;
 class GeoService
 {
     /**
-     * Calculate distance between two points using Haversine formula.
-     * Returns distance in kilometers.
+     * Pure Haversine in kilometres — no rounding, callable statically.
+     * Used by callers that compare distances (nearest-region lookup)
+     * where the 0.01 km rounding from distanceKm() would create ties.
      */
-    public function distanceKm(
+    public static function haversineKm(
         float $lat1,
         float $lon1,
         float $lat2,
@@ -31,7 +32,19 @@ class GeoService
 
         $c = 2 * atan2(sqrt($a), sqrt(1 - $a));
 
-        return round($earthRadiusKm * $c, 2);
+        return $earthRadiusKm * $c;
+    }
+
+    /**
+     * Instance wrapper that rounds for UI display of driver distance.
+     */
+    public function distanceKm(
+        float $lat1,
+        float $lon1,
+        float $lat2,
+        float $lon2,
+    ): float {
+        return round(self::haversineKm($lat1, $lon1, $lat2, $lon2), 2);
     }
 
     /**

@@ -10,6 +10,7 @@ use App\Http\Controllers\Admin\DriverTicketController;
 use App\Http\Controllers\Admin\OrderController;
 use App\Http\Controllers\Admin\OtpController;
 use App\Http\Controllers\Admin\RegionController;
+use App\Http\Controllers\Admin\RegionRouteController;
 use App\Http\Controllers\Admin\SettingController;
 use App\Http\Middleware\EnsureUserRole;
 use Illuminate\Http\Request;
@@ -51,6 +52,8 @@ Route::prefix('admin')->name('admin.')->group(function () {
         Route::get('clients', [ClientController::class, 'index'])->name('clients.index');
 
         Route::resource('regions', RegionController::class)->except(['show']);
+        Route::get('region-routes', [RegionRouteController::class, 'index'])->name('region-routes.index');
+        Route::put('region-routes', [RegionRouteController::class, 'update'])->name('region-routes.update');
 
         Route::resource('orders', OrderController::class)->only(['index', 'show']);
 

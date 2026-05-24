@@ -15,12 +15,18 @@ interface RegionSelectorProps {
   visible: boolean;
   onSelect: (regionId: number) => void;
   onClose: () => void;
+  /** Pickup GPS — server returns prices already adjusted for the
+   *  pickup→destination pair (origin-destination matrix). */
+  latitude?: number;
+  longitude?: number;
 }
 
 export default function RegionSelector({
   visible,
   onSelect,
   onClose,
+  latitude,
+  longitude,
 }: RegionSelectorProps): React.ReactNode {
   const [regions, setRegions] = useState<Region[]>([]);
   const [loading, setLoading] = useState(false);
@@ -30,12 +36,12 @@ export default function RegionSelector({
     if (visible) {
       setLoading(true);
       setError(null);
-      getRegions()
+      getRegions(latitude, longitude)
         .then(setRegions)
         .catch(() => setError('Не удалось загрузить направления'))
         .finally(() => setLoading(false));
     }
-  }, [visible]);
+  }, [visible, latitude, longitude]);
 
   const renderItem = ({ item }: { item: Region }) => (
     <TouchableOpacity
@@ -72,7 +78,7 @@ export default function RegionSelector({
               { color: ClientColors.dark, marginBottom: 16 },
             ]}
           >
-            Межселами
+            Межсёлами
           </Text>
 
           {loading && (

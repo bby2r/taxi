@@ -22,6 +22,7 @@ class SettingSeeder extends Seeder
             ['key' => 'commission_rate', 'value' => '7', 'description' => 'Operator commission percentage taken from each completed order (0-100). Locked onto orders at completion.'],
             ['key' => 'live_heartbeat_seconds', 'value' => '300', 'description' => 'Max seconds since driver location ping before they are excluded from dispatch (is_online stays). Lower = faster dead-driver detection; higher = tolerant of background pauses.'],
             ['key' => 'round_trip_surcharge_percent', 'value' => '70', 'description' => 'Доплата к базовой цене за поездку туда-обратно, в процентах (0-300). Применяется при создании заказа.'],
+            ['key' => 'district_detection_max_km', 'value' => '2', 'description' => 'Максимальное расстояние от центра района (км) для in-village заказа. Если ближайший район дальше — клиент не сможет создать «Заказ внутри села» и должен использовать «Межсёлами».'],
         ];
 
         foreach ($settings as $setting) {

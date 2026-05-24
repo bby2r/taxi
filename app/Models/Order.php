@@ -29,6 +29,7 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
     'declined_drivers',
     'search_attempts',
     'region_id',
+    'pickup_region_id',
     'cancellation_fee',
     'cancelled_by',
     'cancellation_reason',
@@ -73,6 +74,7 @@ class Order extends Model
         'declined_drivers',
         'search_attempts',
         'region_id',
+        'pickup_region_id',
         'cancellation_fee',
         'cancelled_by',
         'cancellation_reason',
@@ -135,6 +137,18 @@ class Order extends Model
     public function region(): BelongsTo
     {
         return $this->belongsTo(Region::class);
+    }
+
+    /**
+     * Detected pickup district (Гео-A+). Set on in-district trips so
+     * admin reporting / driver UI can show "поездка в Покровке". Distinct
+     * from region() which still represents inter-district destination.
+     *
+     * @return BelongsTo<Region, $this>
+     */
+    public function pickupRegion(): BelongsTo
+    {
+        return $this->belongsTo(Region::class, 'pickup_region_id');
     }
 
     /**

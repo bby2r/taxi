@@ -47,9 +47,40 @@ class OrderService
             throw new \RuntimeException('Client already has an active order.');
         }
 
-        $basePrice = $regionId
-            ? Region::findOrFail($regionId)->getCurrentPrice()
-            : $this->tariffService->getCurrentPrice();
+        // Inter-district = explicit regionId chosen by the client (Talas → Bishkek).
+        // In-district = no regionId; we map pickup GPS to the nearest configured
+        // district centre within district_detection_max_km radius (geofence).
+        // No district in range = client is outside any served village —
+        // в-селе flow is BLOCKED (would assign Бакаирца к таласскому тарифу
+        // и водитель бы ушёл в минус за подачу). Они должны использовать
+        // межсёлами и явно выбрать направление.
+        // pickup_region_id записывается всегда когда район определён —
+        // информационно для админки. region_id остаётся «направление при
+        // межсёлами» чтобы is_inter_district и FCM-payload не сломались.
+        $pickupRegionId = null;
+        if ($regionId !== null) {
+            // Inter-village: detect pickup district (no radius limit — позволяем
+            // межсёлами даже из неотмеченных мест) и применяем pair-цену.
+            // Без определения pickup → fallback на destination.getCurrentPrice
+            // (старое поведение). Pickup пишем всегда — для отчётности.
+            $destination = Region::findOrFail($regionId);
+            $pickupRegion = Region::findNearestByCoordinates($pickupLat, $pickupLon);
+            $pickupRegionId = $pickupRegion?->id;
+            $basePrice = $destination->priceFrom($pickupRegion);
+        } else {
+            $detectedRegion = Region::findNearestByCoordinates(
+                $pickupLat,
+                $pickupLon,
+                Region::detectionMaxKm(),
+            );
+            if ($detectedRegion === null) {
+                throw new \RuntimeException(
+                    'Вы вне зон обслуживания внутри села. Используйте «Межсёлами» и выберите направление.'
+                );
+            }
+            $pickupRegionId = $detectedRegion->id;
+            $basePrice = $detectedRegion->getCurrentInDistrictPrice();
+        }
 
         // Round-trip = driver waits at the destination and brings the
         // client back. Surcharge percent comes from Settings so the
@@ -81,6 +112,7 @@ class OrderService
             'is_round_trip' => $isRoundTrip,
             'price' => $price,
             'region_id' => $regionId,
+            'pickup_region_id' => $pickupRegionId,
             'declined_drivers' => [],
         ]);
 
