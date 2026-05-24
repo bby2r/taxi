@@ -20,7 +20,7 @@ class WhatsAppCloudApiChannel implements OtpChannel
     public function send(string $phone, string $code): bool
     {
         if (! $this->enabled) {
-            Log::info('WhatsApp OTP channel disabled, skipping send.', [
+            $this->safeLog('info', 'WhatsApp OTP channel disabled, skipping send.', [
                 'phone' => $phone,
             ]);
 
@@ -39,7 +39,7 @@ class WhatsAppCloudApiChannel implements OtpChannel
                 ->post($endpoint, $this->buildPayload($phone, $code));
 
             if ($response->successful()) {
-                Log::info('WhatsApp OTP sent successfully.', [
+                $this->safeLog('info', 'WhatsApp OTP sent successfully.', [
                     'phone' => $phone,
                     'wamid' => $response->json('messages.0.id'),
                 ]);
@@ -47,7 +47,7 @@ class WhatsAppCloudApiChannel implements OtpChannel
                 return true;
             }
 
-            Log::warning('WhatsApp OTP send failed.', [
+            $this->safeLog('warning', 'WhatsApp OTP send failed.', [
                 'phone' => $phone,
                 'status' => $response->status(),
                 'error_code' => $response->json('error.code'),
@@ -57,12 +57,28 @@ class WhatsAppCloudApiChannel implements OtpChannel
 
             return false;
         } catch (\Throwable $e) {
-            Log::error('WhatsApp OTP exception.', [
+            $this->safeLog('error', 'WhatsApp OTP exception.', [
                 'phone' => $phone,
                 'error' => $e->getMessage(),
             ]);
 
             return false;
+        }
+    }
+
+    /**
+     * Log without ever throwing — a broken log channel (e.g. unwritable
+     * storage/logs) must not turn an OTP send into a 500. The OTP path is
+     * already best-effort; logging is observability, not correctness.
+     *
+     * @param  array<string, mixed>  $context
+     */
+    private function safeLog(string $level, string $message, array $context): void
+    {
+        try {
+            Log::$level($message, $context);
+        } catch (\Throwable) {
+            // Swallow — observability failures must not break the request.
         }
     }
 

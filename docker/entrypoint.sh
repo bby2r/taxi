@@ -34,4 +34,11 @@ echo "=== REGISTERED ROUTES (client) ==="
 php artisan route:list --path=client 2>&1
 echo "==================================="
 
+# Reclaim any storage/cache files the boot-time artisan commands above
+# created as root, so php-fpm workers (www-data) can append to today's
+# laravel-YYYY-MM-DD.log without "Permission denied" — that error was
+# escaping WhatsAppCloudApiChannel's logging and surfacing as a 500 on
+# /api/v1/auth/send-otp.
+chown -R www-data:www-data /var/www/html/storage /var/www/html/bootstrap/cache 2>/dev/null || true
+
 exec "$@"

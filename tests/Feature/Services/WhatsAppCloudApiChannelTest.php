@@ -4,6 +4,7 @@ namespace Tests\Feature\Services;
 
 use App\Services\WhatsAppCloudApiChannel;
 use Illuminate\Support\Facades\Http;
+use Illuminate\Support\Facades\Log;
 use PHPUnit\Framework\Attributes\Test;
 use Tests\TestCase;
 
@@ -99,6 +100,30 @@ class WhatsAppCloudApiChannelTest extends TestCase
         Http::fake(function () {
             throw new \RuntimeException('connection refused');
         });
+
+        $result = $this->makeChannel()->send('+996700123456', '1234');
+
+        $this->assertFalse($result);
+    }
+
+    #[Test]
+    public function test_send_swallows_log_failures_and_does_not_throw(): void
+    {
+        // Regression: a Render deploy left storage/logs/laravel-*.log owned
+        // by root, so Log::warning threw UnexpectedValueException inside the
+        // channel, the catch's Log::error threw too, and the 500 escaped to
+        // the user as "Request failed with status code 500" on send-otp.
+        Http::fake([
+            'graph.facebook.com/*' => Http::response([
+                'error' => [
+                    'code' => 190,
+                    'message' => 'Authentication Error',
+                ],
+            ], 401),
+        ]);
+
+        Log::shouldReceive('warning')
+            ->andThrow(new \UnexpectedValueException('storage unwritable'));
 
         $result = $this->makeChannel()->send('+996700123456', '1234');
 
