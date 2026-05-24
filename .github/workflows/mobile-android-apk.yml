@@ -190,7 +190,7 @@ jobs:
           fi
           APP_VERSION=$(node -p "require('./app.json').expo.version")
           SHORT_SHA=$(echo "${{ github.sha }}" | cut -c1-7)
-          ARTIFACT_NAME="aiyl-taxi-${{ matrix.app }}-v${APP_VERSION}-build${{ github.run_number }}-${SHORT_SHA}"
+          ARTIFACT_NAME="alif-taxi-${{ matrix.app }}-v${APP_VERSION}-build${{ github.run_number }}-${SHORT_SHA}"
           RENAMED_PATH="android/app/build/outputs/apk/release/${ARTIFACT_NAME}.apk"
           mv "$APK_PATH" "$RENAMED_PATH"
           echo "path=$RENAMED_PATH" >> "$GITHUB_OUTPUT"
@@ -216,7 +216,7 @@ jobs:
           fi
           APP_VERSION=$(node -p "require('./app.json').expo.version")
           SHORT_SHA=$(echo "${{ github.sha }}" | cut -c1-7)
-          ARTIFACT_NAME="aiyl-taxi-${{ matrix.app }}-v${APP_VERSION}-build${{ github.run_number }}-${SHORT_SHA}"
+          ARTIFACT_NAME="alif-taxi-${{ matrix.app }}-v${APP_VERSION}-build${{ github.run_number }}-${SHORT_SHA}"
           RENAMED_PATH="android/app/build/outputs/bundle/release/${ARTIFACT_NAME}.aab"
           mv "$AAB_PATH" "$RENAMED_PATH"
           echo "path=$RENAMED_PATH" >> "$GITHUB_OUTPUT"

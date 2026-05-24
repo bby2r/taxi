@@ -1,9 +1,9 @@
 {
   "expo": {
-    "name": "AIYL Taxi Driver",
-    "slug": "aiyl-taxi-driver",
+    "name": "Alif Taxi Driver",
+    "slug": "alif-taxi-driver",
     "version": "1.0.0",
-    "scheme": "aiyltaxidriver",
+    "scheme": "aliftaxidriver",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "dark",
@@ -14,7 +14,7 @@
     },
     "ios": {
       "supportsTablet": false,
-      "bundleIdentifier": "kg.aiyltaxi.app",
+      "bundleIdentifier": "kg.aliftaxi.app",
       "infoPlist": {
         "NSLocationWhenInUseUsageDescription": "Нужен доступ к геолокации для определения вашего положения и приёма заказов",
         "NSLocationAlwaysAndWhenInUseUsageDescription": "Нужен доступ к геолокации в фоне для отправки координат пассажирам и диспетчеру",
@@ -27,9 +27,9 @@
     "android": {
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
-        "backgroundColor": "#1F2937"
+        "backgroundColor": "#FFFFFF"
       },
-      "package": "kg.aiyltaxi.app",
+      "package": "kg.aliftaxi.app",
       "googleServicesFile": "./google-services.json",
       "config": {
         "googleMaps": {

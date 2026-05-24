@@ -26,7 +26,7 @@ try {
 // OfferFirebaseMessagingService — it shadows expo-notifications' FCM
 // receiver, draws the SYSTEM_ALERT_WINDOW overlay + ringing notification
 // directly, and routes Принять / Отказаться taps into the app via the
-// aiyltaxidriver:// deep-link scheme.
+// aliftaxidriver:// deep-link scheme.
 registerBackgroundEvents();
 
 registerRootComponent(App);

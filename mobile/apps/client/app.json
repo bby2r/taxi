@@ -1,7 +1,7 @@
 {
   "expo": {
-    "name": "AIYL Taxi",
-    "slug": "aiyl-taxi-client",
+    "name": "Alif Taxi",
+    "slug": "alif-taxi-client",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
@@ -13,7 +13,7 @@
     },
     "ios": {
       "supportsTablet": false,
-      "bundleIdentifier": "kg.aiyltaxi.client",
+      "bundleIdentifier": "kg.aliftaxi.client",
       "infoPlist": {
         "NSLocationWhenInUseUsageDescription": "Нужен доступ к геолокации для определения точки подачи такси"
       }
@@ -21,9 +21,9 @@
     "android": {
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
-        "backgroundColor": "#F4FBFA"
+        "backgroundColor": "#FFFFFF"
       },
-      "package": "kg.aiyltaxi.client",
+      "package": "kg.aliftaxi.client",
       "config": {
         "googleMaps": {
           "apiKey": "AIzaSyAtbF4MY6NGAfxHyF75anFC6LxLzmjr878"

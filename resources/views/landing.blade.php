@@ -3,8 +3,8 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <meta name="description" content="AIYL Taxi — современное такси для жителей Таласа и соседних сёл. Заказ за 5 секунд, водитель на карте, цена известна заранее.">
-    <title>AIYL Taxi — такси по селу и в город</title>
+    <meta name="description" content="Alif Taxi — современное такси для жителей Таласа и соседних сёл. Заказ за 5 секунд, водитель на карте, цена известна заранее.">
+    <title>Alif Taxi — такси по селу и в город</title>
     <link rel="icon" type="image/png" href="{{ asset('favicon.png') }}">
     <link rel="apple-touch-icon" href="{{ asset('apple-touch-icon.png') }}">
 
@@ -22,7 +22,7 @@
             --ink: #0E1D24;            /* near-black with cool tint, easier on eyes than #000 */
             --ink-soft: #34464E;
             --ink-mute: #708189;
-            --teal: #0E5A57;           /* primary deep teal, AIYL brand */
+            --teal: #0E5A57;           /* primary deep teal, Alif brand */
             --teal-deep: #073F3D;
             --teal-soft: #D7E7E5;
             --amber: #E8973A;          /* warm action accent, less harsh than pure orange */
@@ -694,7 +694,7 @@
     <header class="nav">
         <div class="container nav-inner">
             <a href="{{ route('home') }}" class="brand">
-                AIYL <span class="brand-dot"></span> Taxi
+                Alif <span class="brand-dot"></span> Taxi
             </a>
             <nav class="nav-links">
                 <a href="#how">Как это работает</a>
@@ -866,7 +866,7 @@
                             </div>
                         </div>
 
-                        <a href="https://wa.me/996509397226?text={{ urlencode('Здравствуйте, хочу стать водителем AIYL Taxi.') }}" class="btn-amber" target="_blank" rel="noopener">
+                        <a href="https://wa.me/996509397226?text={{ urlencode('Здравствуйте, хочу стать водителем Alif Taxi.') }}" class="btn-amber" target="_blank" rel="noopener">
                             Написать в WhatsApp
                             <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
                                 <path d="M3 7h8m0 0L7 3m4 4l-4 4" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
@@ -916,7 +916,7 @@
                     </div>
                     <div class="compare-card good reveal delay-3">
                         <span class="compare-tag">Сейчас</span>
-                        <div class="compare-title">AIYL Taxi</div>
+                        <div class="compare-title">Alif Taxi</div>
                         <ul class="compare-list">
                             <li>Алгоритм находит ближайшего за&nbsp;секунды</li>
                             <li>Цена фиксированная, показывается до&nbsp;заказа</li>
@@ -940,7 +940,7 @@
                     Напиши нам&nbsp;&mdash; добавим тебя в&nbsp;список.
                 </p>
                 <div class="hero-cta-row reveal delay-2">
-                    <a href="https://wa.me/996509397226?text={{ urlencode('Здравствуйте, хочу попробовать приложение AIYL Taxi.') }}" class="btn-primary" target="_blank" rel="noopener">
+                    <a href="https://wa.me/996509397226?text={{ urlencode('Здравствуйте, хочу попробовать приложение Alif Taxi.') }}" class="btn-primary" target="_blank" rel="noopener">
                         Запросить доступ
                     </a>
                     <a href="{{ route('privacy') }}" class="btn-ghost">Политика конфиденциальности</a>
@@ -954,7 +954,7 @@
             <div class="footer-grid">
                 <div>
                     <a href="{{ route('home') }}" class="brand">
-                        AIYL <span class="brand-dot"></span> Taxi
+                        Alif <span class="brand-dot"></span> Taxi
                     </a>
                     <p class="footer-tag">
                         Местное такси для Таласской области.
@@ -985,7 +985,7 @@
                 </div>
             </div>
             <div class="footer-bottom">
-                <span>© {{ date('Y') }} AIYL Taxi · г. Талас, Кыргызстан</span>
+                <span>© {{ date('Y') }} Alif Taxi · г. Талас, Кыргызстан</span>
                 <span>Сделано в&nbsp;Таласе</span>
             </div>
         </div>

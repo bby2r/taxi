@@ -420,7 +420,7 @@ export default function HomeScreen(): React.ReactNode {
               <Icon name="check" size={40} color={ClientColors.white} strokeWidth={2.5} />
             </View>
             <Text style={styles.completedTitle}>Поездка завершена</Text>
-            <Text style={styles.completedSubtitle}>Спасибо, что выбрали AIYL Taxi</Text>
+            <Text style={styles.completedSubtitle}>Спасибо, что выбрали Alif Taxi</Text>
             {state.phase === 'completed' && (
               <View style={styles.completedPriceBlock}>
                 <Text style={styles.completedPriceLabel}>К оплате водителю</Text>

@@ -251,7 +251,7 @@ Build a phone + password login screen for drivers with dark theme styling.
 
 Layout (dark background `DriverColors.background`, padding 24):
 1. Spacer (flex: 0.25)
-2. Title: "AIYL Taxi" — `Typography.h1`, color `DriverColors.primary` (yellow on dark)
+2. Title: "Alif Taxi" — `Typography.h1`, color `DriverColors.primary` (yellow on dark)
 3. Subtitle: "Вход для водителей" — `Typography.body`, color `DriverColors.textSecondary`
 4. Phone input (marginTop 40):
    - Label: "Номер телефона" — `Typography.caption`, `DriverColors.textSecondary`

@@ -16,7 +16,7 @@ services:
     autoDeploy: true
     envVars:
       - key: APP_NAME
-        value: "AIYL Taxi"
+        value: "Alif Taxi"
       - key: APP_ENV
         value: production
       - key: APP_DEBUG

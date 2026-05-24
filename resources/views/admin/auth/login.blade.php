@@ -3,14 +3,14 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>AIYL Taxi Админ — Вход</title>
+    <title>Alif Taxi Админ — Вход</title>
     <link rel="icon" type="image/png" href="{{ asset('favicon.png') }}">
     <link rel="apple-touch-icon" href="{{ asset('apple-touch-icon.png') }}">
     @vite(['resources/css/app.css', 'resources/js/app.js'])
 </head>
 <body class="min-h-screen flex items-center justify-center bg-[#F9FAFB]">
     <div class="w-full max-w-sm rounded-xl bg-white p-8 shadow-lg">
-        <h1 class="text-2xl font-bold text-gray-900">AIYL Taxi Админ</h1>
+        <h1 class="text-2xl font-bold text-gray-900">Alif Taxi Админ</h1>
         <p class="mt-1 text-sm text-gray-500">Вход в личный кабинет</p>
 
         @if ($errors->any())

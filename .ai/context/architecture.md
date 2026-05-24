@@ -9,7 +9,7 @@
 - **Push:** Expo Push Notifications
 - **Frontend (admin):** Blade + Vite + TailwindCSS v4
 
-**Why this stack:** AIYL Taxi app prioritizing simplicity and speed-to-market. Laravel monolith + Expo for cross-platform, Pusher as managed WebSocket service.
+**Why this stack:** Alif Taxi app prioritizing simplicity and speed-to-market. Laravel monolith + Expo for cross-platform, Pusher as managed WebSocket service.
 
 ## Code Structure
 Standard Laravel 13, service-layer architecture. Controllers are thin — delegate to services.
@@ -37,7 +37,7 @@ app/
 | Pusher | WebSocket broadcasting (order events) |
 | Nikita SMS | OTP delivery (Kyrgyz provider) |
 | Expo Push | Mobile push notifications |
-| EAS Build | Mobile app builds (Android package: `kg.aiyltaxi.app`) |
+| EAS Build | Mobile app builds (Android package: `kg.aliftaxi.app`) |
 
 ## Queue
 Database queue driver. Single key job: `OfferTimeoutJob` (10s delay for driver offer timeout). Supervisor runs 1 worker in production.

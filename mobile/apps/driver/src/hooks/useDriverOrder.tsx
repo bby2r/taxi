@@ -865,7 +865,7 @@ function useDriverOrderState(): UseDriverOrderReturn {
 
   // Drain a queued accept/decline from the notification action buttons
   // or the system-alert-window overlay. Both surfaces dispatch through
-  // the aiyltaxidriver://offer deep link → useNotifications.handleDeepLink
+  // the aliftaxidriver://offer deep link → useNotifications.handleDeepLink
   // → setPendingDriverAction. The drainer fires on phase change (shade
   // tap arrived before the Pusher offer event) AND on every AppState
   // 'active' transition (overlay tap that brought the app back to the

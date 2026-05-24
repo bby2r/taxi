@@ -100,7 +100,7 @@ class DashboardTest extends TestCase
 
         $response->assertStatus(200);
         $response->assertSee('Главная');
-        $response->assertSee('AIYL Taxi');
+        $response->assertSee('Alif Taxi');
         $response->assertSee('Admin User');
     }
 

@@ -4,7 +4,7 @@
 Three distinct UIs: web admin (English), mobile client (Russian, light theme), mobile driver (Russian, dark theme). Single mobile app binary — navigation splits by user role.
 
 ## Admin Panel (Blade + TailwindCSS)
-- **Login:** Phone + password. Brand: "AIYL Taxi Admin", amber accent.
+- **Login:** Phone + password. Brand: "Alif Taxi Admin", amber accent.
 - **Layout:** Fixed sidebar (Dashboard, Drivers, Orders) + header with user name + logout.
 - **Dashboard:** 4 KPI cards (Active Orders, Online Drivers, Today Revenue KGS, Total Rides) + Recent Orders table.
 - **Drivers:** Paginated table (name, phone, car, plate, joined). Full CRUD. Delete blocked if active orders.

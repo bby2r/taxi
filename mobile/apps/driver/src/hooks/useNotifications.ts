@@ -296,12 +296,12 @@ export function useNotifications(): void {
       });
 
     // OfferFirebaseMessagingService (the native FCM listener that owns
-    // offer pushes) opens the app via aiyltaxidriver://offer?action=...
+    // offer pushes) opens the app via aliftaxidriver://offer?action=...
     // &order_id=... — both notification action buttons and overlay button
     // taps route through that scheme. Parse here so the existing
     // pendingDriverAction queue stays the single source of truth.
     const handleDeepLink = (url: string | null): void => {
-      if (!url || !url.startsWith('aiyltaxidriver://offer')) return;
+      if (!url || !url.startsWith('aliftaxidriver://offer')) return;
       try {
         const parsed = new URL(url);
         const action = parsed.searchParams.get('action');

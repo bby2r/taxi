@@ -1,4 +1,4 @@
-// Client palette built from the AIYL logo, but leaning into the aqua /
+// Client palette built from the Alif logo, but leaning into the aqua /
 // teal stroke as the lead colour instead of the violet "A" — most taxi
 // brands camp on yellow (Yandex), green (Bolt) or black (Uber), so a
 // rich teal lead reads as distinctive at a glance and pairs naturally

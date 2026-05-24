@@ -41,7 +41,7 @@ export function ensureLaunchActionConsumed(): Promise<void> {
 }
 
 function parseOfferDeepLink(url: string | null): PendingDriverAction | null {
-  if (!url || !url.startsWith('aiyltaxidriver://offer')) return null;
+  if (!url || !url.startsWith('aliftaxidriver://offer')) return null;
   try {
     const parsed = new URL(url);
     const action = parsed.searchParams.get('action');

@@ -2,4 +2,4 @@
 
 | Date | Plan | Status | Tags | Summary |
 |------|------|--------|------|---------|
-| 2026-04-07 | [AIYL Taxi](2026-04-07-aiyl-taxi.md) | draft | taxi, react-native, laravel | AIYL Taxi dispatch — Laravel 13 API + React Native (Expo) mobile + Blade admin |
+| 2026-04-07 | [Alif Taxi](2026-04-07-alif-taxi.md) | draft | taxi, react-native, laravel | Alif Taxi dispatch — Laravel 13 API + React Native (Expo) mobile + Blade admin |

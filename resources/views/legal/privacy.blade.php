@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Политика конфиденциальности — AIYL Taxi</title>
+    <title>Политика конфиденциальности — Alif Taxi</title>
     <link rel="icon" type="image/png" href="{{ asset('favicon.png') }}">
     <link rel="apple-touch-icon" href="{{ asset('apple-touch-icon.png') }}">
     @vite(['resources/css/app.css', 'resources/js/app.js'])
@@ -11,7 +11,7 @@
 <body class="flex min-h-screen flex-col bg-gray-50">
     <header class="border-b border-gray-200 bg-white">
         <div class="mx-auto max-w-3xl px-6 py-6">
-            <a href="{{ route('home') }}" class="text-2xl font-bold text-amber-500">AIYL Taxi</a>
+            <a href="{{ route('home') }}" class="text-2xl font-bold text-amber-500">Alif Taxi</a>
         </div>
     </header>
 
@@ -28,7 +28,7 @@
             <h2 class="mt-8 text-xl font-semibold text-gray-900">1. Общие положения</h2>
             <p>
                 Настоящая Политика конфиденциальности (далее — «Политика») определяет порядок
-                обработки персональных данных в мобильном приложении AIYL Taxi (далее — «Сервис»)
+                обработки персональных данных в мобильном приложении Alif Taxi (далее — «Сервис»)
                 и связанных с ним веб-ресурсах.
             </p>
             <p>
@@ -179,7 +179,7 @@
                 реализации Ваших прав свяжитесь с нами:
             </p>
             <ul class="list-disc pl-6">
-                <li>E-mail: <strong>[support@aiyltaxi.kg]</strong></li>
+                <li>E-mail: <strong>[support@aliftaxi.kg]</strong></li>
                 <li>Телефон / WhatsApp: <strong>[+996 XXX XXX XXX]</strong></li>
                 <li>Адрес: <strong>[г. Талас, Кыргызская Республика, адрес офиса]</strong></li>
             </ul>
@@ -189,7 +189,7 @@
     <footer class="border-t border-gray-200 bg-white">
         <div class="mx-auto max-w-3xl px-6 py-4 text-center">
             <p class="text-xs text-gray-400">
-                &copy; {{ date('Y') }} AIYL Taxi &middot;
+                &copy; {{ date('Y') }} Alif Taxi &middot;
                 <a href="{{ route('home') }}" class="text-gray-400 hover:text-gray-500">На главную</a>
             </p>
         </div>

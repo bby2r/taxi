@@ -39,8 +39,8 @@ npm install --save-dev @testing-library/react-native @testing-library/jest-nativ
 ```json
 {
   "expo": {
-    "name": "AIYL Taxi",
-    "slug": "aiyl-taxi",
+    "name": "Alif Taxi",
+    "slug": "alif-taxi",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
@@ -52,7 +52,7 @@ npm install --save-dev @testing-library/react-native @testing-library/jest-nativ
     },
     "ios": {
       "supportsTablet": false,
-      "bundleIdentifier": "com.aiyltaxi.app",
+      "bundleIdentifier": "com.aliftaxi.app",
       "infoPlist": {
         "NSLocationWhenInUseUsageDescription": "Нужен доступ к геолокации для определения точки подачи такси",
         "NSLocationAlwaysAndWhenInUseUsageDescription": "Нужен доступ к геолокации для отслеживания маршрута"
@@ -63,7 +63,7 @@ npm install --save-dev @testing-library/react-native @testing-library/jest-nativ
         "foregroundImage": "./assets/adaptive-icon.png",
         "backgroundColor": "#FBBF24"
       },
-      "package": "com.aiyltaxi.app",
+      "package": "com.aliftaxi.app",
       "permissions": [
         "ACCESS_FINE_LOCATION",
         "ACCESS_COARSE_LOCATION"
@@ -182,7 +182,7 @@ export const Typography = {
 ```typescript
 export const API_BASE_URL = __DEV__
   ? 'http://192.168.1.100:8000' // TODO: replace with actual dev IP
-  : 'https://api.aiyltaxi.kg';
+  : 'https://api.aliftaxi.kg';
 
 export const PUSHER_KEY = 'your-pusher-key';
 export const PUSHER_CLUSTER = 'ap1';
@@ -812,7 +812,7 @@ const styles = StyleSheet.create({
 
 Layout (top to bottom, centered with padding 24):
 1. Spacer (flex: 0.3)
-2. Title: "AIYL Taxi" — `Typography.h1`, color `ClientColors.dark`
+2. Title: "Alif Taxi" — `Typography.h1`, color `ClientColors.dark`
 3. Subtitle: "Введите номер телефона" — `Typography.body`, color `ClientColors.textSecondary`, marginTop 8
 4. Phone input container (marginTop 32):
    - Prefix label "+996" in a box, attached left

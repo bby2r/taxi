@@ -43,7 +43,7 @@ class AuthBrowserTest extends TestCase
 
         $response = $this->get('/admin/login');
         $response->assertStatus(200);
-        $response->assertSee('AIYL Taxi Админ');
+        $response->assertSee('Alif Taxi Админ');
         $response->assertSee('Войти');
 
         $response = $this->post('/admin/login', [

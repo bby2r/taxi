@@ -1,13 +1,13 @@
 ---
-title: "Implementation Plan: AIYL Taxi Service"
+title: "Implementation Plan: Alif Taxi Service"
 date: 2026-04-06
 status: draft
 tags: [taxi, react-native, expo, laravel, api, realtime, village]
-summary: "AIYL Taxi dispatch — Laravel 13 API backend + React Native (Expo) mobile apps for Client & Driver"
+summary: "Alif Taxi dispatch — Laravel 13 API backend + React Native (Expo) mobile apps for Client & Driver"
 phases: 8
 ---
 
-# Implementation Plan: AIYL Taxi Service
+# Implementation Plan: Alif Taxi Service
 
 ## Overview
 
@@ -277,11 +277,11 @@ Done when: Users can register their Expo push token via API.
   npm install react-native-gesture-handler react-native-reanimated
   ```
 - Configure `app.json`:
-  - `name`: "AIYL Taxi"
-  - `slug`: "aiyl-taxi"
-  - `scheme`: "aiyltaxi"
-  - `ios.bundleIdentifier`: "com.aiyltaxi.client"
-  - `android.package`: "com.aiyltaxi.client"
+  - `name`: "Alif Taxi"
+  - `slug`: "alif-taxi"
+  - `scheme`: "aliftaxi"
+  - `ios.bundleIdentifier`: "com.aliftaxi.client"
+  - `android.package`: "com.aliftaxi.client"
   - `android.permissions`: ["ACCESS_FINE_LOCATION", "ACCESS_COARSE_LOCATION"]
   - `ios.infoPlist.NSLocationWhenInUseUsageDescription`: location permission string
   - `plugins`: ["expo-location", "expo-notifications", "expo-secure-store"]
@@ -549,7 +549,7 @@ Location.startLocationUpdatesAsync('DRIVER_LOCATION_TASK', {
   distanceInterval: 100, // meters
   deferredUpdatesInterval: 10000, // ms
   foregroundService: {
-    notificationTitle: 'AIYL Taxi',
+    notificationTitle: 'Alif Taxi',
     notificationBody: 'Вы на линии — ожидание заказов',
   },
 });

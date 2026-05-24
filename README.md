@@ -1,4 +1,4 @@
-# AIYL Taxi
+# Alif Taxi
 
 A ride-hailing application for villages — a simple replacement for calling a dispatcher. Passengers tap one button, and the system automatically finds the nearest available driver.
 

@@ -20,7 +20,7 @@ interface AuthProviderProps {
   // Each app declares the role it expects. A cached or server-side user
   // whose role doesn't match (e.g. a leftover client SecureStore token
   // when launching the driver-only app on a device that previously had
-  // the combined app installed under the same kg.aiyltaxi.app id) is
+  // the combined app installed under the same kg.aliftaxi.app id) is
   // dropped immediately — otherwise every /api/v1/{role}/* call would
   // 403 forever and the user would be stuck on a "logged in" home screen.
   requiredRole?: 'client' | 'driver';

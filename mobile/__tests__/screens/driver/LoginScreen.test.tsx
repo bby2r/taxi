@@ -254,7 +254,7 @@ describe('DriverLoginScreen', () => {
       <DriverLoginScreen navigation={mockNavigation} route={mockRoute} />,
     );
     // Verify title and subtitle are rendered (dark theme markers)
-    expect(getByText('AIYL Taxi')).toBeTruthy();
+    expect(getByText('Alif Taxi')).toBeTruthy();
     expect(getByText('Вход для водителей')).toBeTruthy();
   });
 });

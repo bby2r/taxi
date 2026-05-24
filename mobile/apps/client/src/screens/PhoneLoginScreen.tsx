@@ -57,7 +57,7 @@ export default function PhoneLoginScreen({ navigation }: Props): React.ReactNode
             <View style={styles.brandMark}>
               <Icon name="car" size={36} color={ClientColors.white} strokeWidth={2} />
             </View>
-            <Text style={styles.title}>AIYL Taxi</Text>
+            <Text style={styles.title}>Alif Taxi</Text>
             <Text style={styles.subtitle}>
               Такси в селе и до города{'\n'}за пару минут
             </Text>
