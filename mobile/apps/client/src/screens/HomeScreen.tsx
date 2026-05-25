@@ -117,7 +117,15 @@ export default function HomeScreen(): React.ReactNode {
   const panResponder = useMemo(
     () =>
       PanResponder.create({
-        onMoveShouldSetPanResponder: (_, g) => Math.abs(g.dy) > 6,
+        // Никогда не перехватываем тап на старте — клик по кнопке/чипу
+        // должен пройти через нас в TouchableOpacity. Активируемся только
+        // когда жест явно вертикальный (dy > 12 и больше горизонтального
+        // движения). Так свайп со всей карточки управляет шторкой, но
+        // обычные нажатия на «Заказать» / «Межсёлами» / пикер села
+        // остаются клик-абельными.
+        onStartShouldSetPanResponder: () => false,
+        onMoveShouldSetPanResponder: (_, g) =>
+          Math.abs(g.dy) > 12 && Math.abs(g.dy) > Math.abs(g.dx),
         onPanResponderGrant: () => {
           translateY.stopAnimation((current) => {
             translateY.setOffset(current);
@@ -294,8 +302,9 @@ export default function HomeScreen(): React.ReactNode {
           styles.bottomCard,
           { height: EXPANDED_HEIGHT, transform: [{ translateY }] },
         ]}
+        {...panResponder.panHandlers}
       >
-        <View {...panResponder.panHandlers} style={styles.handleZone}>
+        <View style={styles.handleZone}>
           <View style={styles.handle} />
         </View>
 
