@@ -15,7 +15,28 @@ import {
   Dimensions,
   PanResponder,
 } from 'react-native';
-import MapView, { Region as MapRegion } from 'react-native-maps';
+import MapView, { Region as MapRegion, Marker, MarkerDragStartEndEvent } from 'react-native-maps';
+
+// Тёмная карта в стиле WB Такси / Yandex Go night mode. Чёрно-серый
+// фон, контуры улиц приглушённые — наша бирюзовая метка подачи
+// и водительский маркер сразу выделяются. Стиль сжатый, ровно
+// столько что нужно — без оверкила с десятками featureType.
+const DARK_MAP_STYLE = [
+  { elementType: 'geometry', stylers: [{ color: '#1e1b2e' }] },
+  { elementType: 'labels.text.stroke', stylers: [{ color: '#1e1b2e' }] },
+  { elementType: 'labels.text.fill', stylers: [{ color: '#8c879d' }] },
+  { featureType: 'administrative', elementType: 'geometry', stylers: [{ color: '#2a2640' }] },
+  { featureType: 'poi', elementType: 'labels.text.fill', stylers: [{ color: '#6b6680' }] },
+  { featureType: 'poi.park', elementType: 'geometry', stylers: [{ color: '#1a2820' }] },
+  { featureType: 'road', elementType: 'geometry', stylers: [{ color: '#2f2a45' }] },
+  { featureType: 'road', elementType: 'geometry.stroke', stylers: [{ color: '#1e1b2e' }] },
+  { featureType: 'road', elementType: 'labels.text.fill', stylers: [{ color: '#9c97b0' }] },
+  { featureType: 'road.highway', elementType: 'geometry', stylers: [{ color: '#3d3658' }] },
+  { featureType: 'road.highway', elementType: 'geometry.stroke', stylers: [{ color: '#1e1b2e' }] },
+  { featureType: 'transit', elementType: 'geometry', stylers: [{ color: '#2a2640' }] },
+  { featureType: 'water', elementType: 'geometry', stylers: [{ color: '#13111f' }] },
+  { featureType: 'water', elementType: 'labels.text.fill', stylers: [{ color: '#3d3658' }] },
+];
 import { useLocation, ActionButton, ClientColors, Typography, reverseGeocode, Region } from '@taxi/shared';
 import { useOrder } from '../hooks/useOrder';
 import DriverCard from '../components/DriverCard';
@@ -24,7 +45,7 @@ import Icon from '../components/Icon';
 import IntervillageModal from '../components/IntervillageModal';
 import { getRegions, getTariffs, priceFor, type TariffRoute } from '../api/regions';
 
-function PulsingDot(): React.ReactNode {
+function PulsingDot({ size = 14 }: { size?: number }): React.ReactNode {
   const scale = useRef(new Animated.Value(1)).current;
   const opacity = useRef(new Animated.Value(1)).current;
 
@@ -32,32 +53,12 @@ function PulsingDot(): React.ReactNode {
     const animation = Animated.loop(
       Animated.parallel([
         Animated.sequence([
-          Animated.timing(scale, {
-            toValue: 1.6,
-            duration: 800,
-            easing: Easing.inOut(Easing.ease),
-            useNativeDriver: true,
-          }),
-          Animated.timing(scale, {
-            toValue: 1,
-            duration: 800,
-            easing: Easing.inOut(Easing.ease),
-            useNativeDriver: true,
-          }),
+          Animated.timing(scale, { toValue: 1.6, duration: 800, easing: Easing.inOut(Easing.ease), useNativeDriver: true }),
+          Animated.timing(scale, { toValue: 1, duration: 800, easing: Easing.inOut(Easing.ease), useNativeDriver: true }),
         ]),
         Animated.sequence([
-          Animated.timing(opacity, {
-            toValue: 0.3,
-            duration: 800,
-            easing: Easing.inOut(Easing.ease),
-            useNativeDriver: true,
-          }),
-          Animated.timing(opacity, {
-            toValue: 1,
-            duration: 800,
-            easing: Easing.inOut(Easing.ease),
-            useNativeDriver: true,
-          }),
+          Animated.timing(opacity, { toValue: 0.3, duration: 800, easing: Easing.inOut(Easing.ease), useNativeDriver: true }),
+          Animated.timing(opacity, { toValue: 1, duration: 800, easing: Easing.inOut(Easing.ease), useNativeDriver: true }),
         ]),
       ])
     );
@@ -67,7 +68,15 @@ function PulsingDot(): React.ReactNode {
 
   return (
     <Animated.View
-      style={[styles.pulsingDot, { transform: [{ scale }], opacity }]}
+      style={[
+        {
+          width: size,
+          height: size,
+          borderRadius: size / 2,
+          backgroundColor: ClientColors.primary,
+        },
+        { transform: [{ scale }], opacity },
+      ]}
     />
   );
 }
@@ -82,15 +91,39 @@ export default function HomeScreen(): React.ReactNode {
   const [roundTripPct, setRoundTripPct] = useState<number>(70);
   const [isRoundTrip, setIsRoundTrip] = useState(false);
   const [intervillageOpen, setIntervillageOpen] = useState(false);
-  // Район определённый сервером по GPS (geofence ~5 км). null пока
-  // ещё не запрашивали или GPS не готов.
   const [detectedVillage, setDetectedVillage] = useState<{ id: number; name: string } | null>(null);
-  // null = ещё не определились (показываем лоадер). true = в зоне,
-  // показываем нормальный заказ. false = вне зоны, показываем
-  // экран «Сервис недоступен».
   const [inServiceArea, setInServiceArea] = useState<boolean | null>(null);
 
-  // Bottom-sheet с двумя снап-позициями.
+  // Pickup-метка может быть перетащена пользователем — отдельно от
+  // его реального GPS. Пока pin не двигали — следует за GPS. После
+  // драга — стоит на месте до сброса (кнопкой «К моему GPS»).
+  const [pickupCoord, setPickupCoord] = useState<{ lat: number; lng: number } | null>(null);
+  const [pinDragged, setPinDragged] = useState(false);
+
+  // GPS → pickup, если клиент ещё не двигал метку.
+  useEffect(() => {
+    if (!pinDragged && location.hasRealFix) {
+      setPickupCoord({ lat: location.latitude, lng: location.longitude });
+    }
+  }, [pinDragged, location.hasRealFix, location.latitude, location.longitude]);
+
+  const resetPinToGps = useCallback(() => {
+    if (location.hasRealFix) {
+      setPickupCoord({ lat: location.latitude, lng: location.longitude });
+      setPinDragged(false);
+      mapRef.current?.animateToRegion(
+        {
+          latitude: location.latitude,
+          longitude: location.longitude,
+          latitudeDelta: 0.015,
+          longitudeDelta: 0.015,
+        },
+        400,
+      );
+    }
+  }, [location.hasRealFix, location.latitude, location.longitude]);
+
+  // Bottom-sheet snap-positions.
   const SCREEN_HEIGHT = Dimensions.get('window').height;
   const PEEK_HEIGHT = 130;
   const EXPANDED_HEIGHT = Math.min(SCREEN_HEIGHT * 0.62, 560);
@@ -111,6 +144,10 @@ export default function HomeScreen(): React.ReactNode {
     },
     [translateY, COLLAPSE_OFFSET],
   );
+
+  const togglePeek = useCallback(() => {
+    snapTo(lastSnapRef.current === 'peek' ? 'expanded' : 'peek');
+  }, [snapTo]);
 
   const panResponder = useMemo(
     () =>
@@ -148,25 +185,23 @@ export default function HomeScreen(): React.ReactNode {
     [translateY, COLLAPSE_OFFSET, snapTo],
   );
 
-  // Загружаем регионы + тарифы с GPS на каждом фокусе. Сервер
-  // определяет район клиента (geofence) — клиент решает что показать:
-  // нормальный экран заказа или «Сервис недоступен».
+  // Тарифы + определение района по pickupCoord (а не location).
+  // Перетянул метку → запрос ушёл с новыми координатами → бейдж и
+  // цена обновились автоматически.
   useFocusEffect(
     useCallback(() => {
-      const lat = location.hasRealFix ? location.latitude : undefined;
-      const lng = location.hasRealFix ? location.longitude : undefined;
+      const lat = pickupCoord?.lat;
+      const lng = pickupCoord?.lng;
       Promise.all([getRegions(), getTariffs(lat, lng)])
         .then(([rs, t]) => {
           setRegions(rs);
           setTariffs(t.routes);
           setRoundTripPct(t.roundTripSurchargePercent);
           setDetectedVillage(t.detectedVillage);
-          // Если GPS не передан — оставляем null (лоадер); сервер
-          // ничего не сказал про зону, без координат не определить.
           setInServiceArea(t.inServiceArea);
         })
         .catch(() => undefined);
-    }, [location.hasRealFix, location.latitude, location.longitude]),
+    }, [pickupCoord?.lat, pickupCoord?.lng]),
   );
 
   useEffect(() => {
@@ -204,13 +239,13 @@ export default function HomeScreen(): React.ReactNode {
   };
 
   const handleInVillageCallTaxi = async (): Promise<void> => {
-    if (detectedVillage === null) return;
+    if (detectedVillage === null || pickupCoord === null) return;
     if (!(await confirmRoundTripIfNeeded())) return;
-    const address = await reverseGeocode(location.latitude, location.longitude);
+    const address = await reverseGeocode(pickupCoord.lat, pickupCoord.lng);
     await callTaxi(
-      location.latitude,
-      location.longitude,
-      detectedVillage.id, // to == from = заказ внутри села
+      pickupCoord.lat,
+      pickupCoord.lng,
+      detectedVillage.id,
       address,
       undefined,
       isRoundTrip,
@@ -222,11 +257,17 @@ export default function HomeScreen(): React.ReactNode {
     toId: number,
     rt: boolean,
   ): Promise<boolean> => {
-    // from_region_id игнорируется — сервер определяет по GPS.
-    const address = await reverseGeocode(location.latitude, location.longitude);
+    if (pickupCoord === null) return false;
+    const address = await reverseGeocode(pickupCoord.lat, pickupCoord.lng);
     const before = error;
-    await callTaxi(location.latitude, location.longitude, toId, address, undefined, rt);
+    await callTaxi(pickupCoord.lat, pickupCoord.lng, toId, address, undefined, rt);
     return error === before;
+  };
+
+  const handlePinDragEnd = (e: MarkerDragStartEndEvent): void => {
+    const { latitude, longitude } = e.nativeEvent.coordinate;
+    setPickupCoord({ lat: latitude, lng: longitude });
+    setPinDragged(true);
   };
 
   const inVillagePrice = detectedVillage
@@ -249,14 +290,89 @@ export default function HomeScreen(): React.ReactNode {
       ? { latitude: state.order.driver.latitude, longitude: state.order.driver.longitude }
       : null;
 
+  // Содержимое peek-бара зависит от фазы заказа и состояния детекции.
+  // Делаем компактным — в свёрнутом виде шторки видна только эта часть.
+  const renderPeekContent = (): React.ReactNode => {
+    if (state.phase === 'searching') {
+      return (
+        <View style={styles.peekRow}>
+          <PulsingDot size={10} />
+          <Text style={styles.peekTitle}>Ищем водителя…</Text>
+          <Icon name="chevron-down" size={18} color={ClientColors.textMuted} strokeWidth={2.4} />
+        </View>
+      );
+    }
+
+    if (state.phase === 'accepted' || state.phase === 'arrived' || state.phase === 'in_progress') {
+      const phaseLabel: Record<string, string> = {
+        accepted: 'Водитель в пути',
+        arrived: 'Водитель прибыл',
+        in_progress: 'В пути',
+      };
+      return (
+        <View style={styles.peekRow}>
+          <Icon name="car" size={18} color={ClientColors.primary} strokeWidth={2.2} />
+          <Text style={styles.peekTitle}>{phaseLabel[state.phase]}</Text>
+          <Icon name="chevron-up" size={18} color={ClientColors.textMuted} strokeWidth={2.4} />
+        </View>
+      );
+    }
+
+    // idle phase
+    if (!pickupCoord || regions.length === 0 || inServiceArea === null) {
+      return (
+        <View style={styles.peekRow}>
+          <ActivityIndicator size="small" color={ClientColors.primary} />
+          <Text style={styles.peekTitle}>Определяем местоположение…</Text>
+        </View>
+      );
+    }
+
+    if (inServiceArea === false) {
+      return (
+        <View style={styles.peekRow}>
+          <Icon name="alert" size={18} color={ClientColors.secondaryDark} strokeWidth={2.4} />
+          <Text style={[styles.peekTitle, { color: ClientColors.secondaryDark }]}>
+            Вне зоны обслуживания
+          </Text>
+          <Icon name="chevron-up" size={18} color={ClientColors.textMuted} strokeWidth={2.4} />
+        </View>
+      );
+    }
+
+    if (inVillageTariffMissing) {
+      return (
+        <View style={styles.peekRow}>
+          <Icon name="alert" size={18} color={ClientColors.danger} strokeWidth={2.4} />
+          <Text style={[styles.peekTitle, { color: ClientColors.danger }]}>
+            Тариф не настроен
+          </Text>
+        </View>
+      );
+    }
+
+    // Главный happy path: «В Кировке · 80 сом · →»
+    return (
+      <View style={styles.peekRow}>
+        <View style={styles.peekVillagePill}>
+          <Icon name="pin" size={12} color={ClientColors.primaryDark} strokeWidth={2.4} />
+          <Text style={styles.peekVillageText}>В {detectedVillage?.name}</Text>
+        </View>
+        <Text style={styles.peekPrice}>{displayedPrice} сом</Text>
+        <Icon name="chevron-up" size={18} color={ClientColors.textMuted} strokeWidth={2.4} />
+      </View>
+    );
+  };
+
   return (
     <View style={styles.container}>
       <MapView
         ref={mapRef}
         style={StyleSheet.absoluteFillObject}
         initialRegion={initialRegion}
-        showsUserLocation
-        showsMyLocationButton
+        showsUserLocation={false}
+        showsMyLocationButton={false}
+        customMapStyle={DARK_MAP_STYLE}
         mapPadding={{
           top: Platform.OS === 'android' ? (StatusBar.currentHeight ?? 40) + 8 : 0,
           right: 0,
@@ -264,10 +380,62 @@ export default function HomeScreen(): React.ReactNode {
           left: 0,
         }}
       >
+        {pickupCoord && (
+          <Marker
+            coordinate={{ latitude: pickupCoord.lat, longitude: pickupCoord.lng }}
+            anchor={{ x: 0.5, y: 1 }}
+            draggable={state.phase === 'idle'}
+            onDragEnd={handlePinDragEnd}
+            tracksViewChanges={false}
+          >
+            <View style={styles.pickupPinWrapper}>
+              {detectedVillage && (
+                <View
+                  style={[
+                    styles.pickupTooltip,
+                    inServiceArea === false && styles.pickupTooltipWarn,
+                  ]}
+                >
+                  <Text
+                    style={[
+                      styles.pickupTooltipText,
+                      inServiceArea === false && styles.pickupTooltipTextWarn,
+                    ]}
+                  >
+                    Вы в: <Text style={{ fontWeight: '800' }}>{detectedVillage.name}</Text>
+                  </Text>
+                </View>
+              )}
+              {!detectedVillage && inServiceArea === false && (
+                <View style={[styles.pickupTooltip, styles.pickupTooltipWarn]}>
+                  <Text style={[styles.pickupTooltipText, styles.pickupTooltipTextWarn]}>
+                    Вне зоны
+                  </Text>
+                </View>
+              )}
+              <View style={styles.pickupPin}>
+                <View style={styles.pickupPinDot} />
+              </View>
+              <View style={styles.pickupPinTail} />
+            </View>
+          </Marker>
+        )}
         {driverCoords && (
           <AnimatedDriverMarker coordinate={driverCoords} title="Водитель" />
         )}
       </MapView>
+
+      {/* «К моему GPS» — показываем когда метка перетащена */}
+      {pinDragged && location.hasRealFix && (
+        <TouchableOpacity
+          style={styles.resetGpsButton}
+          onPress={resetPinToGps}
+          activeOpacity={0.85}
+        >
+          <Icon name="pin" size={18} color={ClientColors.primary} strokeWidth={2.4} />
+          <Text style={styles.resetGpsText}>К моему GPS</Text>
+        </TouchableOpacity>
+      )}
 
       {state.phase === 'cancelled' && (
         <View style={styles.cancelledToast}>
@@ -287,9 +455,15 @@ export default function HomeScreen(): React.ReactNode {
         ]}
         {...panResponder.panHandlers}
       >
-        <View style={styles.handleZone}>
+        {/* Peek-header — всегда виден, тапается для разворота/свёртки */}
+        <TouchableOpacity
+          activeOpacity={0.85}
+          onPress={togglePeek}
+          style={styles.peekHeader}
+        >
           <View style={styles.handle} />
-        </View>
+          {renderPeekContent()}
+        </TouchableOpacity>
 
         {error && (
           <View style={styles.errorPill}>
@@ -300,8 +474,8 @@ export default function HomeScreen(): React.ReactNode {
 
         {state.phase === 'idle' && (
           <>
-            {/* Лоадер: ждём либо GPS, либо ответа /tariffs */}
-            {(!location.hasRealFix || inServiceArea === null || regions.length === 0) && (
+            {/* Лоадер: ждём GPS или ответа /tariffs */}
+            {(!pickupCoord || inServiceArea === null || regions.length === 0) && (
               <View style={styles.loadingBlock}>
                 <ActivityIndicator color={ClientColors.primary} />
                 <Text style={styles.loadingText}>
@@ -312,9 +486,8 @@ export default function HomeScreen(): React.ReactNode {
               </View>
             )}
 
-            {/* Вне зоны обслуживания: запрещаем заказ, показываем
-                понятное объяснение. */}
-            {location.hasRealFix && inServiceArea === false && (
+            {/* Вне зоны — большая плашка с объяснением */}
+            {pickupCoord && inServiceArea === false && (
               <View style={styles.serviceUnavailable}>
                 <View style={styles.serviceUnavailableIcon}>
                   <Icon name="pin" size={28} color={ClientColors.secondaryDark} strokeWidth={2.2} />
@@ -324,20 +497,26 @@ export default function HomeScreen(): React.ReactNode {
                 </Text>
                 <Text style={styles.serviceUnavailableBody}>
                   Мы работаем в Таласе, Кировке и Покровке.
-                  Если вы в одном из этих сёл — проверьте GPS.
+                  {pinDragged
+                    ? ' Перетащите метку обратно или вернитесь к GPS.'
+                    : ' Если вы в одном из этих сёл — проверьте GPS.'}
                 </Text>
+                {pinDragged && (
+                  <TouchableOpacity
+                    style={styles.serviceUnavailableButton}
+                    onPress={resetPinToGps}
+                    activeOpacity={0.85}
+                  >
+                    <Icon name="pin" size={18} color={ClientColors.primary} strokeWidth={2.4} />
+                    <Text style={styles.serviceUnavailableButtonText}>К моему GPS</Text>
+                  </TouchableOpacity>
+                )}
               </View>
             )}
 
-            {/* В зоне: основной экран заказа */}
-            {location.hasRealFix && inServiceArea === true && detectedVillage && (
+            {/* В зоне — основной экран заказа */}
+            {pickupCoord && inServiceArea === true && detectedVillage && (
               <>
-                <View style={styles.villageBadge}>
-                  <Icon name="pin" size={14} color={ClientColors.primaryDark} strokeWidth={2.4} />
-                  <Text style={styles.villageBadgeLabel}>Вы в:</Text>
-                  <Text style={styles.villageBadgeValue}>{detectedVillage.name}</Text>
-                </View>
-
                 <Text style={styles.greeting}>Куда поедем?</Text>
 
                 <View style={styles.priceCard}>
@@ -407,24 +586,13 @@ export default function HomeScreen(): React.ReactNode {
         )}
 
         {state.phase === 'searching' && (
-          <>
-            <View style={styles.searchingRow}>
-              <PulsingDot />
-              <View style={{ marginLeft: 14, flex: 1 }}>
-                <Text style={styles.searchingTitle}>Ищем водителя</Text>
-                <Text style={styles.searchingSubtitle}>
-                  Обычно занимает 1-2 минуты
-                </Text>
-              </View>
-            </View>
-            <ActionButton
-              title="Отменить"
-              onPress={cancelOrder}
-              loading={loading}
-              variant="outline"
-              style={{ marginTop: 18 }}
-            />
-          </>
+          <ActionButton
+            title="Отменить"
+            onPress={cancelOrder}
+            loading={loading}
+            variant="outline"
+            style={{ marginTop: 18 }}
+          />
         )}
 
         {(state.phase === 'accepted' || state.phase === 'arrived' || state.phase === 'in_progress') &&
@@ -511,17 +679,52 @@ const styles = StyleSheet.create({
     elevation: 12,
     overflow: 'hidden',
   },
-  handleZone: {
+  peekHeader: {
     paddingTop: 10,
-    paddingBottom: 8,
+    paddingBottom: 14,
     marginHorizontal: -24,
-    alignItems: 'center',
+    paddingHorizontal: 24,
   },
   handle: {
     width: 44,
     height: 5,
     borderRadius: 3,
     backgroundColor: ClientColors.border,
+    alignSelf: 'center',
+    marginBottom: 12,
+  },
+  peekRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+  },
+  peekVillagePill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+    backgroundColor: ClientColors.primaryTint,
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 999,
+  },
+  peekVillageText: {
+    fontSize: 13,
+    fontWeight: '700' as const,
+    color: ClientColors.primaryDark,
+  },
+  peekTitle: {
+    flex: 1,
+    fontSize: 15,
+    fontWeight: '600' as const,
+    color: ClientColors.dark,
+  },
+  peekPrice: {
+    flex: 1,
+    textAlign: 'right',
+    fontSize: 18,
+    fontWeight: '800' as const,
+    color: ClientColors.dark,
+    letterSpacing: -0.2,
   },
   loadingBlock: {
     flexDirection: 'row',
@@ -562,31 +765,27 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     lineHeight: 20,
   },
-  villageBadge: {
+  serviceUnavailableButton: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 6,
-    alignSelf: 'flex-start',
-    backgroundColor: ClientColors.primaryTint,
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 999,
-    marginBottom: 10,
+    gap: 8,
+    marginTop: 18,
+    paddingHorizontal: 18,
+    paddingVertical: 12,
+    borderRadius: 24,
+    borderWidth: 1.5,
+    borderColor: ClientColors.primary,
   },
-  villageBadgeLabel: {
-    fontSize: 12,
-    color: ClientColors.primaryDark,
-    fontWeight: '500' as const,
-  },
-  villageBadgeValue: {
-    fontSize: 13,
-    color: ClientColors.primaryDark,
+  serviceUnavailableButtonText: {
+    fontSize: 14,
     fontWeight: '700' as const,
+    color: ClientColors.primary,
   },
   greeting: {
-    fontSize: 24,
+    fontSize: 22,
     fontWeight: '700' as const,
     color: ClientColors.dark,
+    marginTop: 4,
     marginBottom: 12,
     letterSpacing: -0.3,
   },
@@ -715,26 +914,82 @@ const styles = StyleSheet.create({
     color: ClientColors.danger,
     flex: 1,
   },
-  searchingRow: {
+  // Pickup pin (drag-handle на карте)
+  pickupPinWrapper: {
+    alignItems: 'center',
+  },
+  pickupTooltip: {
+    backgroundColor: 'rgba(30, 27, 46, 0.92)',
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 14,
+    marginBottom: 6,
+  },
+  pickupTooltipWarn: {
+    backgroundColor: 'rgba(204, 84, 84, 0.92)',
+  },
+  pickupTooltipText: {
+    fontSize: 12,
+    fontWeight: '600' as const,
+    color: ClientColors.white,
+  },
+  pickupTooltipTextWarn: {
+    color: ClientColors.white,
+  },
+  pickupPin: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    backgroundColor: ClientColors.primary,
+    borderWidth: 3,
+    borderColor: ClientColors.white,
+    alignItems: 'center',
+    justifyContent: 'center',
+    shadowColor: '#000',
+    shadowOpacity: 0.25,
+    shadowRadius: 4,
+    shadowOffset: { width: 0, height: 2 },
+    elevation: 4,
+  },
+  pickupPinDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    backgroundColor: ClientColors.white,
+  },
+  pickupPinTail: {
+    width: 0,
+    height: 0,
+    borderLeftWidth: 6,
+    borderRightWidth: 6,
+    borderTopWidth: 8,
+    borderLeftColor: 'transparent',
+    borderRightColor: 'transparent',
+    borderTopColor: ClientColors.primary,
+    marginTop: -2,
+  },
+  // «К моему GPS» FAB
+  resetGpsButton: {
+    position: 'absolute',
+    top: Platform.OS === 'android' ? (StatusBar.currentHeight ?? 40) + 16 : 60,
+    right: 16,
     flexDirection: 'row',
     alignItems: 'center',
-    marginTop: 8,
+    gap: 6,
+    backgroundColor: ClientColors.white,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    borderRadius: 24,
+    shadowColor: '#000',
+    shadowOpacity: 0.2,
+    shadowRadius: 8,
+    shadowOffset: { width: 0, height: 4 },
+    elevation: 6,
   },
-  searchingTitle: {
-    fontSize: 19,
-    fontWeight: '700' as const,
-    color: ClientColors.dark,
-  },
-  searchingSubtitle: {
+  resetGpsText: {
     fontSize: 13,
-    color: ClientColors.textSecondary,
-    marginTop: 2,
-  },
-  pulsingDot: {
-    width: 14,
-    height: 14,
-    borderRadius: 7,
-    backgroundColor: ClientColors.primary,
+    fontWeight: '700' as const,
+    color: ClientColors.primary,
   },
   modalOverlay: {
     flex: 1,

@@ -24,6 +24,7 @@ export type IconName =
   | 'message'       // WhatsApp support
   | 'chevron-right'
   | 'chevron-down'  // Picker collapse/expand
+  | 'chevron-up'    // Peek-bar expand hint
   | 'clock'         // History
   | 'route'         // Trip / inter-village
   | 'spark';        // Brand mark
@@ -157,6 +158,12 @@ export default function Icon({
       return (
         <Svg {...props}>
           <Path d="M6 9l6 6 6-6" />
+        </Svg>
+      );
+    case 'chevron-up':
+      return (
+        <Svg {...props}>
+          <Path d="M6 15l6-6 6 6" />
         </Svg>
       );
     case 'clock':
