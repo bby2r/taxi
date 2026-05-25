@@ -3,7 +3,6 @@ import * as SecureStore from 'expo-secure-store';
 
 const TOKEN_KEY = 'auth_token';
 const USER_KEY = 'auth_user';
-const PREFERRED_VILLAGE_KEY = 'preferred_village_id';
 
 const webStorage = {
   getItemAsync: async (key: string): Promise<string | null> =>
@@ -44,15 +43,4 @@ export async function removeUser(): Promise<void> {
 
 export async function clearAuth(): Promise<void> {
   await Promise.all([removeToken(), removeUser()]);
-}
-
-export async function getPreferredVillageId(): Promise<number | null> {
-  const raw = await store.getItemAsync(PREFERRED_VILLAGE_KEY);
-  if (!raw) return null;
-  const parsed = parseInt(raw, 10);
-  return Number.isFinite(parsed) ? parsed : null;
-}
-
-export async function savePreferredVillageId(id: number): Promise<void> {
-  await store.setItemAsync(PREFERRED_VILLAGE_KEY, String(id));
 }

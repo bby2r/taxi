@@ -6,6 +6,7 @@ use App\Enums\UserRole;
 use App\Models\DriverProfile;
 use App\Models\Region;
 use App\Models\RegionRoute;
+use App\Models\Setting;
 use App\Models\User;
 use App\Services\OrderService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -17,10 +18,10 @@ use RuntimeException;
 use Tests\TestCase;
 
 /**
- * Матрица цен «откуда → куда». Клиент явно выбирает оба района
- * (без GPS-определения). from == to → in-village цена (диагональ
- * матрицы); from != to → межсёлами цена пары. Нет записи в матрице
- * → RuntimeException, чтобы заказ не ушёл в работу с ценой 0.
+ * Геозабор + матрица «откуда → куда». Pickup-район определяется
+ * сервером по GPS клиента (radius district_detection_max_km вокруг
+ * центра). Вне зоны → отказ. Внутри зоны → берётся pair-цена из
+ * матрицы region_routes.
  */
 class DistrictPricingTest extends TestCase
 {
@@ -30,16 +31,13 @@ class DistrictPricingTest extends TestCase
 
     private User $client;
 
-    private float $pickupLat = 42.5228;
-
-    private float $pickupLon = 72.2425;
-
     protected function setUp(): void
     {
         parent::setUp();
 
         Event::fake();
         Queue::fake();
+        Setting::updateOrCreate(['key' => 'district_detection_max_km'], ['value' => '5']);
 
         $this->service = app(OrderService::class);
         $this->client = User::factory()->create(['role' => UserRole::Client]);
@@ -49,7 +47,11 @@ class DistrictPricingTest extends TestCase
     {
         Carbon::setTestNow(Carbon::create(2026, 4, 7, 4, 0, 0, 'UTC')); // 10:00 Bishkek = day
 
-        $pokrovka = Region::factory()->create(['name' => 'Покровка']);
+        $pokrovka = Region::factory()->create([
+            'name' => 'Покровка',
+            'center_latitude' => 42.5667,
+            'center_longitude' => 71.9333,
+        ]);
         RegionRoute::create([
             'from_region_id' => $pokrovka->id,
             'to_region_id' => $pokrovka->id,
@@ -57,27 +59,34 @@ class DistrictPricingTest extends TestCase
             'night_price' => 120,
         ]);
 
-        $this->createNearbyDriver();
+        $this->createNearbyDriver(42.5670, 71.9335);
 
         $order = $this->service->createOrder(
             client: $this->client,
-            pickupLat: $this->pickupLat,
-            pickupLon: $this->pickupLon,
-            fromRegionId: $pokrovka->id,
+            pickupLat: 42.5670,
+            pickupLon: 71.9335,
             toRegionId: $pokrovka->id,
         );
 
         $this->assertSame(80, $order->price);
         $this->assertSame($pokrovka->id, $order->pickup_region_id);
-        $this->assertNull($order->region_id); // in-village ⇒ region_id остаётся null
+        $this->assertNull($order->region_id); // in-village ⇒ region_id null
     }
 
     public function test_inter_village_uses_matrix_price(): void
     {
         Carbon::setTestNow(Carbon::create(2026, 4, 7, 4, 0, 0, 'UTC'));
 
-        $pokrovka = Region::factory()->create(['name' => 'Покровка']);
-        $talas = Region::factory()->create(['name' => 'Талас']);
+        $pokrovka = Region::factory()->create([
+            'name' => 'Покровка',
+            'center_latitude' => 42.5667,
+            'center_longitude' => 71.9333,
+        ]);
+        $talas = Region::factory()->create([
+            'name' => 'Талас',
+            'center_latitude' => 42.5228,
+            'center_longitude' => 72.2425,
+        ]);
         RegionRoute::create([
             'from_region_id' => $pokrovka->id,
             'to_region_id' => $talas->id,
@@ -85,46 +94,110 @@ class DistrictPricingTest extends TestCase
             'night_price' => 300,
         ]);
 
-        $this->createNearbyDriver();
+        $this->createNearbyDriver(42.5670, 71.9335);
 
         $order = $this->service->createOrder(
             client: $this->client,
-            pickupLat: $this->pickupLat,
-            pickupLon: $this->pickupLon,
-            fromRegionId: $pokrovka->id,
+            pickupLat: 42.5670, // в Покровке
+            pickupLon: 71.9335,
             toRegionId: $talas->id,
         );
 
         $this->assertSame(200, $order->price);
         $this->assertSame($pokrovka->id, $order->pickup_region_id);
-        $this->assertSame($talas->id, $order->region_id); // inter-village ⇒ region_id = to
+        $this->assertSame($talas->id, $order->region_id);
     }
 
-    public function test_matrix_is_directional(): void
+    public function test_inter_village_to_destination_only_region(): void
     {
         Carbon::setTestNow(Carbon::create(2026, 4, 7, 4, 0, 0, 'UTC'));
 
-        $pokrovka = Region::factory()->create(['name' => 'Покровка']);
-        $talas = Region::factory()->create(['name' => 'Талас']);
-        // Только Покровка → Талас; обратное не задано.
+        $pokrovka = Region::factory()->create([
+            'name' => 'Покровка',
+            'center_latitude' => 42.5667,
+            'center_longitude' => 71.9333,
+        ]);
+        // Бакаир — destination-only, без координат, GPS-определение
+        // на нём не сработает, но как направление работает.
+        $bakair = Region::factory()->create([
+            'name' => 'Бакаир',
+            'center_latitude' => null,
+            'center_longitude' => null,
+        ]);
         RegionRoute::create([
             'from_region_id' => $pokrovka->id,
-            'to_region_id' => $talas->id,
-            'day_price' => 200,
-            'night_price' => 300,
+            'to_region_id' => $bakair->id,
+            'day_price' => 350,
+            'night_price' => 450,
         ]);
 
-        $this->createNearbyDriver();
+        $this->createNearbyDriver(42.5670, 71.9335);
+
+        $order = $this->service->createOrder(
+            client: $this->client,
+            pickupLat: 42.5670,
+            pickupLon: 71.9335,
+            toRegionId: $bakair->id,
+        );
+
+        $this->assertSame(350, $order->price);
+        $this->assertSame($pokrovka->id, $order->pickup_region_id);
+        $this->assertSame($bakair->id, $order->region_id);
+    }
+
+    public function test_rejects_when_client_outside_service_area(): void
+    {
+        Carbon::setTestNow(Carbon::create(2026, 4, 7, 4, 0, 0, 'UTC'));
+
+        $talas = Region::factory()->create([
+            'name' => 'Талас',
+            'center_latitude' => 42.5228,
+            'center_longitude' => 72.2425,
+        ]);
+        RegionRoute::create([
+            'from_region_id' => $talas->id,
+            'to_region_id' => $talas->id,
+            'day_price' => 100,
+            'night_price' => 150,
+        ]);
+
+        $this->createNearbyDriver(42.8746, 74.5698);
 
         $this->expectException(RuntimeException::class);
-        $this->expectExceptionMessage('Тариф для этого направления не настроен');
+        $this->expectExceptionMessage('Сервис пока недоступен в вашем районе');
 
         $this->service->createOrder(
             client: $this->client,
-            pickupLat: $this->pickupLat,
-            pickupLon: $this->pickupLon,
-            fromRegionId: $talas->id,   // обратное направление
-            toRegionId: $pokrovka->id,
+            pickupLat: 42.8746, // Бишкек — далеко
+            pickupLon: 74.5698,
+            toRegionId: $talas->id,
+        );
+    }
+
+    public function test_rejects_when_destination_only_region_has_no_coords_and_client_is_there(): void
+    {
+        // Edge case: клиент физически в Бакаире (направлении без
+        // координат), но из-за отсутствия координат GPS не может
+        // его «найти» как сервисную зону. Это правильно — Бакаир
+        // не сервисный, оттуда заказывать нельзя.
+        Carbon::setTestNow(Carbon::create(2026, 4, 7, 4, 0, 0, 'UTC'));
+
+        $bakair = Region::factory()->create([
+            'name' => 'Бакаир',
+            'center_latitude' => null,
+            'center_longitude' => null,
+        ]);
+
+        $this->createNearbyDriver(42.6, 71.7);
+
+        $this->expectException(RuntimeException::class);
+        $this->expectExceptionMessage('Сервис пока недоступен');
+
+        $this->service->createOrder(
+            client: $this->client,
+            pickupLat: 42.6,
+            pickupLon: 71.7,
+            toRegionId: $bakair->id,
         );
     }
 
@@ -132,20 +205,22 @@ class DistrictPricingTest extends TestCase
     {
         Carbon::setTestNow(Carbon::create(2026, 4, 7, 4, 0, 0, 'UTC'));
 
-        $a = Region::factory()->create(['name' => 'A']);
+        $a = Region::factory()->create([
+            'name' => 'A',
+            'center_latitude' => 42.5,
+            'center_longitude' => 72.0,
+        ]);
         $b = Region::factory()->create(['name' => 'B']);
-        // Никаких записей в матрице.
 
-        $this->createNearbyDriver();
+        $this->createNearbyDriver(42.5, 72.0);
 
         $this->expectException(RuntimeException::class);
         $this->expectExceptionMessage('Тариф для этого направления не настроен');
 
         $this->service->createOrder(
             client: $this->client,
-            pickupLat: $this->pickupLat,
-            pickupLon: $this->pickupLon,
-            fromRegionId: $a->id,
+            pickupLat: 42.5,
+            pickupLon: 72.0,
             toRegionId: $b->id,
         );
     }
@@ -154,7 +229,11 @@ class DistrictPricingTest extends TestCase
     {
         Carbon::setTestNow(Carbon::create(2026, 4, 7, 16, 0, 0, 'UTC')); // 22:00 Bishkek
 
-        $pokrovka = Region::factory()->create(['name' => 'Покровка']);
+        $pokrovka = Region::factory()->create([
+            'name' => 'Покровка',
+            'center_latitude' => 42.5667,
+            'center_longitude' => 71.9333,
+        ]);
         RegionRoute::create([
             'from_region_id' => $pokrovka->id,
             'to_region_id' => $pokrovka->id,
@@ -162,13 +241,12 @@ class DistrictPricingTest extends TestCase
             'night_price' => 120,
         ]);
 
-        $this->createNearbyDriver();
+        $this->createNearbyDriver(42.5667, 71.9333);
 
         $order = $this->service->createOrder(
             client: $this->client,
-            pickupLat: $this->pickupLat,
-            pickupLon: $this->pickupLon,
-            fromRegionId: $pokrovka->id,
+            pickupLat: 42.5667,
+            pickupLon: 71.9333,
             toRegionId: $pokrovka->id,
         );
 
@@ -179,8 +257,16 @@ class DistrictPricingTest extends TestCase
     {
         Carbon::setTestNow(Carbon::create(2026, 4, 7, 4, 0, 0, 'UTC'));
 
-        $pokrovka = Region::factory()->create(['name' => 'Покровка']);
-        $talas = Region::factory()->create(['name' => 'Талас']);
+        $pokrovka = Region::factory()->create([
+            'name' => 'Покровка',
+            'center_latitude' => 42.5667,
+            'center_longitude' => 71.9333,
+        ]);
+        $talas = Region::factory()->create([
+            'name' => 'Талас',
+            'center_latitude' => 42.5228,
+            'center_longitude' => 72.2425,
+        ]);
         RegionRoute::create([
             'from_region_id' => $pokrovka->id,
             'to_region_id' => $talas->id,
@@ -188,13 +274,12 @@ class DistrictPricingTest extends TestCase
             'night_price' => 300,
         ]);
 
-        $this->createNearbyDriver();
+        $this->createNearbyDriver(42.5667, 71.9333);
 
         $order = $this->service->createOrder(
             client: $this->client,
-            pickupLat: $this->pickupLat,
-            pickupLon: $this->pickupLon,
-            fromRegionId: $pokrovka->id,
+            pickupLat: 42.5667,
+            pickupLon: 71.9333,
             toRegionId: $talas->id,
             isRoundTrip: true,
         );
@@ -203,56 +288,68 @@ class DistrictPricingTest extends TestCase
         $this->assertSame(340, $order->price);
     }
 
-    public function test_tariffs_endpoint_returns_matrix(): void
+    public function test_tariffs_endpoint_with_gps_returns_detected_village(): void
     {
-        $pokrovka = Region::factory()->create(['name' => 'Покровка']);
-        $talas = Region::factory()->create(['name' => 'Талас']);
-        RegionRoute::create([
-            'from_region_id' => $pokrovka->id,
-            'to_region_id' => $talas->id,
-            'day_price' => 200,
-            'night_price' => 300,
+        $talas = Region::factory()->create([
+            'name' => 'Талас',
+            'center_latitude' => 42.5228,
+            'center_longitude' => 72.2425,
         ]);
         RegionRoute::create([
-            'from_region_id' => $pokrovka->id,
-            'to_region_id' => $pokrovka->id,
-            'day_price' => 80,
-            'night_price' => 120,
+            'from_region_id' => $talas->id,
+            'to_region_id' => $talas->id,
+            'day_price' => 100,
+            'night_price' => 150,
+        ]);
+
+        Sanctum::actingAs($this->client);
+        $response = $this->getJson('/api/v1/client/tariffs?latitude=42.5230&longitude=72.2427');
+
+        $response->assertOk()
+            ->assertJsonPath('detected_village.id', $talas->id)
+            ->assertJsonPath('detected_village.name', 'Талас')
+            ->assertJsonPath('in_service_area', true);
+    }
+
+    public function test_tariffs_endpoint_outside_zone_returns_in_service_area_false(): void
+    {
+        Region::factory()->create([
+            'name' => 'Талас',
+            'center_latitude' => 42.5228,
+            'center_longitude' => 72.2425,
+        ]);
+
+        Sanctum::actingAs($this->client);
+        $response = $this->getJson('/api/v1/client/tariffs?latitude=42.8746&longitude=74.5698');
+
+        $response->assertOk()
+            ->assertJsonPath('detected_village', null)
+            ->assertJsonPath('in_service_area', false);
+    }
+
+    public function test_tariffs_endpoint_without_gps_returns_null_service_area(): void
+    {
+        Region::factory()->create([
+            'name' => 'Талас',
+            'center_latitude' => 42.5228,
+            'center_longitude' => 72.2425,
         ]);
 
         Sanctum::actingAs($this->client);
         $response = $this->getJson('/api/v1/client/tariffs');
 
         $response->assertOk()
-            ->assertJsonCount(2, 'routes')
-            ->assertJsonFragment([
-                'from_region_id' => $pokrovka->id,
-                'to_region_id' => $talas->id,
-                'day_price' => 200,
-                'night_price' => 300,
-            ]);
+            ->assertJsonPath('detected_village', null)
+            ->assertJsonPath('in_service_area', null);
     }
 
-    public function test_regions_endpoint_returns_active_only(): void
-    {
-        $active = Region::factory()->create(['name' => 'Талас', 'is_active' => true]);
-        Region::factory()->create(['name' => 'Архив', 'is_active' => false]);
-
-        Sanctum::actingAs($this->client);
-        $response = $this->getJson('/api/v1/client/regions');
-
-        $response->assertOk()
-            ->assertJsonCount(1, 'data')
-            ->assertJsonFragment(['id' => $active->id, 'name' => 'Талас']);
-    }
-
-    private function createNearbyDriver(): void
+    private function createNearbyDriver(float $lat, float $lon): void
     {
         $driverUser = User::factory()->driver()->create();
         DriverProfile::factory()
             ->for($driverUser)
             ->online()
-            ->atLocation($this->pickupLat + 0.001, $this->pickupLon + 0.001)
+            ->atLocation($lat + 0.001, $lon + 0.001)
             ->create();
     }
 }

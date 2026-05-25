@@ -68,12 +68,17 @@ class RegionController extends Controller
     {
         $nameUnique = 'unique:regions,name'.($ignoreId ? ','.$ignoreId : '');
 
-        // Все цены живут в матрице /admin/region-routes. Карточка
-        // района — только название и флаги.
+        // Все цены живут в матрице /admin/region-routes. В карточке —
+        // только идентификация и (опционально) координаты центра.
+        // С координатами район становится «сервисным» (GPS-определение,
+        // там могут жить наши клиенты). Без координат — «только
+        // направление» для межсёлами.
         return [
             'name' => ['required', 'string', 'max:255', $nameUnique],
             'is_active' => ['boolean'],
             'sort_order' => ['integer', 'min:0'],
+            'center_latitude' => ['nullable', 'numeric', 'between:-90,90'],
+            'center_longitude' => ['nullable', 'numeric', 'between:-180,180'],
         ];
     }
 }

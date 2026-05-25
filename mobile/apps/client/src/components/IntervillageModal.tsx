@@ -51,25 +51,26 @@ export default function IntervillageModal({
   loading,
   onOrder,
 }: Props): React.ReactNode {
-  const [fromId, setFromId] = useState<number | null>(null);
+  // Откуда залочено = defaultFromId (сервер определил по GPS).
+  // Только «Куда» меняется пользователем.
+  const fromId = defaultFromId;
   const [toId, setToId] = useState<number | null>(null);
-  const [expanded, setExpanded] = useState<'from' | 'to' | null>(null);
+  const [expanded, setExpanded] = useState<'to' | null>(null);
   const [isRoundTrip, setIsRoundTrip] = useState(false);
 
   useEffect(() => {
     if (visible) {
       // Сбрасываем «Куда» каждый раз при открытии — клиент должен
       // явно выбрать, а не отправить заказ с залипшим прошлым
-      // направлением. «Откуда» подтягивается из preferred village.
-      setFromId(defaultFromId);
+      // направлением.
       setToId(null);
       setExpanded(null);
       setIsRoundTrip(false);
     }
-  }, [visible, defaultFromId]);
+  }, [visible]);
 
-  const togglePicker = useCallback((which: 'from' | 'to') => {
-    setExpanded((prev) => (prev === which ? null : which));
+  const togglePicker = useCallback(() => {
+    setExpanded((prev) => (prev === 'to' ? null : 'to'));
   }, []);
 
   const basePrice =
@@ -136,24 +137,25 @@ export default function IntervillageModal({
         </View>
 
         <View style={styles.body}>
-          <Text style={styles.subtitle}>Выберите откуда и куда</Text>
+          <Text style={styles.subtitle}>Выберите направление</Text>
 
           <View style={{ gap: 12 }}>
-            <CollapsiblePicker
-              label="Откуда"
-              regions={regions}
-              selectedId={fromId}
-              expanded={expanded === 'from'}
-              onToggle={() => togglePicker('from')}
-              onSelect={setFromId}
-              excludeId={toId}
-            />
+            {/* Откуда залочено — определяется по GPS сервером. Меняется
+                только если клиент физически переместится в другое село. */}
+            <View style={styles.fromLocked}>
+              <Text style={styles.fromLockedLabel}>Откуда</Text>
+              <View style={styles.fromLockedValueRow}>
+                <Icon name="pin" size={14} color={ClientColors.primaryDark} strokeWidth={2.4} />
+                <Text style={styles.fromLockedValue}>{fromName || '—'}</Text>
+              </View>
+            </View>
+
             <CollapsiblePicker
               label="Куда"
               regions={regions}
               selectedId={toId}
               expanded={expanded === 'to'}
-              onToggle={() => togglePicker('to')}
+              onToggle={togglePicker}
               onSelect={setToId}
               excludeId={fromId}
             />
@@ -261,6 +263,32 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: ClientColors.textSecondary,
     marginBottom: 16,
+  },
+  fromLocked: {
+    borderWidth: 1.5,
+    borderColor: ClientColors.primaryTint,
+    backgroundColor: ClientColors.primaryTint,
+    borderRadius: 16,
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+  },
+  fromLockedLabel: {
+    fontSize: 12,
+    fontWeight: '600' as const,
+    color: ClientColors.primaryDark,
+    textTransform: 'uppercase',
+    letterSpacing: 0.6,
+  },
+  fromLockedValueRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    marginTop: 6,
+  },
+  fromLockedValue: {
+    fontSize: 17,
+    fontWeight: '700' as const,
+    color: ClientColors.primaryDark,
   },
   priceCard: {
     backgroundColor: ClientColors.primaryTint,

@@ -28,17 +28,17 @@ class OrderService
     ) {}
 
     /**
-     * Создание заказа. Клиент явно указывает откуда (fromRegionId) и
-     * куда (toRegionId) — без GPS-автоопределения. from == to ⇒ заказ
-     * внутри одного села, from != to ⇒ межсёлами. Цена берётся из
-     * матрицы region_routes; если пары в матрице нет — кидаем ошибку,
-     * чтобы заказ не ушёл в работу с ценой 0.
+     * Создание заказа. Pickup-район определяется сервером по GPS
+     * клиента (радиус district_detection_max_km вокруг центра).
+     * Если GPS вне всех сервисных районов → отказ «Сервис недоступен
+     * в вашем районе». Клиент указывает только направление (toRegionId).
+     * Цена берётся из матрицы region_routes; если пары нет → отказ
+     * чтобы не уехать с ценой 0.
      */
     public function createOrder(
         User $client,
         float $pickupLat,
         float $pickupLon,
-        int $fromRegionId,
         int $toRegionId,
         ?string $pickupAddress = null,
         ?float $dropoffLat = null,
@@ -52,7 +52,17 @@ class OrderService
             throw new \RuntimeException('Client already has an active order.');
         }
 
-        $from = Region::findOrFail($fromRegionId);
+        $from = Region::findNearestByCoordinates(
+            $pickupLat,
+            $pickupLon,
+            Region::detectionMaxKm(),
+        );
+        if ($from === null) {
+            throw new \RuntimeException(
+                'Сервис пока недоступен в вашем районе. Мы работаем в Таласе, Кировке и Покровке.'
+            );
+        }
+
         $to = Region::findOrFail($toRegionId);
 
         $basePrice = $to->priceFrom($from);

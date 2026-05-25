@@ -37,7 +37,6 @@ class ClientOrderController extends Controller
                 client: $request->user(),
                 pickupLat: (float) $request->validated('pickup_latitude'),
                 pickupLon: (float) $request->validated('pickup_longitude'),
-                fromRegionId: (int) $request->validated('from_region_id'),
                 toRegionId: (int) $request->validated('to_region_id'),
                 pickupAddress: $request->validated('pickup_address'),
                 dropoffLat: $request->validated('dropoff_latitude') ? (float) $request->validated('dropoff_latitude') : null,

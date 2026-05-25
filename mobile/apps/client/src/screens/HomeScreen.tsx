@@ -18,11 +18,9 @@ import {
 import MapView, { Region as MapRegion } from 'react-native-maps';
 import { useLocation, ActionButton, ClientColors, Typography, reverseGeocode, Region } from '@taxi/shared';
 import { useOrder } from '../hooks/useOrder';
-import { usePreferredVillage } from '../hooks/usePreferredVillage';
 import DriverCard from '../components/DriverCard';
 import AnimatedDriverMarker from '../components/AnimatedDriverMarker';
 import Icon from '../components/Icon';
-import VillageBadgeSelector from '../components/VillageBadgeSelector';
 import IntervillageModal from '../components/IntervillageModal';
 import { getRegions, getTariffs, priceFor, type TariffRoute } from '../api/regions';
 
@@ -84,12 +82,15 @@ export default function HomeScreen(): React.ReactNode {
   const [roundTripPct, setRoundTripPct] = useState<number>(70);
   const [isRoundTrip, setIsRoundTrip] = useState(false);
   const [intervillageOpen, setIntervillageOpen] = useState(false);
+  // Район определённый сервером по GPS (geofence ~5 км). null пока
+  // ещё не запрашивали или GPS не готов.
+  const [detectedVillage, setDetectedVillage] = useState<{ id: number; name: string } | null>(null);
+  // null = ещё не определились (показываем лоадер). true = в зоне,
+  // показываем нормальный заказ. false = вне зоны, показываем
+  // экран «Сервис недоступен».
+  const [inServiceArea, setInServiceArea] = useState<boolean | null>(null);
 
-  // Bottom-sheet с двумя снап-позициями. Карточка фиксированной
-  // высоты EXPANDED_HEIGHT; translateY сдвигает её вниз чтобы
-  // «свернуть» так, чтобы из-под низа торчало только PEEK_HEIGHT
-  // (хэндл + подсказка). Свайп вверх/вниз на хэндле управляет
-  // позицией, отпускание снапит к ближайшей с учётом скорости.
+  // Bottom-sheet с двумя снап-позициями.
   const SCREEN_HEIGHT = Dimensions.get('window').height;
   const PEEK_HEIGHT = 130;
   const EXPANDED_HEIGHT = Math.min(SCREEN_HEIGHT * 0.62, 560);
@@ -111,18 +112,9 @@ export default function HomeScreen(): React.ReactNode {
     [translateY, COLLAPSE_OFFSET],
   );
 
-  // PanResponder ловит вертикальный жест на хэндл-зоне сверху
-  // карточки. Только активные жесты с минимальной амплитудой,
-  // чтобы не воровать тапы у кнопок ниже.
   const panResponder = useMemo(
     () =>
       PanResponder.create({
-        // Никогда не перехватываем тап на старте — клик по кнопке/чипу
-        // должен пройти через нас в TouchableOpacity. Активируемся только
-        // когда жест явно вертикальный (dy > 12 и больше горизонтального
-        // движения). Так свайп со всей карточки управляет шторкой, но
-        // обычные нажатия на «Заказать» / «Межсёлами» / пикер села
-        // остаются клик-абельными.
         onStartShouldSetPanResponder: () => false,
         onMoveShouldSetPanResponder: (_, g) =>
           Math.abs(g.dy) > 12 && Math.abs(g.dy) > Math.abs(g.dx),
@@ -133,17 +125,12 @@ export default function HomeScreen(): React.ReactNode {
           });
         },
         onPanResponderMove: (_, g) => {
-          // Clamp в [0, COLLAPSE_OFFSET]: на этих границах сопротивление,
-          // чтобы пользователь чувствовал «стену» а не уползание карточки
-          // за экран.
           const offset = (translateY as Animated.Value & { _offset?: number })._offset ?? 0;
           const target = Math.max(-offset, Math.min(COLLAPSE_OFFSET - offset, g.dy));
           translateY.setValue(target);
         },
         onPanResponderRelease: (_, g) => {
           translateY.flattenOffset();
-          // Снап с учётом скорости: если жест быстрый (>0.5 px/ms),
-          // двигаемся в его направлении; иначе — к ближайшей точке.
           const current = (translateY as Animated.Value & { _value: number })._value;
           let target: 'peek' | 'expanded';
           if (Math.abs(g.vy) > 0.5) {
@@ -161,34 +148,31 @@ export default function HomeScreen(): React.ReactNode {
     [translateY, COLLAPSE_OFFSET, snapTo],
   );
 
-  // «Моё село» — id района проживания, хранится в SecureStore. Это
-  // и есть from для one-tap «Заказ внутри села», и дефолт «Откуда» в
-  // межсёлами-модалке.
-  const { id: villageId, setId: setVillageId, ready: villageReady } =
-    usePreferredVillage(regions);
-
+  // Загружаем регионы + тарифы с GPS на каждом фокусе. Сервер
+  // определяет район клиента (geofence) — клиент решает что показать:
+  // нормальный экран заказа или «Сервис недоступен».
   useFocusEffect(
     useCallback(() => {
-      Promise.all([getRegions(), getTariffs()])
+      const lat = location.hasRealFix ? location.latitude : undefined;
+      const lng = location.hasRealFix ? location.longitude : undefined;
+      Promise.all([getRegions(), getTariffs(lat, lng)])
         .then(([rs, t]) => {
           setRegions(rs);
           setTariffs(t.routes);
           setRoundTripPct(t.roundTripSurchargePercent);
+          setDetectedVillage(t.detectedVillage);
+          // Если GPS не передан — оставляем null (лоадер); сервер
+          // ничего не сказал про зону, без координат не определить.
+          setInServiceArea(t.inServiceArea);
         })
         .catch(() => undefined);
-    }, []),
+    }, [location.hasRealFix, location.latitude, location.longitude]),
   );
 
-  // На монтировании карточка проявляется в expanded — пользователь
-  // сразу видит кнопку заказа. Дальше может свернуть свайпом.
   useEffect(() => {
     snapTo('expanded');
   }, [snapTo]);
 
-  // Когда диспетчер находит водителя / он приезжает / клиент
-  // отменяет заказ — авто-разворачиваем шторку, чтобы важный
-  // контент (DriverCard, кнопка «Отменить», банер «отменён»)
-  // не остался скрыт под низом экрана.
   useEffect(() => {
     if (state.phase !== 'idle') {
       snapTo('expanded');
@@ -220,14 +204,13 @@ export default function HomeScreen(): React.ReactNode {
   };
 
   const handleInVillageCallTaxi = async (): Promise<void> => {
-    if (villageId === null) return;
+    if (detectedVillage === null) return;
     if (!(await confirmRoundTripIfNeeded())) return;
     const address = await reverseGeocode(location.latitude, location.longitude);
     await callTaxi(
       location.latitude,
       location.longitude,
-      villageId,
-      villageId,
+      detectedVillage.id, // to == from = заказ внутри села
       address,
       undefined,
       isRoundTrip,
@@ -235,24 +218,25 @@ export default function HomeScreen(): React.ReactNode {
   };
 
   const handleIntervillageOrder = async (
-    fromId: number,
+    _fromId: number,
     toId: number,
     rt: boolean,
   ): Promise<boolean> => {
+    // from_region_id игнорируется — сервер определяет по GPS.
     const address = await reverseGeocode(location.latitude, location.longitude);
     const before = error;
-    await callTaxi(location.latitude, location.longitude, fromId, toId, address, undefined, rt);
-    // useOrder ставит error на провале; чтобы понять успех — проверяем
-    // что он не изменился (или null остался).
+    await callTaxi(location.latitude, location.longitude, toId, address, undefined, rt);
     return error === before;
   };
 
-  const inVillagePrice =
-    villageId !== null ? priceFor(tariffs, villageId, villageId) : 0;
+  const inVillagePrice = detectedVillage
+    ? priceFor(tariffs, detectedVillage.id, detectedVillage.id)
+    : 0;
   const displayedPrice = isRoundTrip
     ? Math.round(inVillagePrice * (1 + roundTripPct / 100))
     : inVillagePrice;
-  const inVillageTariffMissing = villageReady && villageId !== null && inVillagePrice <= 0;
+  const inVillageTariffMissing =
+    inServiceArea === true && detectedVillage !== null && inVillagePrice <= 0;
 
   const driverCoords =
     state.phase !== 'idle' &&
@@ -264,7 +248,6 @@ export default function HomeScreen(): React.ReactNode {
     Number.isFinite(state.order.driver.longitude)
       ? { latitude: state.order.driver.latitude, longitude: state.order.driver.longitude }
       : null;
-
 
   return (
     <View style={styles.container}>
@@ -317,19 +300,48 @@ export default function HomeScreen(): React.ReactNode {
 
         {state.phase === 'idle' && (
           <>
-            {regions.length === 0 ? (
-              <ActivityIndicator color={ClientColors.primary} style={{ marginVertical: 24 }} />
-            ) : (
+            {/* Лоадер: ждём либо GPS, либо ответа /tariffs */}
+            {(!location.hasRealFix || inServiceArea === null || regions.length === 0) && (
+              <View style={styles.loadingBlock}>
+                <ActivityIndicator color={ClientColors.primary} />
+                <Text style={styles.loadingText}>
+                  {!location.hasRealFix
+                    ? (location.error ?? 'Определяем ваше местоположение…')
+                    : 'Загружаем тарифы…'}
+                </Text>
+              </View>
+            )}
+
+            {/* Вне зоны обслуживания: запрещаем заказ, показываем
+                понятное объяснение. */}
+            {location.hasRealFix && inServiceArea === false && (
+              <View style={styles.serviceUnavailable}>
+                <View style={styles.serviceUnavailableIcon}>
+                  <Icon name="pin" size={28} color={ClientColors.secondaryDark} strokeWidth={2.2} />
+                </View>
+                <Text style={styles.serviceUnavailableTitle}>
+                  Сервис пока недоступен в вашем районе
+                </Text>
+                <Text style={styles.serviceUnavailableBody}>
+                  Мы работаем в Таласе, Кировке и Покровке.
+                  Если вы в одном из этих сёл — проверьте GPS.
+                </Text>
+              </View>
+            )}
+
+            {/* В зоне: основной экран заказа */}
+            {location.hasRealFix && inServiceArea === true && detectedVillage && (
               <>
-                <VillageBadgeSelector
-                  regions={regions}
-                  selectedId={villageId}
-                  onSelect={setVillageId}
-                />
+                <View style={styles.villageBadge}>
+                  <Icon name="pin" size={14} color={ClientColors.primaryDark} strokeWidth={2.4} />
+                  <Text style={styles.villageBadgeLabel}>Вы в:</Text>
+                  <Text style={styles.villageBadgeValue}>{detectedVillage.name}</Text>
+                </View>
+
                 <Text style={styles.greeting}>Куда поедем?</Text>
 
                 <View style={styles.priceCard}>
-                  <Text style={styles.priceCardLabel}>В селе</Text>
+                  <Text style={styles.priceCardLabel}>Внутри села</Text>
                   {inVillageTariffMissing ? (
                     <Text style={styles.priceCardMissing}>Тариф не настроен</Text>
                   ) : (
@@ -354,30 +366,14 @@ export default function HomeScreen(): React.ReactNode {
                     </View>
                   )}
                 </TouchableOpacity>
-                {isRoundTrip && (
-                  <Text style={styles.roundTripHint}>
-                    Водитель ждёт на месте 15-20 минут и везёт обратно
-                  </Text>
-                )}
 
                 <TouchableOpacity
                   style={[
                     styles.heroButton,
-                    (location.loading ||
-                      loading ||
-                      !location.hasRealFix ||
-                      inVillageTariffMissing ||
-                      villageId === null) &&
-                      styles.heroButtonDisabled,
+                    (loading || inVillageTariffMissing) && styles.heroButtonDisabled,
                   ]}
                   onPress={handleInVillageCallTaxi}
-                  disabled={
-                    location.loading ||
-                    loading ||
-                    !location.hasRealFix ||
-                    inVillageTariffMissing ||
-                    villageId === null
-                  }
+                  disabled={loading || inVillageTariffMissing}
                   activeOpacity={0.9}
                 >
                   {loading ? (
@@ -405,25 +401,6 @@ export default function HomeScreen(): React.ReactNode {
                     strokeWidth={2.2}
                   />
                 </TouchableOpacity>
-
-                <View style={styles.helperRow}>
-                  <Icon
-                    name={location.hasRealFix ? 'pin' : 'alert'}
-                    size={13}
-                    color={location.hasRealFix ? ClientColors.textMuted : ClientColors.danger}
-                    strokeWidth={2}
-                  />
-                  <Text
-                    style={[
-                      styles.helperText,
-                      !location.hasRealFix && { color: ClientColors.danger },
-                    ]}
-                  >
-                    {location.hasRealFix
-                      ? 'Подача — ваше текущее местоположение'
-                      : location.error ?? 'Определяем ваше местоположение…'}
-                  </Text>
-                </View>
               </>
             )}
           </>
@@ -478,7 +455,7 @@ export default function HomeScreen(): React.ReactNode {
         regions={regions}
         tariffs={tariffs}
         roundTripPct={roundTripPct}
-        defaultFromId={villageId}
+        defaultFromId={detectedVillage?.id ?? null}
         loading={loading}
         onOrder={handleIntervillageOrder}
       />
@@ -490,7 +467,7 @@ export default function HomeScreen(): React.ReactNode {
               <Icon name="check" size={40} color={ClientColors.white} strokeWidth={2.5} />
             </View>
             <Text style={styles.completedTitle}>Поездка завершена</Text>
-            <Text style={styles.completedSubtitle}>Спасибо, что выбрали Alif Taxi</Text>
+            <Text style={styles.completedSubtitle}>Спасибо, что выбрали AIYL Taxi</Text>
             {state.phase === 'completed' && (
               <View style={styles.completedPriceBlock}>
                 <Text style={styles.completedPriceLabel}>К оплате водителю</Text>
@@ -546,11 +523,71 @@ const styles = StyleSheet.create({
     borderRadius: 3,
     backgroundColor: ClientColors.border,
   },
+  loadingBlock: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 12,
+    paddingVertical: 36,
+  },
+  loadingText: {
+    fontSize: 14,
+    color: ClientColors.textSecondary,
+  },
+  serviceUnavailable: {
+    alignItems: 'center',
+    paddingVertical: 20,
+    paddingHorizontal: 4,
+  },
+  serviceUnavailableIcon: {
+    width: 64,
+    height: 64,
+    borderRadius: 32,
+    backgroundColor: ClientColors.secondaryTint,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 16,
+  },
+  serviceUnavailableTitle: {
+    fontSize: 18,
+    fontWeight: '800' as const,
+    color: ClientColors.dark,
+    textAlign: 'center',
+    marginBottom: 8,
+    letterSpacing: -0.2,
+  },
+  serviceUnavailableBody: {
+    fontSize: 14,
+    color: ClientColors.textSecondary,
+    textAlign: 'center',
+    lineHeight: 20,
+  },
+  villageBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    alignSelf: 'flex-start',
+    backgroundColor: ClientColors.primaryTint,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 999,
+    marginBottom: 10,
+  },
+  villageBadgeLabel: {
+    fontSize: 12,
+    color: ClientColors.primaryDark,
+    fontWeight: '500' as const,
+  },
+  villageBadgeValue: {
+    fontSize: 13,
+    color: ClientColors.primaryDark,
+    fontWeight: '700' as const,
+  },
   greeting: {
-    fontSize: 26,
+    fontSize: 24,
     fontWeight: '700' as const,
     color: ClientColors.dark,
-    marginBottom: 14,
+    marginBottom: 12,
     letterSpacing: -0.3,
   },
   priceCard: {
@@ -566,7 +603,7 @@ const styles = StyleSheet.create({
     fontWeight: '600' as const,
   },
   priceCardValue: {
-    fontSize: 30,
+    fontSize: 28,
     fontWeight: '800' as const,
     color: ClientColors.primaryDark,
     marginTop: 4,
@@ -624,14 +661,6 @@ const styles = StyleSheet.create({
     fontWeight: '700' as const,
     color: ClientColors.white,
   },
-  roundTripHint: {
-    fontSize: 12,
-    color: ClientColors.primaryDark,
-    marginTop: -6,
-    marginBottom: 14,
-    paddingHorizontal: 4,
-    lineHeight: 16,
-  },
   heroButton: {
     backgroundColor: ClientColors.primary,
     borderRadius: 28,
@@ -666,21 +695,9 @@ const styles = StyleSheet.create({
     backgroundColor: ClientColors.secondaryTint,
   },
   intervillageButtonText: {
-    flex: 0,
     fontSize: 15,
     fontWeight: '700' as const,
     color: ClientColors.secondaryDark,
-  },
-  helperRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 6,
-    marginTop: 14,
-  },
-  helperText: {
-    fontSize: 12,
-    color: ClientColors.textMuted,
   },
   errorPill: {
     flexDirection: 'row',

@@ -3,7 +3,6 @@ import { apiClient, Order, PaginatedResponse } from '@taxi/shared';
 export async function createOrder(
   latitude: number,
   longitude: number,
-  fromRegionId: number,
   toRegionId: number,
   address?: string,
   comment?: string,
@@ -12,7 +11,6 @@ export async function createOrder(
   const { data } = await apiClient.post<{ data: Order }>('/api/v1/client/orders', {
     pickup_latitude: latitude,
     pickup_longitude: longitude,
-    from_region_id: fromRegionId,
     to_region_id: toRegionId,
     pickup_address: address,
     client_comment: comment,

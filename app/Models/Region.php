@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Services\GeoService;
 use Carbon\Carbon;
 use Database\Factories\RegionFactory;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
@@ -14,6 +15,8 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
     'name',
     'is_active',
     'sort_order',
+    'center_latitude',
+    'center_longitude',
 ])]
 class Region extends Model
 {
@@ -28,6 +31,8 @@ class Region extends Model
         return [
             'is_active' => 'boolean',
             'sort_order' => 'integer',
+            'center_latitude' => 'decimal:7',
+            'center_longitude' => 'decimal:7',
         ];
     }
 
@@ -60,6 +65,59 @@ class Region extends Model
         $isDay = $time->hour >= 7 && $time->hour <= 20;
 
         return $isDay ? $route->day_price : $route->night_price;
+    }
+
+    /**
+     * Ближайший активный «сервисный» район — у которого заполнены
+     * координаты центра. Если $maxKm задан и ближайший дальше → null
+     * (клиент вне зоны обслуживания).
+     *
+     * Регионы без координат игнорируются: они «только направление»
+     * для межсёлами, в них клиенты не живут.
+     */
+    public static function findNearestByCoordinates(
+        float $latitude,
+        float $longitude,
+        ?float $maxKm = null,
+    ): ?self {
+        $regions = self::active()
+            ->whereNotNull('center_latitude')
+            ->whereNotNull('center_longitude')
+            ->get();
+
+        if ($regions->isEmpty()) {
+            return null;
+        }
+
+        $nearest = null;
+        $nearestDistance = INF;
+        foreach ($regions as $region) {
+            $distance = GeoService::haversineKm(
+                $latitude,
+                $longitude,
+                (float) $region->center_latitude,
+                (float) $region->center_longitude,
+            );
+            if ($distance < $nearestDistance) {
+                $nearest = $region;
+                $nearestDistance = $distance;
+            }
+        }
+
+        if ($maxKm !== null && $nearestDistance > $maxKm) {
+            return null;
+        }
+
+        return $nearest;
+    }
+
+    /**
+     * Радиус геозабора (км) — клиент внутри этой дистанции от центра
+     * района считается «в нём». Берётся из Settings, дефолт 5 км.
+     */
+    public static function detectionMaxKm(): float
+    {
+        return (float) Setting::getValue('district_detection_max_km', '5');
     }
 
     /**

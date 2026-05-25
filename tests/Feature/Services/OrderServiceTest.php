@@ -11,6 +11,7 @@ use App\Models\DriverProfile;
 use App\Models\Order;
 use App\Models\Region;
 use App\Models\RegionRoute;
+use App\Models\Setting;
 use App\Models\User;
 use App\Services\OrderService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -41,13 +42,22 @@ class OrderServiceTest extends TestCase
 
         Event::fake();
         Queue::fake();
+        Setting::updateOrCreate(
+            ['key' => 'district_detection_max_km'],
+            ['value' => '5'],
+        );
 
         $this->service = app(OrderService::class);
         $this->client = User::factory()->create(['role' => UserRole::Client]);
-        // Один район + in-village цена (80 день / 120 ночь). Все тесты
-        // ниже создают заказ внутри этого района — это базовый сценарий;
-        // тесты конкретных межсельных цен живут в DistrictPricingTest.
-        $this->village = Region::factory()->create(['name' => 'TestVillage']);
+        // Сервисный район с центром на pickupLat/pickupLon, чтобы
+        // GPS-определение нашло его. In-village цена 80/120 — все
+        // тесты ниже работают «внутри этого района». Конкретные
+        // межсельные цены живут в DistrictPricingTest.
+        $this->village = Region::factory()->create([
+            'name' => 'TestVillage',
+            'center_latitude' => $this->pickupLat,
+            'center_longitude' => $this->pickupLon,
+        ]);
         RegionRoute::create([
             'from_region_id' => $this->village->id,
             'to_region_id' => $this->village->id,
@@ -62,7 +72,6 @@ class OrderServiceTest extends TestCase
             client: $client ?? $this->client,
             pickupLat: $this->pickupLat,
             pickupLon: $this->pickupLon,
-            fromRegionId: $this->village->id,
             toRegionId: $this->village->id,
         );
     }

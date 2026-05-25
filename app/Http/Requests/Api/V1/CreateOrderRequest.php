@@ -20,10 +20,10 @@ class CreateOrderRequest extends FormRequest
             'pickup_latitude' => ['required', 'numeric', 'between:-90,90'],
             'pickup_longitude' => ['required', 'numeric', 'between:-180,180'],
             'pickup_address' => ['nullable', 'string', 'max:500'],
-            // Откуда + куда — обязательны. Клиент выбирает оба района
-            // в пикерах. from == to ⇒ заказ внутри села; from != to ⇒
-            // межсёлами. Цена берётся из матрицы region_routes.
-            'from_region_id' => ['required', 'integer', 'exists:regions,id'],
+            // from_region_id определяется сервером по GPS (geofence
+            // вокруг центров сервисных районов). Клиент шлёт только
+            // куда: in-village = тот же район что определил сервер,
+            // межсёлами = другой район.
             'to_region_id' => ['required', 'integer', 'exists:regions,id'],
             'dropoff_latitude' => ['nullable', 'numeric', 'between:-90,90'],
             'dropoff_longitude' => ['nullable', 'numeric', 'between:-180,180'],

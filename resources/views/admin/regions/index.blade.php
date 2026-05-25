@@ -47,6 +47,7 @@
                 <thead class="border-b border-gray-200 bg-gray-50 text-xs uppercase tracking-wider text-gray-500">
                     <tr>
                         <th class="px-6 py-3">Название</th>
+                        <th class="px-6 py-3">Зона</th>
                         <th class="px-6 py-3">Статус</th>
                         <th class="px-6 py-3">Порядок</th>
                         <th class="px-6 py-3">Действия</th>
@@ -56,6 +57,13 @@
                     @forelse ($regions as $region)
                         <tr class="hover:bg-gray-50">
                             <td class="whitespace-nowrap px-6 py-4 font-medium text-gray-900">{{ $region->name }}</td>
+                            <td class="whitespace-nowrap px-6 py-4">
+                                @if ($region->center_latitude !== null && $region->center_longitude !== null)
+                                    <span class="inline-flex items-center rounded-full bg-blue-100 px-2.5 py-0.5 text-xs font-medium text-blue-700" title="GPS-определение работает, клиенты в радиусе могут заказывать">Сервисная</span>
+                                @else
+                                    <span class="inline-flex items-center rounded-full bg-gray-100 px-2.5 py-0.5 text-xs font-medium text-gray-600" title="Только как направление в межсёлами">Направление</span>
+                                @endif
+                            </td>
                             <td class="whitespace-nowrap px-6 py-4">
                                 @if ($region->is_active)
                                     <span class="inline-flex items-center rounded-full bg-green-100 px-2.5 py-0.5 text-xs font-medium text-green-700">Активен</span>
@@ -88,7 +96,7 @@
                         </tr>
                     @empty
                         <tr>
-                            <td colspan="4" class="px-6 py-8 text-center text-gray-500">Районов нет.</td>
+                            <td colspan="5" class="px-6 py-8 text-center text-gray-500">Районов нет.</td>
                         </tr>
                     @endforelse
                 </tbody>

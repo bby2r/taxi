@@ -53,6 +53,49 @@
                     @enderror
                 </div>
 
+                {{-- Координаты центра (определяют сервисную зону) --}}
+                <div class="mb-2 mt-2 border-t border-gray-200 pt-4">
+                    <h3 class="mb-1 text-sm font-semibold text-gray-800">Центр района (опционально)</h3>
+                    <p class="mb-4 text-xs text-gray-500">
+                        Заполните для районов где есть наши клиенты — тогда GPS-определение будет работать
+                        и клиенты в радиусе ~5 км смогут заказывать. <strong>Без координат</strong> — район
+                        будет показываться только как направление в межсёлами.
+                    </p>
+                </div>
+
+                <div class="mb-5 grid grid-cols-2 gap-4">
+                    <div>
+                        <label for="center_latitude" class="mb-1.5 block text-sm font-medium text-gray-700">Широта</label>
+                        <input
+                            type="number"
+                            id="center_latitude"
+                            name="center_latitude"
+                            value="{{ old('center_latitude', $region->center_latitude) }}"
+                            step="0.0000001"
+                            placeholder="42.5228"
+                            class="w-full rounded-lg border border-gray-300 px-4 py-2.5 text-sm focus:border-amber-400 focus:ring-2 focus:ring-amber-400"
+                        >
+                        @error('center_latitude')
+                            <p class="mt-1 text-sm text-red-600">{{ $message }}</p>
+                        @enderror
+                    </div>
+                    <div>
+                        <label for="center_longitude" class="mb-1.5 block text-sm font-medium text-gray-700">Долгота</label>
+                        <input
+                            type="number"
+                            id="center_longitude"
+                            name="center_longitude"
+                            value="{{ old('center_longitude', $region->center_longitude) }}"
+                            step="0.0000001"
+                            placeholder="72.2425"
+                            class="w-full rounded-lg border border-gray-300 px-4 py-2.5 text-sm focus:border-amber-400 focus:ring-2 focus:ring-amber-400"
+                        >
+                        @error('center_longitude')
+                            <p class="mt-1 text-sm text-red-600">{{ $message }}</p>
+                        @enderror
+                    </div>
+                </div>
+
                 {{-- Подсказка про матрицу --}}
                 <div class="mb-5 rounded-lg border border-blue-100 bg-blue-50 p-4 text-sm text-blue-900">
                     <p class="font-medium">Цены поездок</p>

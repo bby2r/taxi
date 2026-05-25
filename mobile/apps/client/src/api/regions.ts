@@ -15,14 +15,25 @@ export type TariffRoute = {
 export type TariffSnapshot = {
   routes: TariffRoute[];
   roundTripSurchargePercent: number;
+  detectedVillage: { id: number; name: string } | null;
+  /** null = GPS не передан; true = в зоне; false = вне зоны обслуживания */
+  inServiceArea: boolean | null;
 };
 
 /**
- * Матрица всех цен «откуда → куда». Клиент получает её один раз и
- * вычисляет цену любой пары локально — без сетевого вызова на каждый
- * тап пикера.
+ * Матрица + автоопределение района по GPS. Передаём latitude/longitude
+ * чтобы сервер вернул detectedVillage + inServiceArea. Без GPS придёт
+ * только матрица — клиент должен сам поймать GPS и перезапросить.
  */
-export async function getTariffs(): Promise<TariffSnapshot> {
+export async function getTariffs(
+  latitude?: number,
+  longitude?: number,
+): Promise<TariffSnapshot> {
+  const params: Record<string, number> = {};
+  if (typeof latitude === 'number' && typeof longitude === 'number') {
+    params.latitude = latitude;
+    params.longitude = longitude;
+  }
   const { data } = await apiClient.get<{
     routes: Array<{
       from_region_id: number;
@@ -31,7 +42,9 @@ export async function getTariffs(): Promise<TariffSnapshot> {
       night_price: number;
     }>;
     round_trip_surcharge_percent: number;
-  }>('/api/v1/client/tariffs');
+    detected_village: { id: number; name: string } | null;
+    in_service_area: boolean | null;
+  }>('/api/v1/client/tariffs', { params });
 
   return {
     routes: data.routes.map((r) => ({
@@ -41,6 +54,8 @@ export async function getTariffs(): Promise<TariffSnapshot> {
       nightPrice: r.night_price,
     })),
     roundTripSurchargePercent: data.round_trip_surcharge_percent,
+    detectedVillage: data.detected_village,
+    inServiceArea: data.in_service_area,
   };
 }
 
@@ -59,7 +74,6 @@ export function priceFor(
   );
   if (!route) return 0;
 
-  // Asia/Bishkek = UTC+6. Простое смещение часа достаточно — DST там нет.
   const bishkekHour = (at.getUTCHours() + 6) % 24;
   const isDay = bishkekHour >= 7 && bishkekHour <= 20;
   return isDay ? route.dayPrice : route.nightPrice;

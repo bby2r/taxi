@@ -33,7 +33,6 @@ export interface UseOrderReturn {
   callTaxi: (
     latitude: number,
     longitude: number,
-    fromRegionId: number,
     toRegionId: number,
     address?: string,
     comment?: string,
@@ -259,7 +258,6 @@ export function useOrder(): UseOrderReturn {
     async (
       latitude: number,
       longitude: number,
-      fromRegionId: number,
       toRegionId: number,
       address?: string,
       comment?: string,
@@ -271,7 +269,6 @@ export function useOrder(): UseOrderReturn {
         const order = await ordersApi.createOrder(
           latitude,
           longitude,
-          fromRegionId,
           toRegionId,
           address,
           comment,
