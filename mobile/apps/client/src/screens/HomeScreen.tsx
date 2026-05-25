@@ -95,10 +95,11 @@ function PulsingDot({ size = 14 }: { size?: number }): React.ReactNode {
 }
 
 /**
- * «Вы здесь» маркер для карты — бирюзовая точка с пульсирующим
- * кольцом вокруг (как у Google Maps blue dot, только в нашем цвете).
- * Привлекает внимание, легко узнаётся как «вот это я».
- * Сверху плашка с названием села (или «Вне зоны» если outOfZone=true).
+ * «Вы здесь» — статичный маркер. Animated.View внутри Marker ломает
+ * перетаскивание на Android (react-native-maps кэширует bitmap, и
+ * постоянные ререндеры от анимации делают hit-testing ненадёжным).
+ * Drag важнее визуального пульса, поэтому маркер фиксированный:
+ * бирюзовый круг с белой каймой и точкой внутри, тултип сверху.
  */
 function UserLocationMarker({
   label,
@@ -107,44 +108,6 @@ function UserLocationMarker({
   label?: string;
   outOfZone?: boolean;
 }): React.ReactNode {
-  const pulseScale = useRef(new Animated.Value(1)).current;
-  const pulseOpacity = useRef(new Animated.Value(0.6)).current;
-
-  useEffect(() => {
-    const loop = Animated.loop(
-      Animated.parallel([
-        Animated.sequence([
-          Animated.timing(pulseScale, {
-            toValue: 2.4,
-            duration: 1400,
-            easing: Easing.out(Easing.ease),
-            useNativeDriver: true,
-          }),
-          Animated.timing(pulseScale, {
-            toValue: 1,
-            duration: 0,
-            useNativeDriver: true,
-          }),
-        ]),
-        Animated.sequence([
-          Animated.timing(pulseOpacity, {
-            toValue: 0,
-            duration: 1400,
-            easing: Easing.out(Easing.ease),
-            useNativeDriver: true,
-          }),
-          Animated.timing(pulseOpacity, {
-            toValue: 0.6,
-            duration: 0,
-            useNativeDriver: true,
-          }),
-        ]),
-      ]),
-    );
-    loop.start();
-    return () => loop.stop();
-  }, [pulseScale, pulseOpacity]);
-
   return (
     <View style={userMarkerStyles.wrapper}>
       {(label || outOfZone) && (
@@ -159,16 +122,8 @@ function UserLocationMarker({
           </Text>
         </View>
       )}
-      <View style={userMarkerStyles.dotWrapper}>
-        <Animated.View
-          style={[
-            userMarkerStyles.pulse,
-            { transform: [{ scale: pulseScale }], opacity: pulseOpacity },
-          ]}
-        />
-        <View style={userMarkerStyles.outer}>
-          <View style={userMarkerStyles.inner} />
-        </View>
+      <View style={userMarkerStyles.outer}>
+        <View style={userMarkerStyles.inner} />
       </View>
     </View>
   );
@@ -177,20 +132,13 @@ function UserLocationMarker({
 const userMarkerStyles = StyleSheet.create({
   wrapper: {
     alignItems: 'center',
-    justifyContent: 'center',
-  },
-  dotWrapper: {
-    width: 80,
-    height: 80,
-    alignItems: 'center',
-    justifyContent: 'center',
   },
   tooltip: {
     backgroundColor: 'rgba(30, 27, 46, 0.92)',
     paddingHorizontal: 12,
     paddingVertical: 6,
     borderRadius: 14,
-    marginBottom: -8,
+    marginBottom: 6,
     shadowColor: '#000',
     shadowOpacity: 0.3,
     shadowRadius: 4,
@@ -205,17 +153,10 @@ const userMarkerStyles = StyleSheet.create({
     fontWeight: '700' as const,
     color: ClientColors.white,
   },
-  pulse: {
-    position: 'absolute',
-    width: 32,
-    height: 32,
-    borderRadius: 16,
-    backgroundColor: ClientColors.primary,
-  },
   outer: {
-    width: 28,
-    height: 28,
-    borderRadius: 14,
+    width: 30,
+    height: 30,
+    borderRadius: 15,
     backgroundColor: ClientColors.primary,
     borderWidth: 4,
     borderColor: ClientColors.white,
@@ -260,6 +201,18 @@ export default function HomeScreen(): React.ReactNode {
       setPickupCoord({ lat: location.latitude, lng: location.longitude });
     }
   }, [pinDragged, location.hasRealFix, location.latitude, location.longitude]);
+
+  // tracksViewChanges=true позволяет marker обновить свой bitmap при
+  // изменении содержимого (например когда detected_village пришёл и
+  // тултип нужно обновить). Но непрерывный true ломает drag на
+  // Android. Поэтому: включаем на короткое время после изменений,
+  // затем выключаем чтобы drag работал.
+  const [tracksMarkerChanges, setTracksMarkerChanges] = useState(true);
+  useEffect(() => {
+    setTracksMarkerChanges(true);
+    const t = setTimeout(() => setTracksMarkerChanges(false), 800);
+    return () => clearTimeout(t);
+  }, [detectedVillage?.id, inServiceArea]);
 
   // На первом реальном GPS-fix центрируем карту на пользователе.
   // initialRegion — статика, ставится один раз с дефолтным Бишкеком
@@ -570,9 +523,13 @@ export default function HomeScreen(): React.ReactNode {
                 ? { latitude: pickupCoord.lat, longitude: pickupCoord.lng }
                 : { latitude: location.latitude, longitude: location.longitude }
             }
-            anchor={{ x: 0.5, y: 0.5 }}
+            anchor={{ x: 0.5, y: 1 }}
             draggable={state.phase === 'idle' && location.hasRealFix}
             onDragEnd={handlePinDragEnd}
+            // Управляется хуком — true на 800ms после изменения
+            // detected_village/inServiceArea (чтобы тултип обновился),
+            // затем false для надёжного drag на Android.
+            tracksViewChanges={tracksMarkerChanges}
           >
             <UserLocationMarker
               label={detectedVillage?.name}
