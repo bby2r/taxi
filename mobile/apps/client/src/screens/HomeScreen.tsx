@@ -22,8 +22,13 @@ import MapView, { Region as MapRegion, Marker, MarkerDragStartEndEvent } from 'r
 // snapTo каждый раз новый, и useEffect авто-разворота фигачит animation
 // на каждый ререндер → видимый дёрг при свайпе.
 const SCREEN_HEIGHT = Dimensions.get('window').height;
-const PEEK_HEIGHT = 130;
-const EXPANDED_HEIGHT = Math.min(SCREEN_HEIGHT * 0.62, 560);
+const PEEK_HEIGHT = 90;
+// EXPANDED_HEIGHT подобран по реальному содержимому idle-фазы (peek
+// header + greeting + price + round-trip + hero + межсёлами + padding).
+// Если контент в каких-то фазах будет больше — увеличим. Сейчас под
+// заказа idle экран это ~430px, в остальных фазах меньше → пустое
+// место снизу некритично.
+const EXPANDED_HEIGHT = Math.min(SCREEN_HEIGHT * 0.55, 470);
 const COLLAPSE_OFFSET = EXPANDED_HEIGHT - PEEK_HEIGHT;
 
 // Тёмная карта в стиле WB Такси / Yandex Go night mode. Чёрно-серый
@@ -689,7 +694,7 @@ const styles = StyleSheet.create({
     borderTopLeftRadius: 32,
     borderTopRightRadius: 32,
     paddingHorizontal: 24,
-    paddingBottom: 36,
+    paddingBottom: 24,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: -4 },
     shadowOpacity: 0.12,
