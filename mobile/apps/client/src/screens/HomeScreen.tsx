@@ -23,11 +23,11 @@ import MapView, { Region as MapRegion, Marker, MarkerDragStartEndEvent } from 'r
 // на каждый ререндер → видимый дёрг при свайпе.
 const SCREEN_HEIGHT = Dimensions.get('window').height;
 const PEEK_HEIGHT = 90;
-// EXPANDED_HEIGHT строго подогнан под реальный контент idle-фазы:
+// EXPANDED_HEIGHT под реальный контент idle-фазы + небольшой запас:
 // peek header (63) + greeting (38) + priceCard (78) + roundTrip (54) +
-// hero button (60) + межсёлами (62) + paddingBottom (24) ≈ 380px.
-// Для других фаз меньше — пустота снизу некритична.
-const EXPANDED_HEIGHT = Math.min(SCREEN_HEIGHT * 0.5, 395);
+// hero button (60) + межсёлами (62) + paddingBottom (24) ≈ 380px +
+// ~45px воздуха снизу чтобы кнопки не упирались в край шторки.
+const EXPANDED_HEIGHT = Math.min(SCREEN_HEIGHT * 0.52, 425);
 const COLLAPSE_OFFSET = EXPANDED_HEIGHT - PEEK_HEIGHT;
 
 // Тёмная карта в стиле WB Такси / Yandex Go night mode. Чёрно-серый
@@ -265,8 +265,9 @@ export default function HomeScreen(): React.ReactNode {
     if (location.hasRealFix) {
       setPickupCoord({ lat: location.latitude, lng: location.longitude });
       setPinDragged(false);
-      // Street-level zoom (delta 0.004 ≈ ~400-500 м) — клиент видит
-      // свой дом и пару кварталов вокруг, а не весь город.
+      // Street-level zoom (delta 0.004 ≈ ~400-500 м). mapPadding.bottom
+      // уже учитывает шторку, поэтому центрирование автоматически
+      // ставит точку в видимой части экрана выше peek-области.
       mapRef.current?.animateToRegion(
         {
           latitude: location.latitude,
@@ -527,7 +528,10 @@ export default function HomeScreen(): React.ReactNode {
         mapPadding={{
           top: Platform.OS === 'android' ? (StatusBar.currentHeight ?? 40) + 8 : 0,
           right: 0,
-          bottom: 0,
+          // Резервируем PEEK_HEIGHT снизу — map центрирует точку
+          // пользователя в видимой части (над пик-шторкой), а не в
+          // геометрическом центре экрана где её закрывает шторка.
+          bottom: PEEK_HEIGHT,
           left: 0,
         }}
       >
