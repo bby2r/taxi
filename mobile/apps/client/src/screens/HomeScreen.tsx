@@ -23,12 +23,11 @@ import MapView, { Region as MapRegion, Marker, MarkerDragStartEndEvent } from 'r
 // на каждый ререндер → видимый дёрг при свайпе.
 const SCREEN_HEIGHT = Dimensions.get('window').height;
 const PEEK_HEIGHT = 90;
-// EXPANDED_HEIGHT подобран по реальному содержимому idle-фазы (peek
-// header + greeting + price + round-trip + hero + межсёлами + padding).
-// Если контент в каких-то фазах будет больше — увеличим. Сейчас под
-// заказа idle экран это ~430px, в остальных фазах меньше → пустое
-// место снизу некритично.
-const EXPANDED_HEIGHT = Math.min(SCREEN_HEIGHT * 0.55, 470);
+// EXPANDED_HEIGHT строго подогнан под реальный контент idle-фазы:
+// peek header (63) + greeting (38) + priceCard (78) + roundTrip (54) +
+// hero button (60) + межсёлами (62) + paddingBottom (24) ≈ 380px.
+// Для других фаз меньше — пустота снизу некритична.
+const EXPANDED_HEIGHT = Math.min(SCREEN_HEIGHT * 0.5, 395);
 const COLLAPSE_OFFSET = EXPANDED_HEIGHT - PEEK_HEIGHT;
 
 // Тёмная карта в стиле WB Такси / Yandex Go night mode. Чёрно-серый
@@ -94,6 +93,147 @@ function PulsingDot({ size = 14 }: { size?: number }): React.ReactNode {
     />
   );
 }
+
+/**
+ * «Вы здесь» маркер для карты — бирюзовая точка с пульсирующим
+ * кольцом вокруг (как у Google Maps blue dot, только в нашем цвете).
+ * Привлекает внимание, легко узнаётся как «вот это я».
+ * Сверху плашка с названием села (или «Вне зоны» если outOfZone=true).
+ */
+function UserLocationMarker({
+  label,
+  outOfZone = false,
+}: {
+  label?: string;
+  outOfZone?: boolean;
+}): React.ReactNode {
+  const pulseScale = useRef(new Animated.Value(1)).current;
+  const pulseOpacity = useRef(new Animated.Value(0.6)).current;
+
+  useEffect(() => {
+    const loop = Animated.loop(
+      Animated.parallel([
+        Animated.sequence([
+          Animated.timing(pulseScale, {
+            toValue: 2.4,
+            duration: 1400,
+            easing: Easing.out(Easing.ease),
+            useNativeDriver: true,
+          }),
+          Animated.timing(pulseScale, {
+            toValue: 1,
+            duration: 0,
+            useNativeDriver: true,
+          }),
+        ]),
+        Animated.sequence([
+          Animated.timing(pulseOpacity, {
+            toValue: 0,
+            duration: 1400,
+            easing: Easing.out(Easing.ease),
+            useNativeDriver: true,
+          }),
+          Animated.timing(pulseOpacity, {
+            toValue: 0.6,
+            duration: 0,
+            useNativeDriver: true,
+          }),
+        ]),
+      ]),
+    );
+    loop.start();
+    return () => loop.stop();
+  }, [pulseScale, pulseOpacity]);
+
+  return (
+    <View style={userMarkerStyles.wrapper}>
+      {(label || outOfZone) && (
+        <View
+          style={[
+            userMarkerStyles.tooltip,
+            outOfZone && userMarkerStyles.tooltipWarn,
+          ]}
+        >
+          <Text style={userMarkerStyles.tooltipText}>
+            {outOfZone ? 'Вне зоны' : `Вы в: ${label}`}
+          </Text>
+        </View>
+      )}
+      <View style={userMarkerStyles.dotWrapper}>
+        <Animated.View
+          style={[
+            userMarkerStyles.pulse,
+            { transform: [{ scale: pulseScale }], opacity: pulseOpacity },
+          ]}
+        />
+        <View style={userMarkerStyles.outer}>
+          <View style={userMarkerStyles.inner} />
+        </View>
+      </View>
+    </View>
+  );
+}
+
+const userMarkerStyles = StyleSheet.create({
+  wrapper: {
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  dotWrapper: {
+    width: 80,
+    height: 80,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  tooltip: {
+    backgroundColor: 'rgba(30, 27, 46, 0.92)',
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 14,
+    marginBottom: -8,
+    shadowColor: '#000',
+    shadowOpacity: 0.3,
+    shadowRadius: 4,
+    shadowOffset: { width: 0, height: 2 },
+    elevation: 4,
+  },
+  tooltipWarn: {
+    backgroundColor: 'rgba(204, 84, 84, 0.95)',
+  },
+  tooltipText: {
+    fontSize: 12,
+    fontWeight: '700' as const,
+    color: ClientColors.white,
+  },
+  pulse: {
+    position: 'absolute',
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: ClientColors.primary,
+  },
+  outer: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    backgroundColor: ClientColors.primary,
+    borderWidth: 4,
+    borderColor: ClientColors.white,
+    alignItems: 'center',
+    justifyContent: 'center',
+    shadowColor: '#000',
+    shadowOpacity: 0.4,
+    shadowRadius: 6,
+    shadowOffset: { width: 0, height: 2 },
+    elevation: 6,
+  },
+  inner: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    backgroundColor: ClientColors.white,
+  },
+});
 
 export default function HomeScreen(): React.ReactNode {
   const location = useLocation();
@@ -391,44 +531,28 @@ export default function HomeScreen(): React.ReactNode {
           left: 0,
         }}
       >
-        {pickupCoord && (
+        {/* Маркер «вы здесь» с пульсом. Рендерится с момента когда
+            у location есть хоть какие-то координаты (включая default
+            Бишкек до получения реального fix) — чтобы пользователь
+            видел метку сразу при открытии и понимал что она
+            интерактивная. Draggable только в idle и только после
+            реального GPS-fix чтобы клиент не перетаскивал случайно
+            пин «бишкек по умолчанию». */}
+        {(pickupCoord || location.hasRealFix) && (
           <Marker
-            coordinate={{ latitude: pickupCoord.lat, longitude: pickupCoord.lng }}
-            anchor={{ x: 0.5, y: 1 }}
-            draggable={state.phase === 'idle'}
+            coordinate={
+              pickupCoord
+                ? { latitude: pickupCoord.lat, longitude: pickupCoord.lng }
+                : { latitude: location.latitude, longitude: location.longitude }
+            }
+            anchor={{ x: 0.5, y: 0.5 }}
+            draggable={state.phase === 'idle' && location.hasRealFix}
             onDragEnd={handlePinDragEnd}
-            tracksViewChanges={false}
           >
-            <View style={styles.pickupPinWrapper}>
-              {detectedVillage && (
-                <View
-                  style={[
-                    styles.pickupTooltip,
-                    inServiceArea === false && styles.pickupTooltipWarn,
-                  ]}
-                >
-                  <Text
-                    style={[
-                      styles.pickupTooltipText,
-                      inServiceArea === false && styles.pickupTooltipTextWarn,
-                    ]}
-                  >
-                    Вы в: <Text style={{ fontWeight: '800' }}>{detectedVillage.name}</Text>
-                  </Text>
-                </View>
-              )}
-              {!detectedVillage && inServiceArea === false && (
-                <View style={[styles.pickupTooltip, styles.pickupTooltipWarn]}>
-                  <Text style={[styles.pickupTooltipText, styles.pickupTooltipTextWarn]}>
-                    Вне зоны
-                  </Text>
-                </View>
-              )}
-              <View style={styles.pickupPin}>
-                <View style={styles.pickupPinDot} />
-              </View>
-              <View style={styles.pickupPinTail} />
-            </View>
+            <UserLocationMarker
+              label={detectedVillage?.name}
+              outOfZone={inServiceArea === false}
+            />
           </Marker>
         )}
         {driverCoords && (
@@ -936,60 +1060,6 @@ const styles = StyleSheet.create({
   errorText: {
     color: ClientColors.danger,
     flex: 1,
-  },
-  // Pickup pin (drag-handle на карте)
-  pickupPinWrapper: {
-    alignItems: 'center',
-  },
-  pickupTooltip: {
-    backgroundColor: 'rgba(30, 27, 46, 0.92)',
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 14,
-    marginBottom: 6,
-  },
-  pickupTooltipWarn: {
-    backgroundColor: 'rgba(204, 84, 84, 0.92)',
-  },
-  pickupTooltipText: {
-    fontSize: 12,
-    fontWeight: '600' as const,
-    color: ClientColors.white,
-  },
-  pickupTooltipTextWarn: {
-    color: ClientColors.white,
-  },
-  pickupPin: {
-    width: 28,
-    height: 28,
-    borderRadius: 14,
-    backgroundColor: ClientColors.primary,
-    borderWidth: 3,
-    borderColor: ClientColors.white,
-    alignItems: 'center',
-    justifyContent: 'center',
-    shadowColor: '#000',
-    shadowOpacity: 0.25,
-    shadowRadius: 4,
-    shadowOffset: { width: 0, height: 2 },
-    elevation: 4,
-  },
-  pickupPinDot: {
-    width: 8,
-    height: 8,
-    borderRadius: 4,
-    backgroundColor: ClientColors.white,
-  },
-  pickupPinTail: {
-    width: 0,
-    height: 0,
-    borderLeftWidth: 6,
-    borderRightWidth: 6,
-    borderTopWidth: 8,
-    borderLeftColor: 'transparent',
-    borderRightColor: 'transparent',
-    borderTopColor: ClientColors.primary,
-    marginTop: -2,
   },
   // «Моя локация» FAB — приклеен к верхней грани шторки
   myLocationFab: {
