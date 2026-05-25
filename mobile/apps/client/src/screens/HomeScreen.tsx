@@ -261,6 +261,27 @@ export default function HomeScreen(): React.ReactNode {
     }
   }, [pinDragged, location.hasRealFix, location.latitude, location.longitude]);
 
+  // На первом реальном GPS-fix центрируем карту на пользователе.
+  // initialRegion — статика, ставится один раз с дефолтным Бишкеком
+  // (42.87/74.59) пока GPS не пришёл. Без этого эффекта карта так
+  // и остаётся на Бишкеке, а маркер пользователя оказывается
+  // за пределами видимой области.
+  const initialCenterDoneRef = useRef(false);
+  useEffect(() => {
+    if (location.hasRealFix && !initialCenterDoneRef.current) {
+      initialCenterDoneRef.current = true;
+      mapRef.current?.animateToRegion(
+        {
+          latitude: location.latitude,
+          longitude: location.longitude,
+          latitudeDelta: 0.004,
+          longitudeDelta: 0.004,
+        },
+        400,
+      );
+    }
+  }, [location.hasRealFix, location.latitude, location.longitude]);
+
   const resetPinToGps = useCallback(() => {
     if (location.hasRealFix) {
       setPickupCoord({ lat: location.latitude, lng: location.longitude });
