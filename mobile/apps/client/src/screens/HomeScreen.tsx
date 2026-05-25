@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect, useCallback } from 'react';
+import React, { useState, useRef, useEffect, useCallback, useMemo } from 'react';
 import { useFocusEffect } from '@react-navigation/native';
 import {
   Alert,
@@ -12,6 +12,8 @@ import {
   Platform,
   StatusBar,
   TouchableOpacity,
+  Dimensions,
+  PanResponder,
 } from 'react-native';
 import MapView, { Region as MapRegion } from 'react-native-maps';
 import { useLocation, ActionButton, ClientColors, Typography, reverseGeocode, Region } from '@taxi/shared';
@@ -82,7 +84,74 @@ export default function HomeScreen(): React.ReactNode {
   const [roundTripPct, setRoundTripPct] = useState<number>(70);
   const [isRoundTrip, setIsRoundTrip] = useState(false);
   const [intervillageOpen, setIntervillageOpen] = useState(false);
-  const cardAnim = useRef(new Animated.Value(0)).current;
+
+  // Bottom-sheet с двумя снап-позициями. Карточка фиксированной
+  // высоты EXPANDED_HEIGHT; translateY сдвигает её вниз чтобы
+  // «свернуть» так, чтобы из-под низа торчало только PEEK_HEIGHT
+  // (хэндл + подсказка). Свайп вверх/вниз на хэндле управляет
+  // позицией, отпускание снапит к ближайшей с учётом скорости.
+  const SCREEN_HEIGHT = Dimensions.get('window').height;
+  const PEEK_HEIGHT = 130;
+  const EXPANDED_HEIGHT = Math.min(SCREEN_HEIGHT * 0.62, 560);
+  const COLLAPSE_OFFSET = EXPANDED_HEIGHT - PEEK_HEIGHT;
+  const translateY = useRef(new Animated.Value(COLLAPSE_OFFSET)).current;
+  const lastSnapRef = useRef<'peek' | 'expanded'>('peek');
+
+  const snapTo = useCallback(
+    (target: 'peek' | 'expanded') => {
+      lastSnapRef.current = target;
+      Animated.spring(translateY, {
+        toValue: target === 'peek' ? COLLAPSE_OFFSET : 0,
+        useNativeDriver: true,
+        damping: 22,
+        stiffness: 200,
+        mass: 0.9,
+      }).start();
+    },
+    [translateY, COLLAPSE_OFFSET],
+  );
+
+  // PanResponder ловит вертикальный жест на хэндл-зоне сверху
+  // карточки. Только активные жесты с минимальной амплитудой,
+  // чтобы не воровать тапы у кнопок ниже.
+  const panResponder = useMemo(
+    () =>
+      PanResponder.create({
+        onMoveShouldSetPanResponder: (_, g) => Math.abs(g.dy) > 6,
+        onPanResponderGrant: () => {
+          translateY.stopAnimation((current) => {
+            translateY.setOffset(current);
+            translateY.setValue(0);
+          });
+        },
+        onPanResponderMove: (_, g) => {
+          // Clamp в [0, COLLAPSE_OFFSET]: на этих границах сопротивление,
+          // чтобы пользователь чувствовал «стену» а не уползание карточки
+          // за экран.
+          const offset = (translateY as Animated.Value & { _offset?: number })._offset ?? 0;
+          const target = Math.max(-offset, Math.min(COLLAPSE_OFFSET - offset, g.dy));
+          translateY.setValue(target);
+        },
+        onPanResponderRelease: (_, g) => {
+          translateY.flattenOffset();
+          // Снап с учётом скорости: если жест быстрый (>0.5 px/ms),
+          // двигаемся в его направлении; иначе — к ближайшей точке.
+          const current = (translateY as Animated.Value & { _value: number })._value;
+          let target: 'peek' | 'expanded';
+          if (Math.abs(g.vy) > 0.5) {
+            target = g.vy > 0 ? 'peek' : 'expanded';
+          } else {
+            target = current > COLLAPSE_OFFSET / 2 ? 'peek' : 'expanded';
+          }
+          snapTo(target);
+        },
+        onPanResponderTerminate: () => {
+          translateY.flattenOffset();
+          snapTo(lastSnapRef.current);
+        },
+      }),
+    [translateY, COLLAPSE_OFFSET, snapTo],
+  );
 
   // «Моё село» — id района проживания, хранится в SecureStore. Это
   // и есть from для one-tap «Заказ внутри села», и дефолт «Откуда» в
@@ -102,14 +171,21 @@ export default function HomeScreen(): React.ReactNode {
     }, []),
   );
 
+  // На монтировании карточка проявляется в expanded — пользователь
+  // сразу видит кнопку заказа. Дальше может свернуть свайпом.
   useEffect(() => {
-    Animated.timing(cardAnim, {
-      toValue: 1,
-      duration: 420,
-      easing: Easing.out(Easing.cubic),
-      useNativeDriver: true,
-    }).start();
-  }, [cardAnim]);
+    snapTo('expanded');
+  }, [snapTo]);
+
+  // Когда диспетчер находит водителя / он приезжает / клиент
+  // отменяет заказ — авто-разворачиваем шторку, чтобы важный
+  // контент (DriverCard, кнопка «Отменить», банер «отменён»)
+  // не остался скрыт под низом экрана.
+  useEffect(() => {
+    if (state.phase !== 'idle') {
+      snapTo('expanded');
+    }
+  }, [state.phase, snapTo]);
 
   const initialRegion: MapRegion = {
     latitude: location.latitude,
@@ -181,10 +257,6 @@ export default function HomeScreen(): React.ReactNode {
       ? { latitude: state.order.driver.latitude, longitude: state.order.driver.longitude }
       : null;
 
-  const cardTranslate = cardAnim.interpolate({
-    inputRange: [0, 1],
-    outputRange: [80, 0],
-  });
 
   return (
     <View style={styles.container}>
@@ -218,9 +290,14 @@ export default function HomeScreen(): React.ReactNode {
       )}
 
       <Animated.View
-        style={[styles.bottomCard, { transform: [{ translateY: cardTranslate }] }]}
+        style={[
+          styles.bottomCard,
+          { height: EXPANDED_HEIGHT, transform: [{ translateY }] },
+        ]}
       >
-        <View style={styles.handle} />
+        <View {...panResponder.panHandlers} style={styles.handleZone}>
+          <View style={styles.handle} />
+        </View>
 
         {error && (
           <View style={styles.errorPill}>
@@ -440,21 +517,25 @@ const styles = StyleSheet.create({
     borderTopLeftRadius: 32,
     borderTopRightRadius: 32,
     paddingHorizontal: 24,
-    paddingTop: 14,
     paddingBottom: 36,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: -4 },
     shadowOpacity: 0.12,
     shadowRadius: 16,
     elevation: 12,
+    overflow: 'hidden',
+  },
+  handleZone: {
+    paddingTop: 10,
+    paddingBottom: 8,
+    marginHorizontal: -24,
+    alignItems: 'center',
   },
   handle: {
     width: 44,
-    height: 4,
-    borderRadius: 2,
+    height: 5,
+    borderRadius: 3,
     backgroundColor: ClientColors.border,
-    alignSelf: 'center',
-    marginBottom: 14,
   },
   greeting: {
     fontSize: 26,
