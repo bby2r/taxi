@@ -17,6 +17,15 @@ import {
 } from 'react-native';
 import MapView, { Region as MapRegion, Marker, MarkerDragStartEndEvent } from 'react-native-maps';
 
+// Снап-константы шторки. Вынесены за компонент — иначе пересчёт на
+// каждый рендер делает их новые reference identity, useCallback вокруг
+// snapTo каждый раз новый, и useEffect авто-разворота фигачит animation
+// на каждый ререндер → видимый дёрг при свайпе.
+const SCREEN_HEIGHT = Dimensions.get('window').height;
+const PEEK_HEIGHT = 130;
+const EXPANDED_HEIGHT = Math.min(SCREEN_HEIGHT * 0.62, 560);
+const COLLAPSE_OFFSET = EXPANDED_HEIGHT - PEEK_HEIGHT;
+
 // Тёмная карта в стиле WB Такси / Yandex Go night mode. Чёрно-серый
 // фон, контуры улиц приглушённые — наша бирюзовая метка подачи
 // и водительский маркер сразу выделяются. Стиль сжатый, ровно
@@ -111,23 +120,20 @@ export default function HomeScreen(): React.ReactNode {
     if (location.hasRealFix) {
       setPickupCoord({ lat: location.latitude, lng: location.longitude });
       setPinDragged(false);
+      // Street-level zoom (delta 0.004 ≈ ~400-500 м) — клиент видит
+      // свой дом и пару кварталов вокруг, а не весь город.
       mapRef.current?.animateToRegion(
         {
           latitude: location.latitude,
           longitude: location.longitude,
-          latitudeDelta: 0.015,
-          longitudeDelta: 0.015,
+          latitudeDelta: 0.004,
+          longitudeDelta: 0.004,
         },
         400,
       );
     }
   }, [location.hasRealFix, location.latitude, location.longitude]);
 
-  // Bottom-sheet snap-positions.
-  const SCREEN_HEIGHT = Dimensions.get('window').height;
-  const PEEK_HEIGHT = 130;
-  const EXPANDED_HEIGHT = Math.min(SCREEN_HEIGHT * 0.62, 560);
-  const COLLAPSE_OFFSET = EXPANDED_HEIGHT - PEEK_HEIGHT;
   const translateY = useRef(new Animated.Value(COLLAPSE_OFFSET)).current;
   const lastSnapRef = useRef<'peek' | 'expanded'>('peek');
 
@@ -142,7 +148,7 @@ export default function HomeScreen(): React.ReactNode {
         mass: 0.9,
       }).start();
     },
-    [translateY, COLLAPSE_OFFSET],
+    [translateY],
   );
 
   const togglePeek = useCallback(() => {
@@ -182,7 +188,7 @@ export default function HomeScreen(): React.ReactNode {
           snapTo(lastSnapRef.current);
         },
       }),
-    [translateY, COLLAPSE_OFFSET, snapTo],
+    [translateY, snapTo],
   );
 
   // Тарифы + определение района по pickupCoord (а не location).
@@ -217,8 +223,8 @@ export default function HomeScreen(): React.ReactNode {
   const initialRegion: MapRegion = {
     latitude: location.latitude,
     longitude: location.longitude,
-    latitudeDelta: 0.015,
-    longitudeDelta: 0.015,
+    latitudeDelta: 0.006,
+    longitudeDelta: 0.006,
   };
 
   const confirmRoundTripIfNeeded = (): Promise<boolean> => {
@@ -425,16 +431,28 @@ export default function HomeScreen(): React.ReactNode {
         )}
       </MapView>
 
-      {/* «К моему GPS» — показываем когда метка перетащена */}
-      {pinDragged && location.hasRealFix && (
-        <TouchableOpacity
-          style={styles.resetGpsButton}
-          onPress={resetPinToGps}
-          activeOpacity={0.85}
+      {/* «Моя локация» FAB — приклеен к верхнему краю шторки. Тот
+          же translateY двигает кнопку вместе со шторкой при свайпе,
+          поэтому она всегда сидит чуть выше границы. Тап = центрирует
+          карту на GPS + возвращает метку подачи на GPS. */}
+      {location.hasRealFix && (
+        <Animated.View
+          pointerEvents="box-none"
+          style={[
+            styles.myLocationFab,
+            { bottom: EXPANDED_HEIGHT + 16, transform: [{ translateY }] },
+          ]}
         >
-          <Icon name="pin" size={18} color={ClientColors.primary} strokeWidth={2.4} />
-          <Text style={styles.resetGpsText}>К моему GPS</Text>
-        </TouchableOpacity>
+          <TouchableOpacity
+            style={styles.myLocationFabInner}
+            onPress={resetPinToGps}
+            activeOpacity={0.85}
+            accessibilityRole="button"
+            accessibilityLabel="Показать моё местоположение"
+          >
+            <Icon name="pin" size={22} color={ClientColors.primary} strokeWidth={2.4} />
+          </TouchableOpacity>
+        </Animated.View>
       )}
 
       {state.phase === 'cancelled' && (
@@ -968,28 +986,24 @@ const styles = StyleSheet.create({
     borderTopColor: ClientColors.primary,
     marginTop: -2,
   },
-  // «К моему GPS» FAB
-  resetGpsButton: {
+  // «Моя локация» FAB — приклеен к верхней грани шторки
+  myLocationFab: {
     position: 'absolute',
-    top: Platform.OS === 'android' ? (StatusBar.currentHeight ?? 40) + 16 : 60,
     right: 16,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-    backgroundColor: ClientColors.white,
-    paddingHorizontal: 14,
-    paddingVertical: 10,
-    borderRadius: 24,
-    shadowColor: '#000',
-    shadowOpacity: 0.2,
-    shadowRadius: 8,
-    shadowOffset: { width: 0, height: 4 },
-    elevation: 6,
+    alignItems: 'flex-end',
   },
-  resetGpsText: {
-    fontSize: 13,
-    fontWeight: '700' as const,
-    color: ClientColors.primary,
+  myLocationFabInner: {
+    width: 52,
+    height: 52,
+    borderRadius: 26,
+    backgroundColor: ClientColors.white,
+    alignItems: 'center',
+    justifyContent: 'center',
+    shadowColor: '#000',
+    shadowOpacity: 0.22,
+    shadowRadius: 10,
+    shadowOffset: { width: 0, height: 4 },
+    elevation: 7,
   },
   modalOverlay: {
     flex: 1,
