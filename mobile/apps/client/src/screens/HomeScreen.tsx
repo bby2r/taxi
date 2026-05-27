@@ -95,68 +95,24 @@ function PulsingDot({ size = 14 }: { size?: number }): React.ReactNode {
 }
 
 /**
- * «Вы здесь» — статичный маркер. Animated.View внутри Marker ломает
- * перетаскивание на Android (react-native-maps кэширует bitmap, и
- * постоянные ререндеры от анимации делают hit-testing ненадёжным).
- * Drag важнее визуального пульса, поэтому маркер фиксированный:
- * бирюзовый круг с белой каймой и точкой внутри, тултип сверху.
+ * Метка подачи такси — крупная бирюзовая точка с белой каймой.
+ * Без тултипа (название села показывается в peek-баре шторки).
+ * Drag-friendly: фиксированный размер, без анимаций, hit-target
+ * 40x40 px — легко зацепить пальцем.
  */
-function UserLocationMarker({
-  label,
-  outOfZone = false,
-}: {
-  label?: string;
-  outOfZone?: boolean;
-}): React.ReactNode {
+function PickupPinMarker(): React.ReactNode {
   return (
-    <View style={userMarkerStyles.wrapper}>
-      {(label || outOfZone) && (
-        <View
-          style={[
-            userMarkerStyles.tooltip,
-            outOfZone && userMarkerStyles.tooltipWarn,
-          ]}
-        >
-          <Text style={userMarkerStyles.tooltipText}>
-            {outOfZone ? 'Вне зоны' : `Вы в: ${label}`}
-          </Text>
-        </View>
-      )}
-      <View style={userMarkerStyles.outer}>
-        <View style={userMarkerStyles.inner} />
-      </View>
+    <View style={pickupPinStyles.outer}>
+      <View style={pickupPinStyles.inner} />
     </View>
   );
 }
 
-const userMarkerStyles = StyleSheet.create({
-  wrapper: {
-    alignItems: 'center',
-  },
-  tooltip: {
-    backgroundColor: 'rgba(30, 27, 46, 0.92)',
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 14,
-    marginBottom: 6,
-    shadowColor: '#000',
-    shadowOpacity: 0.3,
-    shadowRadius: 4,
-    shadowOffset: { width: 0, height: 2 },
-    elevation: 4,
-  },
-  tooltipWarn: {
-    backgroundColor: 'rgba(204, 84, 84, 0.95)',
-  },
-  tooltipText: {
-    fontSize: 12,
-    fontWeight: '700' as const,
-    color: ClientColors.white,
-  },
+const pickupPinStyles = StyleSheet.create({
   outer: {
-    width: 30,
-    height: 30,
-    borderRadius: 15,
+    width: 40,
+    height: 40,
+    borderRadius: 20,
     backgroundColor: ClientColors.primary,
     borderWidth: 4,
     borderColor: ClientColors.white,
@@ -164,14 +120,14 @@ const userMarkerStyles = StyleSheet.create({
     justifyContent: 'center',
     shadowColor: '#000',
     shadowOpacity: 0.4,
-    shadowRadius: 6,
-    shadowOffset: { width: 0, height: 2 },
-    elevation: 6,
+    shadowRadius: 8,
+    shadowOffset: { width: 0, height: 3 },
+    elevation: 8,
   },
   inner: {
-    width: 8,
-    height: 8,
-    borderRadius: 4,
+    width: 10,
+    height: 10,
+    borderRadius: 5,
     backgroundColor: ClientColors.white,
   },
 });
@@ -202,37 +158,37 @@ export default function HomeScreen(): React.ReactNode {
     }
   }, [pinDragged, location.hasRealFix, location.latitude, location.longitude]);
 
-  // tracksViewChanges=true позволяет marker обновить свой bitmap при
-  // изменении содержимого (например когда detected_village пришёл и
-  // тултип нужно обновить). Но непрерывный true ломает drag на
-  // Android. Поэтому: включаем на короткое время после изменений,
-  // затем выключаем чтобы drag работал.
-  const [tracksMarkerChanges, setTracksMarkerChanges] = useState(true);
-  useEffect(() => {
-    setTracksMarkerChanges(true);
-    const t = setTimeout(() => setTracksMarkerChanges(false), 800);
-    return () => clearTimeout(t);
-  }, [detectedVillage?.id, inServiceArea]);
-
   // На первом реальном GPS-fix центрируем карту на пользователе.
   // initialRegion — статика, ставится один раз с дефолтным Бишкеком
-  // (42.87/74.59) пока GPS не пришёл. Без этого эффекта карта так
-  // и остаётся на Бишкеке, а маркер пользователя оказывается
-  // за пределами видимой области.
+  // (42.87/74.59). Без этого эффекта карта остаётся на Бишкеке,
+  // а маркер пользователя оказывается за пределами видимой области.
+  // Retry-цикл нужен потому что mapRef.current может быть null когда
+  // эффект первый раз срабатывает (MapView ещё не отмонтировался) —
+  // повторяем попытку до 10 раз с интервалом 200ms.
   const initialCenterDoneRef = useRef(false);
   useEffect(() => {
-    if (location.hasRealFix && !initialCenterDoneRef.current) {
-      initialCenterDoneRef.current = true;
-      mapRef.current?.animateToRegion(
-        {
-          latitude: location.latitude,
-          longitude: location.longitude,
-          latitudeDelta: 0.004,
-          longitudeDelta: 0.004,
-        },
-        400,
-      );
+    if (!location.hasRealFix || initialCenterDoneRef.current) {
+      return;
     }
+    let attempts = 0;
+    const tryCenter = (): void => {
+      if (mapRef.current) {
+        initialCenterDoneRef.current = true;
+        mapRef.current.animateToRegion(
+          {
+            latitude: location.latitude,
+            longitude: location.longitude,
+            latitudeDelta: 0.005,
+            longitudeDelta: 0.005,
+          },
+          400,
+        );
+      } else if (attempts < 10) {
+        attempts += 1;
+        setTimeout(tryCenter, 200);
+      }
+    };
+    tryCenter();
   }, [location.hasRealFix, location.latitude, location.longitude]);
 
   const resetPinToGps = useCallback(() => {
@@ -496,7 +452,7 @@ export default function HomeScreen(): React.ReactNode {
         ref={mapRef}
         style={StyleSheet.absoluteFillObject}
         initialRegion={initialRegion}
-        showsUserLocation={false}
+        showsUserLocation
         showsMyLocationButton={false}
         customMapStyle={DARK_MAP_STYLE}
         mapPadding={{
@@ -509,32 +465,23 @@ export default function HomeScreen(): React.ReactNode {
           left: 0,
         }}
       >
-        {/* Маркер «вы здесь» с пульсом. Рендерится с момента когда
-            у location есть хоть какие-то координаты (включая default
-            Бишкек до получения реального fix) — чтобы пользователь
-            видел метку сразу при открытии и понимал что она
-            интерактивная. Draggable только в idle и только после
-            реального GPS-fix чтобы клиент не перетаскивал случайно
-            пин «бишкек по умолчанию». */}
-        {(pickupCoord || location.hasRealFix) && (
+        {/* Метка подачи (pickup pin) — отдельно от пользовательской
+            точки. Юзер видит:
+            - синюю точку OS-native (showsUserLocation) — где он реально
+            - бирюзовую метку (наш Marker) — куда подать такси
+            Это позволяет перетащить pickup в другое место (например на
+            угол улицы) не путая «где я» и «куда подать».
+            Pin рендерится после реального GPS-fix чтобы не падать в
+            дефолтном Бишкеке. */}
+        {pickupCoord && (
           <Marker
-            coordinate={
-              pickupCoord
-                ? { latitude: pickupCoord.lat, longitude: pickupCoord.lng }
-                : { latitude: location.latitude, longitude: location.longitude }
-            }
-            anchor={{ x: 0.5, y: 1 }}
+            coordinate={{ latitude: pickupCoord.lat, longitude: pickupCoord.lng }}
+            anchor={{ x: 0.5, y: 0.5 }}
             draggable={state.phase === 'idle' && location.hasRealFix}
             onDragEnd={handlePinDragEnd}
-            // Управляется хуком — true на 800ms после изменения
-            // detected_village/inServiceArea (чтобы тултип обновился),
-            // затем false для надёжного drag на Android.
-            tracksViewChanges={tracksMarkerChanges}
+            tracksViewChanges={false}
           >
-            <UserLocationMarker
-              label={detectedVillage?.name}
-              outOfZone={inServiceArea === false}
-            />
+            <PickupPinMarker />
           </Marker>
         )}
         {driverCoords && (
