@@ -3,6 +3,7 @@ import { Text } from 'react-native';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { DriverColors, Typography } from '@taxi/shared';
 import HomeScreen from '../screens/HomeScreen';
+import IntercityScreen from '../screens/IntercityScreen';
 import ProfileScreen from '../screens/ProfileScreen';
 import { DriverTabParamList } from './types';
 
@@ -34,6 +35,14 @@ export default function DriverTabs(): React.ReactNode {
         options={{
           tabBarLabel: 'Главная',
           tabBarIcon: () => <TabIcon label="🚕" />,
+        }}
+      />
+      <Tab.Screen
+        name="DriverIntercity"
+        component={IntercityScreen}
+        options={{
+          tabBarLabel: 'Межгород',
+          tabBarIcon: () => <TabIcon label="🚌" />,
         }}
       />
       <Tab.Screen

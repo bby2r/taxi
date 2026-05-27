@@ -5,6 +5,7 @@ export type AuthStackParamList = {
 
 export type DriverTabParamList = {
   DriverHome: undefined;
+  DriverIntercity: undefined;
   DriverProfile: undefined;
 };
 
