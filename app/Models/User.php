@@ -66,6 +66,26 @@ class User extends Authenticatable
     }
 
     /**
+     * Межгород-трипы где этот пользователь — водитель.
+     *
+     * @return HasMany<IntercityTrip, $this>
+     */
+    public function intercityDriverTrips(): HasMany
+    {
+        return $this->hasMany(IntercityTrip::class, 'driver_id');
+    }
+
+    /**
+     * Межгород-брони этого пользователя как клиента.
+     *
+     * @return HasMany<IntercityBooking, $this>
+     */
+    public function intercityBookings(): HasMany
+    {
+        return $this->hasMany(IntercityBooking::class, 'client_id');
+    }
+
+    /**
      * Change requests submitted by this user.
      *
      * @return HasMany<DriverChangeRequest, $this>

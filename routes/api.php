@@ -1,9 +1,11 @@
 <?php
 
 use App\Http\Controllers\Api\V1\AuthController;
+use App\Http\Controllers\Api\V1\ClientIntercityController;
 use App\Http\Controllers\Api\V1\ClientOrderController;
 use App\Http\Controllers\Api\V1\ClientProfileController;
 use App\Http\Controllers\Api\V1\DriverController;
+use App\Http\Controllers\Api\V1\DriverIntercityController;
 use App\Http\Controllers\Api\V1\DriverProfileController;
 use App\Http\Controllers\Api\V1\RegionController;
 use Illuminate\Support\Facades\Route;
@@ -59,6 +61,12 @@ Route::prefix('v1')->middleware('auth:sanctum')->group(function () {
         Route::put('/profile', [ClientProfileController::class, 'update'])->name('api.v1.client.profile.update');
         Route::get('/regions', [RegionController::class, 'index'])->name('api.v1.client.regions');
         Route::get('/tariffs', [RegionController::class, 'tariffs'])->name('api.v1.client.tariffs');
+
+        // Межгород: маршруты + брони клиента
+        Route::get('/intercity/routes', [ClientIntercityController::class, 'routes'])->name('api.v1.client.intercity.routes');
+        Route::post('/intercity/bookings', [ClientIntercityController::class, 'store'])->name('api.v1.client.intercity.bookings.store');
+        Route::get('/intercity/bookings/active', [ClientIntercityController::class, 'active'])->name('api.v1.client.intercity.bookings.active');
+        Route::post('/intercity/bookings/{booking}/cancel', [ClientIntercityController::class, 'cancel'])->name('api.v1.client.intercity.bookings.cancel');
     });
 
     // Driver routes
@@ -80,5 +88,12 @@ Route::prefix('v1')->middleware('auth:sanctum')->group(function () {
         Route::post('/orders/{order}/start', [DriverController::class, 'startRide'])->name('api.v1.driver.orders.start');
         Route::post('/orders/{order}/complete', [DriverController::class, 'completeOrder'])->name('api.v1.driver.orders.complete');
         Route::post('/orders/{order}/cancel', [DriverController::class, 'cancelOrder'])->name('api.v1.driver.orders.cancel');
+
+        // Межгород для водителя
+        Route::get('/intercity/available', [DriverIntercityController::class, 'available'])->name('api.v1.driver.intercity.available');
+        Route::post('/intercity/accept', [DriverIntercityController::class, 'accept'])->name('api.v1.driver.intercity.accept');
+        Route::get('/intercity/trips/active', [DriverIntercityController::class, 'activeTrip'])->name('api.v1.driver.intercity.trips.active');
+        Route::post('/intercity/trips/{trip}/start', [DriverIntercityController::class, 'start'])->name('api.v1.driver.intercity.trips.start');
+        Route::post('/intercity/trips/{trip}/complete', [DriverIntercityController::class, 'complete'])->name('api.v1.driver.intercity.trips.complete');
     });
 });

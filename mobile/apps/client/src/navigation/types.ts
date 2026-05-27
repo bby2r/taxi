@@ -5,6 +5,7 @@ export type AuthStackParamList = {
 
 export type ClientTabParamList = {
   Home: undefined;
+  Intercity: undefined;
   History: undefined;
   Profile: undefined;
 };

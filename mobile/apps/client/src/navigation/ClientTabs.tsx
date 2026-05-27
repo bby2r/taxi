@@ -3,6 +3,7 @@ import { Text } from 'react-native';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { ClientColors, Typography } from '@taxi/shared';
 import HomeScreen from '../screens/HomeScreen';
+import IntercityScreen from '../screens/IntercityScreen';
 import HistoryScreen from '../screens/HistoryScreen';
 import ProfileScreen from '../screens/ProfileScreen';
 import { ClientTabParamList } from './types';
@@ -35,6 +36,14 @@ export default function ClientTabs(): React.ReactNode {
         options={{
           tabBarLabel: 'Главная',
           tabBarIcon: () => <TabIcon label="🚕" />,
+        }}
+      />
+      <Tab.Screen
+        name="Intercity"
+        component={IntercityScreen}
+        options={{
+          tabBarLabel: 'Межгород',
+          tabBarIcon: () => <TabIcon label="🚌" />,
         }}
       />
       <Tab.Screen
