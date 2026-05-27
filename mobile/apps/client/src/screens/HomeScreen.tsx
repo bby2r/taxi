@@ -95,40 +95,51 @@ function PulsingDot({ size = 14 }: { size?: number }): React.ReactNode {
 }
 
 /**
- * Метка подачи такси — крупная бирюзовая точка с белой каймой.
- * Без тултипа (название села показывается в peek-баре шторки).
- * Drag-friendly: фиксированный размер, без анимаций, hit-target
- * 40x40 px — легко зацепить пальцем.
+ * Метка подачи такси в стиле Яндекс Go — жёлтый закруглённый
+ * квадрат с тёмной фигуркой человека («тут стоит пассажир»).
+ * Стержень снизу указывает точно на координату подачи. Drag-friendly:
+ * фиксированный размер, без анимаций, hit-target ~50px.
  */
 function PickupPinMarker(): React.ReactNode {
   return (
-    <View style={pickupPinStyles.outer}>
-      <View style={pickupPinStyles.inner} />
+    <View style={pickupPinStyles.wrapper}>
+      <View style={pickupPinStyles.badge}>
+        <Icon name="user" size={26} color={pickupPinStyles.iconColor.color} strokeWidth={2.4} />
+      </View>
+      <View style={pickupPinStyles.stem} />
     </View>
   );
 }
 
+const PICKUP_YELLOW = '#FFCE2B';
+const PICKUP_DARK = '#1E1B2E';
+
 const pickupPinStyles = StyleSheet.create({
-  outer: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    backgroundColor: ClientColors.primary,
-    borderWidth: 4,
-    borderColor: ClientColors.white,
+  wrapper: {
+    alignItems: 'center',
+  },
+  badge: {
+    width: 48,
+    height: 48,
+    borderRadius: 14,
+    backgroundColor: PICKUP_YELLOW,
     alignItems: 'center',
     justifyContent: 'center',
     shadowColor: '#000',
-    shadowOpacity: 0.4,
+    shadowOpacity: 0.35,
     shadowRadius: 8,
-    shadowOffset: { width: 0, height: 3 },
+    shadowOffset: { width: 0, height: 4 },
     elevation: 8,
   },
-  inner: {
-    width: 10,
-    height: 10,
-    borderRadius: 5,
-    backgroundColor: ClientColors.white,
+  stem: {
+    width: 2,
+    height: 14,
+    backgroundColor: PICKUP_DARK,
+    opacity: 0.65,
+    marginTop: -1,
+  },
+  iconColor: {
+    color: PICKUP_DARK,
   },
 });
 
@@ -476,7 +487,9 @@ export default function HomeScreen(): React.ReactNode {
         {pickupCoord && (
           <Marker
             coordinate={{ latitude: pickupCoord.lat, longitude: pickupCoord.lng }}
-            anchor={{ x: 0.5, y: 0.5 }}
+            // Anchor в самом низу стержня — координата подачи приходится
+            // ровно на кончик «иголки» под жёлтым бейджем.
+            anchor={{ x: 0.5, y: 1 }}
             draggable={state.phase === 'idle' && location.hasRealFix}
             onDragEnd={handlePinDragEnd}
             tracksViewChanges={false}
