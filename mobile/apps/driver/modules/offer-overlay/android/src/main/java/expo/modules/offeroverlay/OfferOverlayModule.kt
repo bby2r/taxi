@@ -7,7 +7,7 @@ import expo.modules.kotlin.modules.ModuleDefinition
  * Yandex-style incoming-offer overlay — JS bridge. All overlay logic
  * lives in OfferOverlayManager; this module is the thin wrapper that
  * forwards calls in. Action buttons (accept / decline / timeout) always
- * route through the aiyltaxidriver://offer deep link, picked up by the
+ * route through the aliftaxidriver://offer deep link, picked up by the
  * JS Linking handler in useNotifications — no Expo event channel
  * involved, so the same path works whether the overlay was raised from
  * the JS module or from the native FCM service while JS was dead.

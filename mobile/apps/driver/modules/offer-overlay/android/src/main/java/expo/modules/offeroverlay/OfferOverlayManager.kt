@@ -34,7 +34,7 @@ import android.widget.TextView
  *     service when an offer push arrives while JS is dead.
  *
  * Button presses (accept / decline / timeout) always launch the app via
- * the aiyltaxidriver://offer deep link. The JS Linking handler picks
+ * the aliftaxidriver://offer deep link. The JS Linking handler picks
  * that up and feeds the existing pendingDriverAction queue, so both
  * notification action buttons and overlay buttons share one path into
  * the in-app accept / decline flow.
@@ -608,7 +608,7 @@ object OfferOverlayManager {
     private fun buildDeepLinkIntent(context: Context, action: String, orderId: Int): Intent {
         // Matches the `scheme` field in apps/driver/app.json. Expo wires
         // this scheme to MainActivity automatically.
-        val uri = Uri.parse("aiyltaxidriver://offer?action=$action&order_id=$orderId")
+        val uri = Uri.parse("aliftaxidriver://offer?action=$action&order_id=$orderId")
         val intent = Intent(Intent.ACTION_VIEW, uri)
         intent.setPackage(context.packageName)
         intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP)
