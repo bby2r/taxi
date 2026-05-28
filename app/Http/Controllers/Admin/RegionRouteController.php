@@ -20,6 +20,7 @@ class RegionRouteController extends Controller
     public function index(): View
     {
         $regions = Region::active()
+            ->service()
             ->orderBy('sort_order')
             ->orderBy('name')
             ->get();
@@ -47,7 +48,7 @@ class RegionRouteController extends Controller
             'routes.*.*.night' => ['nullable', 'integer', 'min:0'],
         ]);
 
-        $regionIds = Region::active()->pluck('id')->all();
+        $regionIds = Region::active()->service()->pluck('id')->all();
         $regionIdSet = array_flip($regionIds);
 
         DB::transaction(function () use ($validated, $regionIdSet) {

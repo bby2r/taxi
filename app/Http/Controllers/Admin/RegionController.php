@@ -29,6 +29,7 @@ class RegionController extends Controller
         $validated = $request->validate($this->validationRules());
 
         $validated['is_active'] = $request->boolean('is_active');
+        $validated['is_intercity_only'] = $request->boolean('is_intercity_only');
 
         Region::create($validated);
 
@@ -46,6 +47,7 @@ class RegionController extends Controller
         $validated = $request->validate($this->validationRules($region->id));
 
         $validated['is_active'] = $request->boolean('is_active');
+        $validated['is_intercity_only'] = $request->boolean('is_intercity_only');
 
         $region->update($validated);
 
@@ -76,6 +78,7 @@ class RegionController extends Controller
         return [
             'name' => ['required', 'string', 'max:255', $nameUnique],
             'is_active' => ['boolean'],
+            'is_intercity_only' => ['boolean'],
             'sort_order' => ['integer', 'min:0'],
             'center_latitude' => ['nullable', 'numeric', 'between:-90,90'],
             'center_longitude' => ['nullable', 'numeric', 'between:-180,180'],

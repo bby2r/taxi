@@ -14,6 +14,7 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
 #[Fillable([
     'name',
     'is_active',
+    'is_intercity_only',
     'sort_order',
     'center_latitude',
     'center_longitude',
@@ -30,6 +31,7 @@ class Region extends Model
     {
         return [
             'is_active' => 'boolean',
+            'is_intercity_only' => 'boolean',
             'sort_order' => 'integer',
             'center_latitude' => 'decimal:7',
             'center_longitude' => 'decimal:7',
@@ -43,6 +45,20 @@ class Region extends Model
     public function scopeActive(Builder $query): Builder
     {
         return $query->where('is_active', true);
+    }
+
+    /**
+     * «Сервисные» регионы — где живут клиенты и работают водители
+     * на городском тарифе. Используется в матрице межсёлами и в
+     * GET /regions для обычного такси, чтобы Бишкек/Талас не
+     * засоряли пикер.
+     *
+     * @param  Builder<Region>  $query
+     * @return Builder<Region>
+     */
+    public function scopeService(Builder $query): Builder
+    {
+        return $query->where('is_intercity_only', false);
     }
 
     /**

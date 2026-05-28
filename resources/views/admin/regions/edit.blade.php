@@ -53,6 +53,22 @@
                     @enderror
                 </div>
 
+                {{-- Intercity-only --}}
+                <div class="mb-5 rounded-lg border border-amber-200 bg-amber-50 p-4">
+                    <label class="flex items-start gap-3">
+                        <input type="checkbox" name="is_intercity_only" value="1" {{ old('is_intercity_only', $region->is_intercity_only) ? 'checked' : '' }} class="mt-0.5 rounded border-gray-300 text-amber-500 focus:ring-amber-400">
+                        <span class="text-sm">
+                            <span class="block font-medium text-gray-900">Только межгород-направление</span>
+                            <span class="block text-xs text-gray-600">
+                                Отметьте если это далёкий город (Бишкек, Талас и т.п.) — он не появится в матрице межсёлами и в пикере «куда ехать» обычного такси, только в межгород-маршрутах.
+                            </span>
+                        </span>
+                    </label>
+                    @error('is_intercity_only')
+                        <p class="mt-1 text-sm text-red-600">{{ $message }}</p>
+                    @enderror
+                </div>
+
                 {{-- Координаты центра (определяют сервисную зону) --}}
                 <div class="mb-2 mt-2 border-t border-gray-200 pt-4">
                     <h3 class="mb-1 text-sm font-semibold text-gray-800">Центр района (опционально)</h3>

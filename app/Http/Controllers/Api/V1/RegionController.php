@@ -20,6 +20,7 @@ class RegionController extends Controller
     public function index(): AnonymousResourceCollection
     {
         $regions = Region::active()
+            ->service()
             ->orderBy('sort_order')
             ->orderBy('name')
             ->get();
