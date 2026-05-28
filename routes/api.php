@@ -93,8 +93,6 @@ Route::prefix('v1')->middleware('auth:sanctum')->group(function () {
         Route::get('/intercity/available', [DriverIntercityController::class, 'available'])->name('api.v1.driver.intercity.available');
         Route::post('/intercity/trips/{trip}/claim', [DriverIntercityController::class, 'claim'])->name('api.v1.driver.intercity.trips.claim');
         Route::get('/intercity/trips/active', [DriverIntercityController::class, 'activeTrip'])->name('api.v1.driver.intercity.trips.active');
-        Route::post('/intercity/trips/{trip}/close', [DriverIntercityController::class, 'close'])->name('api.v1.driver.intercity.trips.close');
-        Route::post('/intercity/trips/{trip}/cancel', [DriverIntercityController::class, 'cancel'])->name('api.v1.driver.intercity.trips.cancel');
         Route::post('/intercity/trips/{trip}/start', [DriverIntercityController::class, 'start'])->name('api.v1.driver.intercity.trips.start');
         Route::post('/intercity/trips/{trip}/complete', [DriverIntercityController::class, 'complete'])->name('api.v1.driver.intercity.trips.complete');
         Route::post('/intercity/bookings/{booking}/no-show', [DriverIntercityController::class, 'noShow'])->name('api.v1.driver.intercity.bookings.no-show');

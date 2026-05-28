@@ -238,6 +238,59 @@ class IntercityService
     }
 
     /**
+     * Админ закрывает slot (новые бронь блокируются). В отличие от
+     * closeSlot не требует владения — диспетчер может закрыть любого
+     * водителя.
+     */
+    public function closeSlotByAdmin(IntercityTrip $trip): IntercityTrip
+    {
+        if (! in_array($trip->status, [IntercityTripStatus::Claimed, IntercityTripStatus::Ready], true)) {
+            throw new RuntimeException('Закрыть можно только принятый рейс.');
+        }
+
+        $trip->update(['is_closed' => true]);
+
+        return $trip->fresh();
+    }
+
+    /**
+     * Админ отменяет slot. Используется когда водитель не выходит на
+     * связь, ломается машина и т.д. — водителю самостоятельно отменять
+     * нельзя, чтобы не было соблазна сливать пассажиров без причины.
+     */
+    public function cancelTripByAdmin(IntercityTrip $trip): IntercityTrip
+    {
+        if ($trip->status === IntercityTripStatus::Completed) {
+            throw new RuntimeException('Завершённую поездку нельзя отменить.');
+        }
+        if ($trip->status === IntercityTripStatus::Cancelled) {
+            throw new RuntimeException('Поездка уже отменена.');
+        }
+
+        DB::transaction(function () use ($trip) {
+            $trip->update([
+                'status' => IntercityTripStatus::Cancelled,
+                'cancelled_at' => now(),
+                'cancelled_by' => 'admin',
+            ]);
+            $trip->bookings()
+                ->whereIn('status', [
+                    IntercityBookingStatus::Matched,
+                    IntercityBookingStatus::EnRoute,
+                ])
+                ->update([
+                    'status' => IntercityBookingStatus::Cancelled,
+                    'cancelled_at' => now(),
+                    'cancelled_by' => 'admin',
+                ]);
+        });
+
+        DB::afterCommit(fn () => $this->notifyPassengersTripCancelledByDriver($trip->fresh()));
+
+        return $trip->fresh();
+    }
+
+    /**
      * Водитель отмечает не-явку пассажира. Trip продолжается, no-show
      * считается для отчётности.
      */

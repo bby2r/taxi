@@ -82,13 +82,6 @@ export async function getActiveIntercityTrip(): Promise<IntercityTrip | null> {
   }
 }
 
-export async function closeIntercitySlot(tripId: number): Promise<IntercityTrip> {
-  const { data } = await apiClient.post<{ data: IntercityTrip }>(
-    `/api/v1/driver/intercity/trips/${tripId}/close`,
-  );
-  return data.data;
-}
-
 export async function startIntercityTrip(tripId: number): Promise<IntercityTrip> {
   const { data } = await apiClient.post<{ data: IntercityTrip }>(
     `/api/v1/driver/intercity/trips/${tripId}/start`,
@@ -99,13 +92,6 @@ export async function startIntercityTrip(tripId: number): Promise<IntercityTrip>
 export async function completeIntercityTrip(tripId: number): Promise<IntercityTrip> {
   const { data } = await apiClient.post<{ data: IntercityTrip }>(
     `/api/v1/driver/intercity/trips/${tripId}/complete`,
-  );
-  return data.data;
-}
-
-export async function cancelIntercityTrip(tripId: number): Promise<IntercityTrip> {
-  const { data } = await apiClient.post<{ data: IntercityTrip }>(
-    `/api/v1/driver/intercity/trips/${tripId}/cancel`,
   );
   return data.data;
 }

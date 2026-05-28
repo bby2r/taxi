@@ -9,6 +9,7 @@ use App\Http\Controllers\Admin\DriverController;
 use App\Http\Controllers\Admin\DriverTicketController;
 use App\Http\Controllers\Admin\IntercityRouteController;
 use App\Http\Controllers\Admin\IntercityScheduleController;
+use App\Http\Controllers\Admin\IntercityTripController;
 use App\Http\Controllers\Admin\OrderController;
 use App\Http\Controllers\Admin\OtpController;
 use App\Http\Controllers\Admin\RegionController;
@@ -63,6 +64,11 @@ Route::prefix('admin')->name('admin.')->group(function () {
         Route::resource('intercity-schedules', IntercityScheduleController::class)
             ->parameters(['intercity-schedules' => 'intercitySchedule'])
             ->except(['show']);
+
+        Route::get('intercity-trips', [IntercityTripController::class, 'index'])->name('intercity-trips.index');
+        Route::get('intercity-trips/{intercityTrip}', [IntercityTripController::class, 'show'])->name('intercity-trips.show');
+        Route::post('intercity-trips/{intercityTrip}/close', [IntercityTripController::class, 'close'])->name('intercity-trips.close');
+        Route::post('intercity-trips/{intercityTrip}/cancel', [IntercityTripController::class, 'cancel'])->name('intercity-trips.cancel');
 
         Route::resource('orders', OrderController::class)->only(['index', 'show']);
 

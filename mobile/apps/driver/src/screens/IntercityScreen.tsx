@@ -19,9 +19,7 @@ import {
   useLocation,
 } from '@taxi/shared';
 import {
-  cancelIntercityTrip,
   claimIntercitySlot,
-  closeIntercitySlot,
   completeIntercityTrip,
   getActiveIntercityTrip,
   getAvailableIntercitySlots,
@@ -143,31 +141,6 @@ export default function IntercityScreen(): React.ReactNode {
     );
   };
 
-  const handleClose = (): void => {
-    if (!activeTrip) return;
-    Alert.alert(
-      'Закрыть слот?',
-      'Подтверждайте если посадили пассажира вне приложения и машина уже полная — клиенты перестанут видеть этот рейс.',
-      [
-        { text: 'Отмена', style: 'cancel' },
-        {
-          text: 'Закрыть',
-          onPress: async () => {
-            setLoading(true);
-            try {
-              const t = await closeIntercitySlot(activeTrip.id);
-              setActiveTrip(t);
-            } catch (e: unknown) {
-              setError(getApiErrorMessage(e, 'Не удалось закрыть слот'));
-            } finally {
-              setLoading(false);
-            }
-          },
-        },
-      ],
-    );
-  };
-
   const handleStart = async (): Promise<void> => {
     if (!activeTrip) return;
     setLoading(true);
@@ -198,33 +171,6 @@ export default function IntercityScreen(): React.ReactNode {
               setActiveTrip(t.status === 'completed' ? null : t);
             } catch (e: unknown) {
               setError(getApiErrorMessage(e, 'Не удалось завершить'));
-            } finally {
-              setLoading(false);
-            }
-          },
-        },
-      ],
-    );
-  };
-
-  const handleCancel = (): void => {
-    if (!activeTrip) return;
-    Alert.alert(
-      'Отменить рейс?',
-      'Пассажиры получат уведомление об отмене. Используйте только если действительно не сможете выехать.',
-      [
-        { text: 'Отмена', style: 'cancel' },
-        {
-          text: 'Отменить рейс',
-          style: 'destructive',
-          onPress: async () => {
-            if (!activeTrip) return;
-            setLoading(true);
-            try {
-              const t = await cancelIntercityTrip(activeTrip.id);
-              setActiveTrip(t.status === 'cancelled' ? null : t);
-            } catch (e: unknown) {
-              setError(getApiErrorMessage(e, 'Не удалось отменить'));
             } finally {
               setLoading(false);
             }
@@ -282,10 +228,8 @@ export default function IntercityScreen(): React.ReactNode {
           <ActiveTripCard
             trip={activeTrip}
             loading={loading}
-            onClose={handleClose}
             onStart={handleStart}
             onComplete={handleComplete}
-            onCancel={handleCancel}
             onNoShow={handleNoShow}
           />
         )}
@@ -373,18 +317,14 @@ function SlotCard({
 function ActiveTripCard({
   trip,
   loading,
-  onClose,
   onStart,
   onComplete,
-  onCancel,
   onNoShow,
 }: {
   trip: IntercityTrip;
   loading: boolean;
-  onClose: () => void;
   onStart: () => void;
   onComplete: () => void;
-  onCancel: () => void;
   onNoShow: (p: IntercityPassenger) => void;
 }): React.ReactNode {
   const isClaimed = trip.status === 'claimed';
@@ -451,19 +391,6 @@ function ActiveTripCard({
         </View>
       ))}
 
-      {/* Action row: close (when there's room) + start (when ready) +
-          complete (when en_route) + cancel (any pre-departure phase). */}
-      {isClaimed && !trip.is_closed && seatsFree > 0 && (
-        <TouchableOpacity
-          style={[styles.secondaryButton, loading && { opacity: 0.5 }]}
-          onPress={onClose}
-          disabled={loading}
-          activeOpacity={0.9}
-        >
-          <Text style={styles.secondaryButtonText}>Закрыть слот (машина полная)</Text>
-        </TouchableOpacity>
-      )}
-
       {(isClaimed || isReady) && (
         <TouchableOpacity
           style={[styles.actionButton, loading && { opacity: 0.5 }]}
@@ -487,14 +414,10 @@ function ActiveTripCard({
       )}
 
       {(isClaimed || isReady) && (
-        <TouchableOpacity
-          style={[styles.dangerButton, loading && { opacity: 0.5 }]}
-          onPress={onCancel}
-          disabled={loading}
-          activeOpacity={0.9}
-        >
-          <Text style={styles.dangerButtonText}>Отменить рейс</Text>
-        </TouchableOpacity>
+        <Text style={styles.adminHint}>
+          Закрыть слот или отменить рейс может только диспетчер.
+          Свяжитесь с ним если нужна помощь.
+        </Text>
       )}
     </View>
   );
@@ -741,32 +664,12 @@ const styles = StyleSheet.create({
     color: DriverColors.white,
     letterSpacing: 0.2,
   },
-  secondaryButton: {
+  adminHint: {
     marginTop: 14,
-    height: 48,
-    borderRadius: 24,
-    backgroundColor: DriverColors.backgroundSecondary,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  secondaryButtonText: {
-    fontSize: 14,
-    fontWeight: '700' as const,
-    color: DriverColors.primaryDark,
-  },
-  dangerButton: {
-    marginTop: 10,
-    height: 44,
-    borderRadius: 22,
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderWidth: 1,
-    borderColor: '#FFD4D4',
-    backgroundColor: '#FFF8F8',
-  },
-  dangerButtonText: {
-    fontSize: 13,
-    fontWeight: '700' as const,
-    color: DriverColors.danger,
+    fontSize: 12,
+    color: DriverColors.textMuted,
+    textAlign: 'center',
+    lineHeight: 16,
+    fontStyle: 'italic',
   },
 });

@@ -112,30 +112,6 @@ class DriverIntercityController extends Controller
         return new IntercityTripResource($trip);
     }
 
-    public function close(Request $request, IntercityTrip $trip): JsonResponse|IntercityTripResource
-    {
-        try {
-            $updated = $this->service->closeSlot($trip, $request->user());
-            $updated->load(['route.fromRegion', 'route.toRegion', 'bookings']);
-
-            return new IntercityTripResource($updated);
-        } catch (RuntimeException $e) {
-            return response()->json(['message' => $e->getMessage()], 422);
-        }
-    }
-
-    public function cancel(Request $request, IntercityTrip $trip): JsonResponse|IntercityTripResource
-    {
-        try {
-            $updated = $this->service->cancelTripByDriver($trip, $request->user());
-            $updated->load(['route.fromRegion', 'route.toRegion', 'bookings']);
-
-            return new IntercityTripResource($updated);
-        } catch (RuntimeException $e) {
-            return response()->json(['message' => $e->getMessage()], 422);
-        }
-    }
-
     public function start(Request $request, IntercityTrip $trip): JsonResponse|IntercityTripResource
     {
         try {
