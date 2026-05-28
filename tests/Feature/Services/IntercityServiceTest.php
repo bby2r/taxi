@@ -52,6 +52,11 @@ class IntercityServiceTest extends TestCase
             return new class
             {
                 public function sendOfferToDriver(...$args): void {}
+
+                public function sendToUser(...$args): bool
+                {
+                    return true;
+                }
             };
         });
 

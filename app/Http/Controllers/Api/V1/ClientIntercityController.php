@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers\Api\V1;
 
+use App\Enums\IntercityBookingStatus;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Api\V1\CreateIntercityBookingRequest;
 use App\Http\Resources\V1\IntercityBookingResource;
@@ -64,6 +65,11 @@ class ClientIntercityController extends Controller
             );
 
             $booking->load(['route.fromRegion', 'route.toRegion', 'trip']);
+            $booking->seats_booked_total = (int) IntercityBooking::query()
+                ->where('route_id', $booking->route_id)
+                ->whereDate('departure_date', $booking->departure_date)
+                ->whereIn('status', IntercityBookingStatus::activeStatuses())
+                ->sum('seats_count');
 
             return (new IntercityBookingResource($booking))
                 ->response()
@@ -73,9 +79,6 @@ class ClientIntercityController extends Controller
         }
     }
 
-    /**
-     * Текущая активная бронь клиента (pending/matched/en_route).
-     */
     public function active(Request $request): JsonResponse|IntercityBookingResource
     {
         $booking = IntercityBooking::query()
@@ -88,6 +91,14 @@ class ClientIntercityController extends Controller
         if ($booking === null) {
             return response()->json(['message' => 'No active intercity booking.'], 404);
         }
+
+        // Прогресс набора batch'а на эту route+date — одной SQL
+        // агрегацией, чтобы Resource не делал per-row запрос.
+        $booking->seats_booked_total = (int) IntercityBooking::query()
+            ->where('route_id', $booking->route_id)
+            ->whereDate('departure_date', $booking->departure_date)
+            ->whereIn('status', IntercityBookingStatus::activeStatuses())
+            ->sum('seats_count');
 
         return new IntercityBookingResource($booking);
     }

@@ -36,3 +36,5 @@ export * from './utils/geocode';
 export * from './utils/phone';
 export * from './utils/routeTrim';
 export * from './utils/storage';
+export * from './utils/dates';
+export * from './utils/apiError';

@@ -11,6 +11,14 @@ enum IntercityTripStatus: string
 
     public function isActive(): bool
     {
-        return in_array($this, [self::Matched, self::EnRoute], true);
+        return in_array($this, self::activeStatuses(), true);
+    }
+
+    /**
+     * @return list<self>
+     */
+    public static function activeStatuses(): array
+    {
+        return [self::Matched, self::EnRoute];
     }
 }

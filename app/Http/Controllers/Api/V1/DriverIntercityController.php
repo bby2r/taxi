@@ -19,42 +19,41 @@ class DriverIntercityController extends Controller
     public function __construct(private readonly IntercityService $service) {}
 
     /**
-     * Готовые к принятию batch'и: маршруты+даты где набралось
-     * max_seats pending bookings. Группируем bookings по route+date,
-     * фильтруем где сумма seats >= route.max_seats.
+     * Готовые batch'и: route+date где сумма pending seats >= max_seats.
+     * SQL-агрегация вместо in-memory groupBy — масштабируется до тысяч
+     * заявок без OOM.
      */
     public function available(): JsonResponse
     {
-        // Берём все pending bookings, группируем по route_id +
-        // departure_date, считаем сумму мест. Те где сумма >= max_seats
-        // и водитель ещё не схватил — это available offers.
-        $grouped = IntercityBooking::query()
+        $aggregates = IntercityBooking::query()
             ->where('status', IntercityBookingStatus::Pending)
             ->whereNull('trip_id')
-            ->with(['route.fromRegion', 'route.toRegion'])
+            ->selectRaw('route_id, departure_date, SUM(seats_count) as total_seats, COUNT(*) as passengers_count')
+            ->groupBy('route_id', 'departure_date')
+            ->get();
+
+        $routeIds = $aggregates->pluck('route_id')->unique()->all();
+        $routes = IntercityRoute::with(['fromRegion', 'toRegion'])
+            ->whereIn('id', $routeIds)
             ->get()
-            ->groupBy(fn ($b) => $b->route_id.'_'.$b->departure_date->toDateString());
+            ->keyBy('id');
 
         $offers = [];
-        foreach ($grouped as $key => $bookings) {
-            $first = $bookings->first();
-            $route = $first->route;
-            if ($route === null) {
+        foreach ($aggregates as $row) {
+            $route = $routes->get($row->route_id);
+            if ($route === null || $row->total_seats < $route->max_seats) {
                 continue;
             }
-            $totalSeats = $bookings->sum('seats_count');
-            if ($totalSeats >= $route->max_seats) {
-                $offers[] = [
-                    'route_id' => $route->id,
-                    'from_region' => $route->fromRegion?->name,
-                    'to_region' => $route->toRegion?->name,
-                    'departure_date' => $first->departure_date->toDateString(),
-                    'max_seats' => $route->max_seats,
-                    'price_per_seat' => $route->price_per_seat,
-                    'total_revenue' => $route->max_seats * $route->price_per_seat,
-                    'passengers_count' => $bookings->count(),
-                ];
-            }
+            $offers[] = [
+                'route_id' => $route->id,
+                'from_region' => $route->fromRegion?->name,
+                'to_region' => $route->toRegion?->name,
+                'departure_date' => Carbon::parse($row->departure_date)->toDateString(),
+                'max_seats' => $route->max_seats,
+                'price_per_seat' => $route->price_per_seat,
+                'total_revenue' => $route->max_seats * $route->price_per_seat,
+                'passengers_count' => (int) $row->passengers_count,
+            ];
         }
 
         return response()->json(['offers' => $offers]);
@@ -84,9 +83,6 @@ class DriverIntercityController extends Controller
         }
     }
 
-    /**
-     * Активный trip водителя (matched/en_route) с пассажирами.
-     */
     public function activeTrip(Request $request): JsonResponse|IntercityTripResource
     {
         $trip = IntercityTrip::query()

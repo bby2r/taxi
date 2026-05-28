@@ -53,10 +53,7 @@ class IntercityTrip extends Model
      */
     public function scopeActive(Builder $query): Builder
     {
-        return $query->whereIn('status', [
-            IntercityTripStatus::Matched,
-            IntercityTripStatus::EnRoute,
-        ]);
+        return $query->whereIn('status', IntercityTripStatus::activeStatuses());
     }
 
     /**
@@ -85,6 +82,6 @@ class IntercityTrip extends Model
 
     public function totalRevenue(): int
     {
-        return $this->bookings->sum(fn ($b) => $b->seats_count * $this->price_per_seat);
+        return (int) $this->bookings->sum('seats_count') * $this->price_per_seat;
     }
 }

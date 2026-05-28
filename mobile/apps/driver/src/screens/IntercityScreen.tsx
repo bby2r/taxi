@@ -12,7 +12,12 @@ import {
   TouchableOpacity,
   View,
 } from 'react-native';
-import { DriverColors, Typography } from '@taxi/shared';
+import {
+  DriverColors,
+  Typography,
+  formatHumanDate,
+  getApiErrorMessage,
+} from '@taxi/shared';
 import {
   acceptIntercityOffer,
   completeIntercityTrip,
@@ -22,17 +27,6 @@ import {
   type IntercityOffer,
   type IntercityTrip,
 } from '../api/intercity';
-
-function formatDate(s: string): string {
-  const d = new Date(s);
-  const today = new Date();
-  const tomorrow = new Date();
-  tomorrow.setDate(today.getDate() + 1);
-  const ymd = (x: Date): string => x.toISOString().slice(0, 10);
-  if (ymd(d) === ymd(today)) return 'сегодня';
-  if (ymd(d) === ymd(tomorrow)) return 'завтра';
-  return d.toLocaleDateString('ru-RU', { day: 'numeric', month: 'long' });
-}
 
 export default function IntercityScreen(): React.ReactNode {
   const [offers, setOffers] = useState<IntercityOffer[]>([]);
@@ -48,11 +42,23 @@ export default function IntercityScreen(): React.ReactNode {
         getActiveIntercityTrip(),
         getAvailableIntercityOffers(),
       ]);
-      setActiveTrip(t);
-      setOffers(o);
+      setActiveTrip((prev) => {
+        if (!t && !prev) return prev;
+        if (t && prev && t.id === prev.id && t.status === prev.status) return prev;
+        return t;
+      });
+      setOffers((prev) => {
+        if (prev.length === o.length && prev.every((p, i) =>
+          p.route_id === o[i].route_id &&
+          p.departure_date === o[i].departure_date &&
+          p.passengers_count === o[i].passengers_count,
+        )) {
+          return prev;
+        }
+        return o;
+      });
     } catch {
-      // молча — пользователь увидит пустой список + сможет потянуть
-      // вниз чтобы обновить
+      // next tick retries
     }
   }, []);
 
@@ -62,13 +68,15 @@ export default function IntercityScreen(): React.ReactNode {
     }, [reload]),
   );
 
-  // Авто-обновление списка офферов раз в 15 сек когда трипа нет —
-  // чтобы новые «полные машины» появлялись сами без свайпа.
+  // Авто-обновление списка офферов когда трипа нет — новые «полные
+  // машины» появляются сами без pull-to-refresh. Депендим только на
+  // activeTrip?.id чтобы тик не пересоздавался на каждом ответе.
+  const activeTripId = activeTrip?.id ?? null;
   useEffect(() => {
-    if (activeTrip) return;
+    if (activeTripId !== null) return;
     const interval = setInterval(reload, 15000);
     return () => clearInterval(interval);
-  }, [activeTrip, reload]);
+  }, [activeTripId, reload]);
 
   const onRefresh = async (): Promise<void> => {
     setRefreshing(true);
@@ -81,7 +89,7 @@ export default function IntercityScreen(): React.ReactNode {
       'Принять рейс?',
       `${offer.from_region} → ${offer.to_region}\n` +
         `${offer.max_seats} пассажиров · ${offer.total_revenue} сом всего\n` +
-        `Выезд: ${formatDate(offer.departure_date)}`,
+        `Выезд: ${formatHumanDate(offer.departure_date)}`,
       [
         { text: 'Отмена', style: 'cancel' },
         {
@@ -97,8 +105,7 @@ export default function IntercityScreen(): React.ReactNode {
               setActiveTrip(trip);
               setOffers([]);
             } catch (e: unknown) {
-              const ae = e as { response?: { data?: { message?: string } } };
-              setError(ae.response?.data?.message ?? 'Не удалось принять рейс');
+              setError(getApiErrorMessage(e, 'Не удалось принять рейс'));
             } finally {
               setLoading(false);
             }
@@ -115,8 +122,7 @@ export default function IntercityScreen(): React.ReactNode {
       const t = await startIntercityTrip(activeTrip.id);
       setActiveTrip(t);
     } catch (e: unknown) {
-      const ae = e as { response?: { data?: { message?: string } } };
-      setError(ae.response?.data?.message ?? 'Не удалось начать рейс');
+      setError(getApiErrorMessage(e, 'Не удалось начать рейс'));
     } finally {
       setLoading(false);
     }
@@ -137,8 +143,7 @@ export default function IntercityScreen(): React.ReactNode {
               const t = await completeIntercityTrip(activeTrip.id);
               setActiveTrip(t.status === 'completed' ? null : t);
             } catch (e: unknown) {
-              const ae = e as { response?: { data?: { message?: string } } };
-              setError(ae.response?.data?.message ?? 'Не удалось завершить');
+              setError(getApiErrorMessage(e, 'Не удалось завершить'));
             } finally {
               setLoading(false);
             }
@@ -216,7 +221,7 @@ function OfferCard({
           {offer.from_region} → {offer.to_region}
         </Text>
         <View style={styles.offerBadge}>
-          <Text style={styles.offerBadgeText}>{formatDate(offer.departure_date)}</Text>
+          <Text style={styles.offerBadgeText}>{formatHumanDate(offer.departure_date)}</Text>
         </View>
       </View>
 
@@ -269,7 +274,7 @@ function ActiveTripCard({
         <Text style={styles.activeRoute}>
           {trip.route?.from_region} → {trip.route?.to_region}
         </Text>
-        <View style={[styles.statusPill, isEnRoute && styles.statusPillEnRoute]}>
+        <View style={styles.statusPill}>
           <Text style={styles.statusPillText}>
             {isMatched ? 'Принято — соберите пассажиров' : 'В пути'}
           </Text>
@@ -277,7 +282,7 @@ function ActiveTripCard({
       </View>
 
       <Text style={styles.activeMeta}>
-        {formatDate(trip.departure_date)} · {trip.max_seats} мест × {trip.price_per_seat} сом · всего{' '}
+        {formatHumanDate(trip.departure_date)} · {trip.max_seats} мест × {trip.price_per_seat} сом · всего{' '}
         {(trip.total_revenue ?? trip.max_seats * trip.price_per_seat).toLocaleString()} сом
       </Text>
 
@@ -318,7 +323,7 @@ function ActiveTripCard({
 
       {isEnRoute && (
         <TouchableOpacity
-          style={[styles.actionButton, styles.actionButtonSuccess, loading && { opacity: 0.5 }]}
+          style={[styles.actionButton, loading && { opacity: 0.5 }]}
           onPress={onComplete}
           disabled={loading}
           activeOpacity={0.9}
@@ -489,9 +494,6 @@ const styles = StyleSheet.create({
     paddingVertical: 4,
     borderRadius: 10,
   },
-  statusPillEnRoute: {
-    backgroundColor: DriverColors.backgroundSecondary,
-  },
   statusPillText: {
     fontSize: 11,
     fontWeight: '700' as const,
@@ -546,9 +548,6 @@ const styles = StyleSheet.create({
     backgroundColor: DriverColors.primary,
     alignItems: 'center',
     justifyContent: 'center',
-  },
-  actionButtonSuccess: {
-    backgroundColor: DriverColors.primary,
   },
   actionButtonText: {
     fontSize: 16,

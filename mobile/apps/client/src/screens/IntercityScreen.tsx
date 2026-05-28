@@ -14,7 +14,15 @@ import {
   StatusBar,
   RefreshControl,
 } from 'react-native';
-import { useLocation, ClientColors, Typography } from '@taxi/shared';
+import {
+  useLocation,
+  ClientColors,
+  Typography,
+  todayDateString,
+  tomorrowDateString,
+  formatHumanDate,
+  getApiErrorMessage,
+} from '@taxi/shared';
 import Icon from '../components/Icon';
 import {
   cancelIntercityBooking,
@@ -24,28 +32,6 @@ import {
   type IntercityBooking,
   type IntercityRoute,
 } from '../api/intercity';
-
-function todayDateString(): string {
-  const d = new Date();
-  return d.toISOString().slice(0, 10);
-}
-
-function tomorrowDateString(): string {
-  const d = new Date();
-  d.setDate(d.getDate() + 1);
-  return d.toISOString().slice(0, 10);
-}
-
-function formatDate(s: string): string {
-  const d = new Date(s);
-  const today = new Date();
-  const tomorrow = new Date();
-  tomorrow.setDate(today.getDate() + 1);
-  const ymd = (x: Date) => x.toISOString().slice(0, 10);
-  if (ymd(d) === ymd(today)) return 'сегодня';
-  if (ymd(d) === ymd(tomorrow)) return 'завтра';
-  return d.toLocaleDateString('ru-RU', { day: 'numeric', month: 'long' });
-}
 
 export default function IntercityScreen(): React.ReactNode {
   const location = useLocation();
@@ -79,22 +65,39 @@ export default function IntercityScreen(): React.ReactNode {
     }, [reload]),
   );
 
-  // Авто-обновление статуса каждые 8 сек когда есть активная бронь —
-  // ловим момент когда водитель примет, без пушей даже работает.
+  // Поллинг статуса — без пушей ловим момент когда водитель примет.
+  // Зависим только от id+status, чтобы поллинг не пересоздавался
+  // на каждую новую booking-копию из setBooking. setBooking защищён
+  // от no-op'ов сравнением ключевых полей.
+  const bookingId = booking?.id ?? null;
+  const bookingStatus = booking?.status ?? null;
   useEffect(() => {
-    if (!booking || booking.status === 'completed' || booking.status === 'cancelled') {
+    if (bookingId === null || bookingStatus === 'completed' || bookingStatus === 'cancelled') {
       return;
     }
     const interval = setInterval(async () => {
       try {
         const fresh = await getActiveIntercityBooking();
-        setBooking(fresh);
+        setBooking((prev) => {
+          if (!fresh && !prev) return prev;
+          if (
+            fresh &&
+            prev &&
+            fresh.id === prev.id &&
+            fresh.status === prev.status &&
+            fresh.seats_booked_total === prev.seats_booked_total &&
+            (fresh.trip?.id ?? null) === (prev.trip?.id ?? null)
+          ) {
+            return prev;
+          }
+          return fresh;
+        });
       } catch {
-        // ignore
+        // next tick retries
       }
     }, 8000);
     return () => clearInterval(interval);
-  }, [booking]);
+  }, [bookingId, bookingStatus]);
 
   const onRefresh = async (): Promise<void> => {
     setRefreshing(true);
@@ -114,8 +117,7 @@ export default function IntercityScreen(): React.ReactNode {
       setBooking(b);
       setSelectedRoute(null);
     } catch (e: unknown) {
-      const ae = e as { response?: { data?: { message?: string } } };
-      setError(ae.response?.data?.message || 'Не удалось забронировать');
+      setError(getApiErrorMessage(e, 'Не удалось забронировать'));
     } finally {
       setLoading(false);
     }
@@ -137,8 +139,7 @@ export default function IntercityScreen(): React.ReactNode {
               await cancelIntercityBooking(booking.id);
               setBooking(null);
             } catch (e: unknown) {
-              const ae = e as { response?: { data?: { message?: string } } };
-              setError(ae.response?.data?.message || 'Не удалось отменить');
+              setError(getApiErrorMessage(e, 'Не удалось отменить'));
             } finally {
               setLoading(false);
             }
@@ -246,7 +247,7 @@ function ActiveBookingCard({
       <View style={styles.activeRow}>
         <Icon name="clock" size={16} color={ClientColors.textSecondary} strokeWidth={2.2} />
         <Text style={styles.activeRowText}>
-          {formatDate(booking.departure_date)} · {booking.seats_count} {booking.seats_count === 1 ? 'место' : 'места'} · {booking.total_price} сом
+          {formatHumanDate(booking.departure_date)} · {booking.seats_count} {booking.seats_count === 1 ? 'место' : 'места'} · {booking.total_price} сом
         </Text>
       </View>
 

@@ -55,11 +55,7 @@ class IntercityBooking extends Model
      */
     public function scopeActive(Builder $query): Builder
     {
-        return $query->whereIn('status', [
-            IntercityBookingStatus::Pending,
-            IntercityBookingStatus::Matched,
-            IntercityBookingStatus::EnRoute,
-        ]);
+        return $query->whereIn('status', IntercityBookingStatus::activeStatuses());
     }
 
     /**
