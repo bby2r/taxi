@@ -109,6 +109,10 @@ class IntercityService
                 'accepted_at' => now(),
             ]);
 
+            // Снимаем с городской линии — пока везёт 7 пассажиров в
+            // Бишкек, обычные заказы ему присылать нельзя.
+            $driver->driverProfile?->update(['is_online' => false]);
+
             DB::afterCommit(fn () => $this->notifyPassengersTripClaimed($fresh->fresh()));
 
             return $fresh->fresh(['bookings']);

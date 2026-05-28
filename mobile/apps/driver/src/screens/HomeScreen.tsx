@@ -22,6 +22,7 @@ import { useAuth, useLocation, DriverColors, Typography, DEFAULT_MAP_REGION } fr
 import { DriverStackParamList, DriverTabParamList } from '../navigation/types';
 import { useDriverOrder } from '../hooks/useDriverOrder';
 import { useDriverLocation } from '../hooks/useDriverLocation';
+import { getActiveIntercityTrip } from '../api/intercity';
 import { usePushStatus, registerToken } from '../hooks/useNotifications';
 import {
   checkFullScreenIntentPermission,
@@ -77,6 +78,7 @@ export default function HomeScreen(): React.ReactNode {
 
   const driverLocation = useLocation();
   useDriverLocation({ enabled: isOnline });
+  const [hasActiveIntercity, setHasActiveIntercity] = useState(false);
   const cameraRef = useRef<Mapbox.Camera>(null);
   const pushStatus = usePushStatus();
   const [fsiStatus, setFsiStatus] = useState<FullScreenIntentStatus>('unknown');
@@ -233,11 +235,44 @@ export default function HomeScreen(): React.ReactNode {
     await toggleOnline(loc.coords.latitude, loc.coords.longitude);
   };
 
+  // Подтягиваем активный межгород чтобы скрыть «Выйти на линию» —
+  // на линию пускаем только когда нет активного рейса. Поллинг
+  // каждые 15с (мирор IntercityScreen) ловит claim'ы из другой
+  // вкладки без рестарта.
+  useEffect(() => {
+    let cancelled = false;
+    const fetchTrip = async (): Promise<void> => {
+      try {
+        const trip = await getActiveIntercityTrip();
+        if (cancelled) return;
+        setHasActiveIntercity((prev) => {
+          const next = trip !== null;
+          return next === prev ? prev : next;
+        });
+      } catch {
+        // 401/network — игнорим, следующий тик повторит
+      }
+    };
+    fetchTrip();
+    const interval = setInterval(fetchTrip, 15000);
+    return () => {
+      cancelled = true;
+      clearInterval(interval);
+    };
+  }, []);
+
   const handleToggle = async (): Promise<void> => {
     // Going OFFLINE — skip the permission gate; revoking shift doesn't
     // need overlay/notification grants.
     if (isOnline) {
       await performToggle();
+      return;
+    }
+    if (hasActiveIntercity) {
+      Alert.alert(
+        'Активный межгород-рейс',
+        'Завершите рейс перед выходом на городскую линию.',
+      );
       return;
     }
     // Going ONLINE — block until critical permissions are in place,
@@ -474,43 +509,60 @@ export default function HomeScreen(): React.ReactNode {
 
       {state.phase !== 'offer' && (
         <View style={[styles.bottomPanel, { bottom: tabBarHeight }]}>
-          {isOnline && state.phase === 'online_idle' && (
-          <View style={styles.statusPill}>
-            <View style={styles.statusDot} />
-            <Text style={[Typography.body, styles.statusText]}>
-              Ожидаем заказ...
-            </Text>
-          </View>
-        )}
-
-        <TouchableOpacity
-          onPress={handleToggle}
-          disabled={loading}
-          activeOpacity={0.85}
-          style={[
-            styles.shiftButton,
-            isOnline ? styles.shiftButtonOnline : styles.shiftButtonOffline,
-          ]}
-        >
-          {loading ? (
-            <ActivityIndicator
-              color={isOnline ? DriverColors.textPrimary : DriverColors.background}
-            />
-          ) : (
-            <Text
-              style={[
-                Typography.button,
-                {
-                  color: isOnline
-                    ? DriverColors.textPrimary
-                    : DriverColors.background,
-                },
-              ]}
+          {hasActiveIntercity && !isOnline ? (
+            <TouchableOpacity
+              activeOpacity={0.85}
+              onPress={() => navigation.navigate('DriverIntercity')}
+              style={styles.intercityBanner}
             >
-              {isOnline ? 'Завершить смену' : 'Выйти на линию'}
-            </Text>
+              <Text style={styles.intercityBannerTitle}>
+                Активный межгород-рейс
+              </Text>
+              <Text style={styles.intercityBannerSubtitle}>
+                Городская линия недоступна. Тап → перейти к рейсу
+              </Text>
+            </TouchableOpacity>
+          ) : (
+            <>
+              {isOnline && state.phase === 'online_idle' && (
+                <View style={styles.statusPill}>
+                  <View style={styles.statusDot} />
+                  <Text style={[Typography.body, styles.statusText]}>
+                    Ожидаем заказ...
+                  </Text>
+                </View>
+              )}
+
+              <TouchableOpacity
+                onPress={handleToggle}
+                disabled={loading}
+                activeOpacity={0.85}
+                style={[
+                  styles.shiftButton,
+                  isOnline ? styles.shiftButtonOnline : styles.shiftButtonOffline,
+                ]}
+              >
+                {loading ? (
+                  <ActivityIndicator
+                    color={isOnline ? DriverColors.textPrimary : DriverColors.background}
+                  />
+                ) : (
+                  <Text
+                    style={[
+                      Typography.button,
+                      {
+                        color: isOnline
+                          ? DriverColors.textPrimary
+                          : DriverColors.background,
+                      },
+                    ]}
+                  >
+                    {isOnline ? 'Завершить смену' : 'Выйти на линию'}
+                  </Text>
+                )}
+              </TouchableOpacity>
+            </>
           )}
-        </TouchableOpacity>
         </View>
       )}
 
@@ -737,6 +789,29 @@ const styles = StyleSheet.create({
     backgroundColor: DriverColors.cardBackground,
     borderWidth: 1,
     borderColor: DriverColors.border,
+  },
+  intercityBanner: {
+    backgroundColor: DriverColors.cardBackground,
+    borderRadius: 16,
+    paddingHorizontal: 18,
+    paddingVertical: 14,
+    borderWidth: 1.5,
+    borderColor: DriverColors.primary,
+    shadowColor: '#000',
+    shadowOpacity: 0.18,
+    shadowRadius: 8,
+    shadowOffset: { width: 0, height: 4 },
+    elevation: 4,
+  },
+  intercityBannerTitle: {
+    fontSize: 15,
+    fontWeight: '800' as const,
+    color: DriverColors.textPrimary,
+  },
+  intercityBannerSubtitle: {
+    fontSize: 12,
+    color: DriverColors.textSecondary,
+    marginTop: 4,
   },
   offerOverlay: {
     position: 'absolute',

@@ -11,6 +11,7 @@ use App\Http\Requests\Api\V1\UpdateLocationRequest;
 use App\Http\Resources\V1\DriverChangeRequestResource;
 use App\Http\Resources\V1\OrderResource;
 use App\Http\Resources\V1\UserResource;
+use App\Models\IntercityTrip;
 use App\Models\Order;
 use App\Services\DriverBalanceService;
 use App\Services\OrderService;
@@ -41,6 +42,19 @@ class DriverController extends Controller
             return response()->json([
                 'message' => 'Вы временно заблокированы за частые отказы. Дождитесь окончания блокировки или обратитесь в поддержку.',
                 'blocked_until' => $profile->blocked_until?->toISOString(),
+            ], 423);
+        }
+
+        // Активный межгород-рейс блокирует обычное такси: водитель
+        // не может одновременно везти 7 человек в Бишкек и принимать
+        // городские заказы.
+        $hasActiveIntercity = IntercityTrip::query()
+            ->where('driver_id', $request->user()->id)
+            ->active()
+            ->exists();
+        if ($hasActiveIntercity) {
+            return response()->json([
+                'message' => 'У вас активный межгород-рейс. Завершите его перед выходом на городскую линию.',
             ], 423);
         }
 
