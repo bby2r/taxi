@@ -5,6 +5,8 @@ namespace App\Http\Controllers\Admin;
 use App\Http\Controllers\Controller;
 use App\Models\IntercityRoute;
 use App\Models\IntercityRouteSchedule;
+use App\Services\IntercityService;
+use Carbon\Carbon;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\View\View;
@@ -69,6 +71,18 @@ class IntercityScheduleController extends Controller
 
         return redirect()->route('admin.intercity-schedules.index')
             ->with('success', 'Расписание удалено.');
+    }
+
+    public function generateNow(IntercityService $service): RedirectResponse
+    {
+        $today = Carbon::now('Asia/Bishkek')->startOfDay();
+        $total = 0;
+        for ($i = 0; $i < 2; $i++) {
+            $total += $service->generateSlotsForDate($today->copy()->addDays($i));
+        }
+
+        return redirect()->route('admin.intercity-schedules.index')
+            ->with('success', "Создано {$total} slot'ов на сегодня + завтра.");
     }
 
     /**

@@ -15,15 +15,26 @@
                 Cron `intercity:generate-slots` ежедневно в 05:00 (Bishkek) создаёт slot'ы на ближайшие 2 дня из активных расписаний.
             </p>
         </div>
-        <a
-            href="{{ route('admin.intercity-schedules.create') }}"
-            class="inline-flex items-center gap-2 rounded-lg bg-amber-500 px-4 py-2.5 text-sm font-medium text-white shadow-sm hover:bg-amber-600"
-        >
-            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="h-4 w-4">
-                <path d="M10.75 4.75a.75.75 0 0 0-1.5 0v4.5h-4.5a.75.75 0 0 0 0 1.5h4.5v4.5a.75.75 0 0 0 1.5 0v-4.5h4.5a.75.75 0 0 0 0-1.5h-4.5v-4.5Z" />
-            </svg>
-            Добавить расписание
-        </a>
+        <div class="flex items-center gap-3">
+            <form method="POST" action="{{ route('admin.intercity-schedules.generate-now') }}">
+                @csrf
+                <button
+                    type="submit"
+                    class="inline-flex items-center gap-2 rounded-lg border border-amber-400 bg-white px-4 py-2.5 text-sm font-medium text-amber-700 shadow-sm hover:bg-amber-50"
+                >
+                    Сгенерировать сейчас
+                </button>
+            </form>
+            <a
+                href="{{ route('admin.intercity-schedules.create') }}"
+                class="inline-flex items-center gap-2 rounded-lg bg-amber-500 px-4 py-2.5 text-sm font-medium text-white shadow-sm hover:bg-amber-600"
+            >
+                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="h-4 w-4">
+                    <path d="M10.75 4.75a.75.75 0 0 0-1.5 0v4.5h-4.5a.75.75 0 0 0 0 1.5h4.5v4.5a.75.75 0 0 0 1.5 0v-4.5h4.5a.75.75 0 0 0 0-1.5h-4.5v-4.5Z" />
+                </svg>
+                Добавить расписание
+            </a>
+        </div>
     </div>
 
     @if (session('success'))

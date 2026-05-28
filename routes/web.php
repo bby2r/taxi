@@ -58,6 +58,8 @@ Route::prefix('admin')->name('admin.')->group(function () {
         Route::put('region-routes', [RegionRouteController::class, 'update'])->name('region-routes.update');
 
         Route::resource('intercity-routes', IntercityRouteController::class)->except(['show']);
+        Route::post('intercity-schedules/generate-now', [IntercityScheduleController::class, 'generateNow'])
+            ->name('intercity-schedules.generate-now');
         Route::resource('intercity-schedules', IntercityScheduleController::class)
             ->parameters(['intercity-schedules' => 'intercitySchedule'])
             ->except(['show']);
