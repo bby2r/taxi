@@ -37,9 +37,7 @@
         </div>
     </div>
 
-    @if (session('success'))
-        <div class="mb-4 rounded-lg bg-green-50 p-4 text-sm text-green-700">{{ session('success') }}</div>
-    @endif
+    @include('admin.partials.flash')
 
     <div class="rounded-xl border border-gray-200 bg-white shadow-sm">
         <div class="overflow-x-auto">

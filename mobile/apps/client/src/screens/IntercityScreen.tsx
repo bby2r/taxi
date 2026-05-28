@@ -18,6 +18,7 @@ import {
   useLocation,
   ClientColors,
   Typography,
+  formatDeparture,
   getApiErrorMessage,
 } from '@taxi/shared';
 import Icon from '../components/Icon';
@@ -30,21 +31,8 @@ import {
   type IntercitySlot,
 } from '../api/intercity';
 
-function formatDeparture(iso: string): string {
-  try {
-    const d = new Date(iso);
-    const hh = String(d.getHours()).padStart(2, '0');
-    const mm = String(d.getMinutes()).padStart(2, '0');
-    const day = d.toLocaleDateString('ru-RU', {
-      weekday: 'short',
-      day: '2-digit',
-      month: 'short',
-    });
-    return `${day}, ${hh}:${mm}`;
-  } catch {
-    return iso;
-  }
-}
+const formatDepartureWithWeekday = (iso: string): string =>
+  formatDeparture(iso, { weekday: true });
 
 export default function IntercityScreen(): React.ReactNode {
   const location = useLocation();
@@ -104,18 +92,39 @@ export default function IntercityScreen(): React.ReactNode {
     }, [reload]),
   );
 
-  // Поллинг — без пушей ловим момент когда водитель claim'нет slot
-  // или выедет в дорогу. Зависим только от id+status чтобы тик не
-  // пересоздавался на каждый идентичный ответ.
+  // Поллинг бронирования — без пушей ловим момент когда водитель
+  // claim'нет slot или выедет. Slot list скрыт пока есть booking,
+  // фетчить его в тике — пустая работа.
   const bookingId = booking?.id ?? null;
   const bookingStatus = booking?.status ?? null;
   useEffect(() => {
     if (bookingId === null || bookingStatus === 'completed' || bookingStatus === 'cancelled') {
       return;
     }
-    const interval = setInterval(reload, 8000);
+    const tick = async (): Promise<void> => {
+      try {
+        const fresh = await getActiveIntercityBooking();
+        setBooking((prev) => {
+          if (!fresh && !prev) return prev;
+          if (
+            fresh &&
+            prev &&
+            fresh.id === prev.id &&
+            fresh.status === prev.status &&
+            (fresh.trip?.status ?? null) === (prev.trip?.status ?? null) &&
+            fresh.seats_booked_total === prev.seats_booked_total
+          ) {
+            return prev;
+          }
+          return fresh;
+        });
+      } catch {
+        // next tick retries
+      }
+    };
+    const interval = setInterval(tick, 8000);
     return () => clearInterval(interval);
-  }, [bookingId, bookingStatus, reload]);
+  }, [bookingId, bookingStatus]);
 
   const onRefresh = async (): Promise<void> => {
     setRefreshing(true);
@@ -236,7 +245,7 @@ function SlotCard({
         <Text style={styles.slotRoute}>
           {slot.from_region} → {slot.to_region}
         </Text>
-        <Text style={styles.slotTime}>{formatDeparture(slot.departure_at)}</Text>
+        <Text style={styles.slotTime}>{formatDepartureWithWeekday(slot.departure_at)}</Text>
       </View>
 
       <View style={styles.progressBar}>
@@ -407,7 +416,7 @@ function BookingModal({
         <View style={styles.modalBody}>
           <View style={styles.modalSummary}>
             <Text style={styles.modalSummaryLabel}>Выезд</Text>
-            <Text style={styles.modalSummaryValue}>{formatDeparture(slot.departure_at)}</Text>
+            <Text style={styles.modalSummaryValue}>{formatDepartureWithWeekday(slot.departure_at)}</Text>
             <Text style={styles.modalSummaryMeta}>
               Свободно {free} из {slot.max_seats} мест
             </Text>

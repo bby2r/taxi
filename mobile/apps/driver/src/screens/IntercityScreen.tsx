@@ -15,6 +15,7 @@ import {
 import {
   DriverColors,
   Typography,
+  formatDeparture,
   getApiErrorMessage,
   useLocation,
 } from '@taxi/shared';
@@ -29,18 +30,6 @@ import {
   type IntercitySlotOffer,
   type IntercityTrip,
 } from '../api/intercity';
-
-function formatDeparture(iso: string): string {
-  try {
-    const d = new Date(iso);
-    const hh = String(d.getHours()).padStart(2, '0');
-    const mm = String(d.getMinutes()).padStart(2, '0');
-    const day = d.toLocaleDateString('ru-RU', { day: '2-digit', month: 'short' });
-    return `${day}, ${hh}:${mm}`;
-  } catch {
-    return iso;
-  }
-}
 
 export default function IntercityScreen(): React.ReactNode {
   const location = useLocation();
@@ -67,7 +56,11 @@ export default function IntercityScreen(): React.ReactNode {
           t.id === prev.id &&
           t.status === prev.status &&
           t.is_closed === prev.is_closed &&
-          (t.seats_booked ?? 0) === (prev.seats_booked ?? 0)
+          (t.seats_booked ?? 0) === (prev.seats_booked ?? 0) &&
+          (t.passengers?.length ?? 0) === (prev.passengers?.length ?? 0) &&
+          (t.passengers ?? []).every(
+            (p, i) => p.id === prev.passengers?.[i]?.id && p.status === prev.passengers?.[i]?.status,
+          )
         ) {
           return prev;
         }

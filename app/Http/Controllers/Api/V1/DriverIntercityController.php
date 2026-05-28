@@ -18,11 +18,6 @@ class DriverIntercityController extends Controller
 {
     public function __construct(private readonly IntercityService $service) {}
 
-    /**
-     * Открытые slot'ы из region'а где водитель сейчас находится (GPS).
-     * Те где он уже claim'нул другой trip активный — не показываем
-     * (нельзя claim'нуть пока есть активный).
-     */
     public function available(Request $request): JsonResponse
     {
         $validated = $request->validate([
@@ -45,15 +40,13 @@ class DriverIntercityController extends Controller
             return response()->json(['offers' => []]);
         }
 
-        // Фильтр по локации водителя. Свежий GPS из запроса перебивает
-        // profile.latitude/longitude — последнее обновляется только на
-        // линии и устаревает когда водитель сменил район offline.
+        // Свежий GPS из запроса перебивает profile coords — profile
+        // обновляется только на линии и устаревает offline.
         $lat = $validated['latitude'] ?? $user->driverProfile?->latitude;
         $lng = $validated['longitude'] ?? $user->driverProfile?->longitude;
 
-        // Без координат показывать всё подряд опасно — водитель из
-        // Таласа увидит покровские slot'ы. Лучше пустой список +
-        // подсказка в UI «включите геолокацию» чем показывать чужое.
+        // Без координат показать всё опасно — водитель из Таласа
+        // увидит покровские slot'ы.
         if ($lat === null || $lng === null) {
             return response()->json(['offers' => []]);
         }
@@ -76,8 +69,27 @@ class DriverIntercityController extends Controller
             ->limit(50)
             ->get();
 
+        $bookedByTrip = IntercityBooking::query()
+            ->whereIn('trip_id', $slots->pluck('id')->all())
+            ->whereIn('status', [
+                IntercityBookingStatus::Matched,
+                IntercityBookingStatus::EnRoute,
+            ])
+            ->selectRaw('trip_id, SUM(seats_count) as total')
+            ->groupBy('trip_id')
+            ->pluck('total', 'trip_id');
+
         return response()->json([
-            'offers' => $slots->map(fn (IntercityTrip $slot) => $this->slotToOfferArray($slot))->all(),
+            'offers' => $slots->map(fn (IntercityTrip $slot) => [
+                'trip_id' => $slot->id,
+                'from_region' => $slot->route?->fromRegion?->name,
+                'to_region' => $slot->route?->toRegion?->name,
+                'departure_at' => $slot->departure_at?->toISOString(),
+                'max_seats' => $slot->max_seats,
+                'price_per_seat' => $slot->price_per_seat,
+                'booked_seats' => (int) ($bookedByTrip[$slot->id] ?? 0),
+                'total_revenue' => $slot->max_seats * $slot->price_per_seat,
+            ])->all(),
         ]);
     }
 
@@ -148,30 +160,5 @@ class DriverIntercityController extends Controller
         } catch (RuntimeException $e) {
             return response()->json(['message' => $e->getMessage()], 422);
         }
-    }
-
-    /**
-     * @return array<string, mixed>
-     */
-    private function slotToOfferArray(IntercityTrip $slot): array
-    {
-        $bookedSeats = (int) IntercityBooking::query()
-            ->where('trip_id', $slot->id)
-            ->whereIn('status', [
-                IntercityBookingStatus::Matched,
-                IntercityBookingStatus::EnRoute,
-            ])
-            ->sum('seats_count');
-
-        return [
-            'trip_id' => $slot->id,
-            'from_region' => $slot->route?->fromRegion?->name,
-            'to_region' => $slot->route?->toRegion?->name,
-            'departure_at' => $slot->departure_at?->toISOString(),
-            'max_seats' => $slot->max_seats,
-            'price_per_seat' => $slot->price_per_seat,
-            'booked_seats' => $bookedSeats,
-            'total_revenue' => $slot->max_seats * $slot->price_per_seat,
-        ];
     }
 }

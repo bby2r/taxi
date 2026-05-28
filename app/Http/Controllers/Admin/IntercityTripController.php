@@ -16,7 +16,7 @@ class IntercityTripController extends Controller
         // Активные сверху (open/claimed/ready/en_route), потом
         // завершённые/отменённые за последние сутки.
         $trips = IntercityTrip::query()
-            ->with(['route.fromRegion', 'route.toRegion', 'driver', 'bookings.client'])
+            ->with(['route.fromRegion', 'route.toRegion', 'driver', 'bookings'])
             ->orderByRaw("
                 CASE
                     WHEN status IN ('open','claimed','ready','en_route') THEN 0

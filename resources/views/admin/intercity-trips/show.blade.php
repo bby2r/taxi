@@ -25,12 +25,7 @@
 @endphp
 
 @section('content')
-    @if (session('success'))
-        <div class="mb-4 rounded-lg bg-green-50 p-4 text-sm text-green-700">{{ session('success') }}</div>
-    @endif
-    @if (session('error'))
-        <div class="mb-4 rounded-lg bg-red-50 p-4 text-sm text-red-700">{{ session('error') }}</div>
-    @endif
+    @include('admin.partials.flash')
 
     <div class="mb-4">
         <a href="{{ route('admin.intercity-trips.index') }}" class="text-sm text-gray-600 hover:text-amber-600">← К списку рейсов</a>

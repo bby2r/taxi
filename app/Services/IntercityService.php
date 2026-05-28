@@ -23,14 +23,9 @@ class IntercityService
         private readonly GeoService $geoService,
     ) {}
 
-    /* ───────────────────────────────────────────────────────────
-     * SCHEDULE → SLOT GENERATION
-     * ─────────────────────────────────────────────────────────── */
-
     /**
-     * Создаёт slot'ы (intercity_trips status=open) на дату по активным
-     * расписаниям. Идемпотентно — повторный вызов на ту же дату не
-     * создаёт дублей (проверка route+schedule+date уникальности).
+     * Идемпотентно: повторный вызов на ту же дату не создаёт дублей
+     * (уникальность по schedule_id + departure_date).
      *
      * @return int количество созданных slot'ов
      */
@@ -68,14 +63,6 @@ class IntercityService
         return $created;
     }
 
-    /* ───────────────────────────────────────────────────────────
-     * DRIVER ACTIONS (claim / close / cancel / lifecycle)
-     * ─────────────────────────────────────────────────────────── */
-
-    /**
-     * Водитель берёт открытый slot. Проверяет: водитель accepts_intercity,
-     * slot ещё open, у водителя нет другого активного intercity-трипа.
-     */
     public function claimSlot(IntercityTrip $trip, User $driver): IntercityTrip
     {
         $driver->loadMissing('driverProfile');
@@ -119,23 +106,13 @@ class IntercityService
         });
     }
 
-    /**
-     * Водитель «закрывает» slot вручную — обычно потому что подобрал
-     * пассажира с улицы. Новые брони блокируются (UI пометит «полная»).
-     * Уже забронированные остаются в силе.
-     */
     public function closeSlot(IntercityTrip $trip, User $driver): IntercityTrip
     {
         if ($trip->driver_id !== $driver->id) {
             throw new RuntimeException('Этот рейс не ваш.');
         }
-        if (! in_array($trip->status, [IntercityTripStatus::Claimed, IntercityTripStatus::Ready], true)) {
-            throw new RuntimeException('Закрыть можно только принятый рейс.');
-        }
 
-        $trip->update(['is_closed' => true]);
-
-        return $trip->fresh();
+        return $this->performClose($trip);
     }
 
     public function startTrip(IntercityTrip $trip, User $driver): IntercityTrip
@@ -196,53 +173,26 @@ class IntercityService
         return $trip->fresh();
     }
 
-    /**
-     * Водитель отменяет принятый slot (сломалась машина, болезнь).
-     * Все active бронь возвращаются как Cancelled, пассажирам пуш
-     * «водитель отменил, поищите другой рейс». Slot не удаляем —
-     * status=Cancelled, чтоб видна история.
-     */
     public function cancelTripByDriver(IntercityTrip $trip, User $driver): IntercityTrip
     {
         if ($trip->driver_id !== $driver->id) {
             throw new RuntimeException('Эта поездка не ваша.');
         }
-        if ($trip->status === IntercityTripStatus::Completed) {
-            throw new RuntimeException('Завершённую поездку нельзя отменить.');
-        }
-        if ($trip->status === IntercityTripStatus::Cancelled) {
-            throw new RuntimeException('Поездка уже отменена.');
-        }
 
-        DB::transaction(function () use ($trip) {
-            $trip->update([
-                'status' => IntercityTripStatus::Cancelled,
-                'cancelled_at' => now(),
-                'cancelled_by' => 'driver',
-            ]);
-            $trip->bookings()
-                ->whereIn('status', [
-                    IntercityBookingStatus::Matched,
-                    IntercityBookingStatus::EnRoute,
-                ])
-                ->update([
-                    'status' => IntercityBookingStatus::Cancelled,
-                    'cancelled_at' => now(),
-                    'cancelled_by' => 'driver',
-                ]);
-        });
-
-        DB::afterCommit(fn () => $this->notifyPassengersTripCancelledByDriver($trip->fresh()));
-
-        return $trip->fresh();
+        return $this->performCancel($trip, 'driver');
     }
 
-    /**
-     * Админ закрывает slot (новые бронь блокируются). В отличие от
-     * closeSlot не требует владения — диспетчер может закрыть любого
-     * водителя.
-     */
     public function closeSlotByAdmin(IntercityTrip $trip): IntercityTrip
+    {
+        return $this->performClose($trip);
+    }
+
+    public function cancelTripByAdmin(IntercityTrip $trip): IntercityTrip
+    {
+        return $this->performCancel($trip, 'admin');
+    }
+
+    private function performClose(IntercityTrip $trip): IntercityTrip
     {
         if (! in_array($trip->status, [IntercityTripStatus::Claimed, IntercityTripStatus::Ready], true)) {
             throw new RuntimeException('Закрыть можно только принятый рейс.');
@@ -253,12 +203,7 @@ class IntercityService
         return $trip->fresh();
     }
 
-    /**
-     * Админ отменяет slot. Используется когда водитель не выходит на
-     * связь, ломается машина и т.д. — водителю самостоятельно отменять
-     * нельзя, чтобы не было соблазна сливать пассажиров без причины.
-     */
-    public function cancelTripByAdmin(IntercityTrip $trip): IntercityTrip
+    private function performCancel(IntercityTrip $trip, string $by): IntercityTrip
     {
         if ($trip->status === IntercityTripStatus::Completed) {
             throw new RuntimeException('Завершённую поездку нельзя отменить.');
@@ -267,11 +212,20 @@ class IntercityService
             throw new RuntimeException('Поездка уже отменена.');
         }
 
-        DB::transaction(function () use ($trip) {
+        $this->transitionToCancelled($trip, $by);
+
+        DB::afterCommit(fn () => $this->notifyPassengersTripCancelledByDriver($trip->fresh()));
+
+        return $trip->fresh();
+    }
+
+    private function transitionToCancelled(IntercityTrip $trip, string $by): void
+    {
+        DB::transaction(function () use ($trip, $by) {
             $trip->update([
                 'status' => IntercityTripStatus::Cancelled,
                 'cancelled_at' => now(),
-                'cancelled_by' => 'admin',
+                'cancelled_by' => $by,
             ]);
             $trip->bookings()
                 ->whereIn('status', [
@@ -281,19 +235,11 @@ class IntercityService
                 ->update([
                     'status' => IntercityBookingStatus::Cancelled,
                     'cancelled_at' => now(),
-                    'cancelled_by' => 'admin',
+                    'cancelled_by' => $by,
                 ]);
         });
-
-        DB::afterCommit(fn () => $this->notifyPassengersTripCancelledByDriver($trip->fresh()));
-
-        return $trip->fresh();
     }
 
-    /**
-     * Водитель отмечает не-явку пассажира. Trip продолжается, no-show
-     * считается для отчётности.
-     */
     public function markPassengerNoShow(IntercityBooking $booking, User $driver): IntercityBooking
     {
         $booking->loadMissing('trip');
@@ -314,14 +260,6 @@ class IntercityService
         return $booking->fresh();
     }
 
-    /* ───────────────────────────────────────────────────────────
-     * CLIENT BOOKINGS
-     * ─────────────────────────────────────────────────────────── */
-
-    /**
-     * Клиент бронит место(а) в конкретном slot'е. Trip автоматически
-     * переходит в Ready когда seats заполнены.
-     */
     public function createBooking(
         User $client,
         IntercityTrip $trip,
@@ -420,58 +358,27 @@ class IntercityService
         return $booking->fresh();
     }
 
-    /* ───────────────────────────────────────────────────────────
-     * EXPIRY (cron)
-     * ─────────────────────────────────────────────────────────── */
-
     /**
-     * Слоты у которых departure_at прошло 30 мин назад и трип всё ещё
-     * Open/Claimed → отменяем. Возвращает количество отменённых.
-     * Вызывается ExpireStaleSlotsCommand раз в час.
+     * @return int количество отменённых
      */
     public function expireStaleSlots(): int
     {
         $cutoff = now()->subMinutes(30);
+        // notify-* сами loadMissing() — eager-loading здесь только тратит запросы.
         $stale = IntercityTrip::query()
             ->whereIn('status', [IntercityTripStatus::Open, IntercityTripStatus::Claimed])
             ->where('departure_at', '<', $cutoff)
-            ->with(['bookings.client', 'driver'])
             ->get();
 
         foreach ($stale as $trip) {
-            DB::transaction(function () use ($trip) {
-                $trip->update([
-                    'status' => IntercityTripStatus::Cancelled,
-                    'cancelled_at' => now(),
-                    'cancelled_by' => 'system',
-                ]);
-                $trip->bookings()
-                    ->whereIn('status', [
-                        IntercityBookingStatus::Matched,
-                        IntercityBookingStatus::EnRoute,
-                    ])
-                    ->update([
-                        'status' => IntercityBookingStatus::Cancelled,
-                        'cancelled_at' => now(),
-                        'cancelled_by' => 'system',
-                    ]);
-            });
-
+            $this->transitionToCancelled($trip, 'system');
             DB::afterCommit(fn () => $this->notifyPassengersSlotExpired($trip->fresh()));
         }
 
         return $stale->count();
     }
 
-    /* ───────────────────────────────────────────────────────────
-     * PUSH NOTIFICATIONS
-     * ─────────────────────────────────────────────────────────── */
-
     /**
-     * Подходящие водители для рассылки оффера «есть открытый slot».
-     * Фильтры: accepts_intercity=true, в зоне обслуживания from_region
-     * (GPS-фильтр), без активного intercity-трипа.
-     *
      * @return Collection<int, User>
      */
     private function eligibleIntercityDrivers(IntercityRoute $route): Collection
