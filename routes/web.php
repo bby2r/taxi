@@ -8,6 +8,7 @@ use App\Http\Controllers\Admin\DashboardController;
 use App\Http\Controllers\Admin\DriverController;
 use App\Http\Controllers\Admin\DriverTicketController;
 use App\Http\Controllers\Admin\IntercityRouteController;
+use App\Http\Controllers\Admin\IntercityScheduleController;
 use App\Http\Controllers\Admin\OrderController;
 use App\Http\Controllers\Admin\OtpController;
 use App\Http\Controllers\Admin\RegionController;
@@ -57,6 +58,9 @@ Route::prefix('admin')->name('admin.')->group(function () {
         Route::put('region-routes', [RegionRouteController::class, 'update'])->name('region-routes.update');
 
         Route::resource('intercity-routes', IntercityRouteController::class)->except(['show']);
+        Route::resource('intercity-schedules', IntercityScheduleController::class)
+            ->parameters(['intercity-schedules' => 'intercitySchedule'])
+            ->except(['show']);
 
         Route::resource('orders', OrderController::class)->only(['index', 'show']);
 

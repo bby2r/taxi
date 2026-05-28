@@ -38,6 +38,7 @@ class IntercityBookingResource extends JsonResource
             'trip' => $this->whenLoaded('trip', fn () => $this->trip ? [
                 'id' => $this->trip->id,
                 'status' => $this->trip->status->value,
+                'departure_at' => $this->trip->departure_at?->toISOString(),
                 'driver_name' => $this->trip->driver_name,
                 'driver_phone' => $this->trip->driver_phone,
                 'car_model' => $this->trip->car_model,

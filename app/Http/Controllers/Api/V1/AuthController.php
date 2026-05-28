@@ -161,6 +161,7 @@ class AuthController extends Controller
         if ($user->isDriver()) {
             $user->loadMissing('driverProfile');
             $payload['is_online'] = $user->driverProfile?->is_online ?? false;
+            $payload['accepts_intercity'] = $user->driverProfile?->accepts_intercity ?? false;
         }
 
         return response()->json(['user' => $payload]);

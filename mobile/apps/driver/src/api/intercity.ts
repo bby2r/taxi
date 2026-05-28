@@ -1,52 +1,60 @@
 import { apiClient } from '@taxi/shared';
 
-export type IntercityOffer = {
-  route_id: number;
-  from_region: string;
-  to_region: string;
-  departure_date: string; // YYYY-MM-DD
+export type IntercitySlotOffer = {
+  trip_id: number;
+  from_region: string | null;
+  to_region: string | null;
+  departure_at: string;
   max_seats: number;
   price_per_seat: number;
+  booked_seats: number;
   total_revenue: number;
-  passengers_count: number;
+};
+
+export type IntercityTripStatus =
+  | 'open'
+  | 'claimed'
+  | 'ready'
+  | 'en_route'
+  | 'completed'
+  | 'cancelled';
+
+export type IntercityPassenger = {
+  id: number;
+  name: string | null;
+  phone: string | null;
+  seats_count: number;
+  pickup_address: string | null;
+  status: string;
 };
 
 export type IntercityTrip = {
   id: number;
-  status: 'matched' | 'en_route' | 'completed' | 'cancelled';
+  status: IntercityTripStatus;
+  is_closed: boolean;
   route?: { id: number; from_region: string; to_region: string };
-  departure_date: string;
+  departure_at: string;
   max_seats: number;
   price_per_seat: number;
+  seats_booked?: number;
   total_revenue?: number;
   commission_amount?: number | null;
-  passengers?: Array<{
-    id: number;
-    name: string | null;
-    phone: string | null;
-    seats_count: number;
-    pickup_address: string | null;
-    status: string;
-  }>;
+  passengers?: IntercityPassenger[];
   accepted_at?: string | null;
   departed_at?: string | null;
   completed_at?: string | null;
 };
 
-export async function getAvailableIntercityOffers(): Promise<IntercityOffer[]> {
-  const { data } = await apiClient.get<{ offers: IntercityOffer[] }>(
+export async function getAvailableIntercitySlots(): Promise<IntercitySlotOffer[]> {
+  const { data } = await apiClient.get<{ offers: IntercitySlotOffer[] }>(
     '/api/v1/driver/intercity/available',
   );
   return data.offers;
 }
 
-export async function acceptIntercityOffer(
-  route_id: number,
-  departure_date: string,
-): Promise<IntercityTrip> {
+export async function claimIntercitySlot(tripId: number): Promise<IntercityTrip> {
   const { data } = await apiClient.post<{ data: IntercityTrip }>(
-    '/api/v1/driver/intercity/accept',
-    { route_id, departure_date },
+    `/api/v1/driver/intercity/trips/${tripId}/claim`,
   );
   return data.data;
 }
@@ -65,6 +73,13 @@ export async function getActiveIntercityTrip(): Promise<IntercityTrip | null> {
   }
 }
 
+export async function closeIntercitySlot(tripId: number): Promise<IntercityTrip> {
+  const { data } = await apiClient.post<{ data: IntercityTrip }>(
+    `/api/v1/driver/intercity/trips/${tripId}/close`,
+  );
+  return data.data;
+}
+
 export async function startIntercityTrip(tripId: number): Promise<IntercityTrip> {
   const { data } = await apiClient.post<{ data: IntercityTrip }>(
     `/api/v1/driver/intercity/trips/${tripId}/start`,
@@ -77,4 +92,20 @@ export async function completeIntercityTrip(tripId: number): Promise<IntercityTr
     `/api/v1/driver/intercity/trips/${tripId}/complete`,
   );
   return data.data;
+}
+
+export async function cancelIntercityTrip(tripId: number): Promise<IntercityTrip> {
+  const { data } = await apiClient.post<{ data: IntercityTrip }>(
+    `/api/v1/driver/intercity/trips/${tripId}/cancel`,
+  );
+  return data.data;
+}
+
+export async function markPassengerNoShow(
+  bookingId: number,
+): Promise<{ id: number; status: string }> {
+  const { data } = await apiClient.post<{ id: number; status: string }>(
+    `/api/v1/driver/intercity/bookings/${bookingId}/no-show`,
+  );
+  return data;
 }

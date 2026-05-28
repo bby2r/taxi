@@ -15,21 +15,36 @@ import {
 import {
   DriverColors,
   Typography,
-  formatHumanDate,
   getApiErrorMessage,
 } from '@taxi/shared';
 import {
-  acceptIntercityOffer,
+  cancelIntercityTrip,
+  claimIntercitySlot,
+  closeIntercitySlot,
   completeIntercityTrip,
   getActiveIntercityTrip,
-  getAvailableIntercityOffers,
+  getAvailableIntercitySlots,
+  markPassengerNoShow,
   startIntercityTrip,
-  type IntercityOffer,
+  type IntercityPassenger,
+  type IntercitySlotOffer,
   type IntercityTrip,
 } from '../api/intercity';
 
+function formatDeparture(iso: string): string {
+  try {
+    const d = new Date(iso);
+    const hh = String(d.getHours()).padStart(2, '0');
+    const mm = String(d.getMinutes()).padStart(2, '0');
+    const day = d.toLocaleDateString('ru-RU', { day: '2-digit', month: 'short' });
+    return `${day}, ${hh}:${mm}`;
+  } catch {
+    return iso;
+  }
+}
+
 export default function IntercityScreen(): React.ReactNode {
-  const [offers, setOffers] = useState<IntercityOffer[]>([]);
+  const [slots, setSlots] = useState<IntercitySlotOffer[]>([]);
   const [activeTrip, setActiveTrip] = useState<IntercityTrip | null>(null);
   const [refreshing, setRefreshing] = useState(false);
   const [loading, setLoading] = useState(false);
@@ -38,24 +53,37 @@ export default function IntercityScreen(): React.ReactNode {
   const reload = useCallback(async (): Promise<void> => {
     setError(null);
     try {
-      const [t, o] = await Promise.all([
+      const [t, s] = await Promise.all([
         getActiveIntercityTrip(),
-        getAvailableIntercityOffers(),
+        getAvailableIntercitySlots(),
       ]);
       setActiveTrip((prev) => {
         if (!t && !prev) return prev;
-        if (t && prev && t.id === prev.id && t.status === prev.status) return prev;
-        return t;
-      });
-      setOffers((prev) => {
-        if (prev.length === o.length && prev.every((p, i) =>
-          p.route_id === o[i].route_id &&
-          p.departure_date === o[i].departure_date &&
-          p.passengers_count === o[i].passengers_count,
-        )) {
+        if (
+          t &&
+          prev &&
+          t.id === prev.id &&
+          t.status === prev.status &&
+          t.is_closed === prev.is_closed &&
+          (t.seats_booked ?? 0) === (prev.seats_booked ?? 0)
+        ) {
           return prev;
         }
-        return o;
+        return t;
+      });
+      setSlots((prev) => {
+        if (
+          prev.length === s.length &&
+          prev.every(
+            (p, i) =>
+              p.trip_id === s[i].trip_id &&
+              p.booked_seats === s[i].booked_seats &&
+              p.departure_at === s[i].departure_at,
+          )
+        ) {
+          return prev;
+        }
+        return s;
       });
     } catch {
       // next tick retries
@@ -68,9 +96,6 @@ export default function IntercityScreen(): React.ReactNode {
     }, [reload]),
   );
 
-  // Авто-обновление списка офферов когда трипа нет — новые «полные
-  // машины» появляются сами без pull-to-refresh. Депендим только на
-  // activeTrip?.id чтобы тик не пересоздавался на каждом ответе.
   const activeTripId = activeTrip?.id ?? null;
   useEffect(() => {
     if (activeTripId !== null) return;
@@ -84,28 +109,52 @@ export default function IntercityScreen(): React.ReactNode {
     setRefreshing(false);
   };
 
-  const handleAccept = async (offer: IntercityOffer): Promise<void> => {
+  const handleClaim = (slot: IntercitySlotOffer): void => {
+    const free = slot.max_seats - slot.booked_seats;
     Alert.alert(
-      'Принять рейс?',
-      `${offer.from_region} → ${offer.to_region}\n` +
-        `${offer.max_seats} пассажиров · ${offer.total_revenue} сом всего\n` +
-        `Выезд: ${formatHumanDate(offer.departure_date)}`,
+      'Взять этот рейс?',
+      `${slot.from_region} → ${slot.to_region}\n` +
+        `Выезд: ${formatDeparture(slot.departure_at)}\n` +
+        `${slot.max_seats} мест × ${slot.price_per_seat} сом\n` +
+        `Сейчас занято: ${slot.booked_seats}, свободно: ${free}`,
       [
         { text: 'Отмена', style: 'cancel' },
         {
-          text: 'Принимаю',
+          text: 'Беру',
           onPress: async () => {
             setLoading(true);
             setError(null);
             try {
-              const trip = await acceptIntercityOffer(
-                offer.route_id,
-                offer.departure_date,
-              );
+              const trip = await claimIntercitySlot(slot.trip_id);
               setActiveTrip(trip);
-              setOffers([]);
+              setSlots([]);
             } catch (e: unknown) {
-              setError(getApiErrorMessage(e, 'Не удалось принять рейс'));
+              setError(getApiErrorMessage(e, 'Не удалось взять рейс'));
+            } finally {
+              setLoading(false);
+            }
+          },
+        },
+      ],
+    );
+  };
+
+  const handleClose = (): void => {
+    if (!activeTrip) return;
+    Alert.alert(
+      'Закрыть слот?',
+      'Подтверждайте если посадили пассажира вне приложения и машина уже полная — клиенты перестанут видеть этот рейс.',
+      [
+        { text: 'Отмена', style: 'cancel' },
+        {
+          text: 'Закрыть',
+          onPress: async () => {
+            setLoading(true);
+            try {
+              const t = await closeIntercitySlot(activeTrip.id);
+              setActiveTrip(t);
+            } catch (e: unknown) {
+              setError(getApiErrorMessage(e, 'Не удалось закрыть слот'));
             } finally {
               setLoading(false);
             }
@@ -128,7 +177,7 @@ export default function IntercityScreen(): React.ReactNode {
     }
   };
 
-  const handleComplete = async (): Promise<void> => {
+  const handleComplete = (): void => {
     if (!activeTrip) return;
     Alert.alert(
       'Завершить рейс?',
@@ -138,6 +187,7 @@ export default function IntercityScreen(): React.ReactNode {
         {
           text: 'Завершить',
           onPress: async () => {
+            if (!activeTrip) return;
             setLoading(true);
             try {
               const t = await completeIntercityTrip(activeTrip.id);
@@ -153,11 +203,63 @@ export default function IntercityScreen(): React.ReactNode {
     );
   };
 
+  const handleCancel = (): void => {
+    if (!activeTrip) return;
+    Alert.alert(
+      'Отменить рейс?',
+      'Пассажиры получат уведомление об отмене. Используйте только если действительно не сможете выехать.',
+      [
+        { text: 'Отмена', style: 'cancel' },
+        {
+          text: 'Отменить рейс',
+          style: 'destructive',
+          onPress: async () => {
+            if (!activeTrip) return;
+            setLoading(true);
+            try {
+              const t = await cancelIntercityTrip(activeTrip.id);
+              setActiveTrip(t.status === 'cancelled' ? null : t);
+            } catch (e: unknown) {
+              setError(getApiErrorMessage(e, 'Не удалось отменить'));
+            } finally {
+              setLoading(false);
+            }
+          },
+        },
+      ],
+    );
+  };
+
+  const handleNoShow = (passenger: IntercityPassenger): void => {
+    Alert.alert(
+      'Пассажир не пришёл?',
+      `Отметить ${passenger.name ?? 'пассажира'} как не пришёл — место освободится для других.`,
+      [
+        { text: 'Отмена', style: 'cancel' },
+        {
+          text: 'Не пришёл',
+          style: 'destructive',
+          onPress: async () => {
+            setLoading(true);
+            try {
+              await markPassengerNoShow(passenger.id);
+              await reload();
+            } catch (e: unknown) {
+              setError(getApiErrorMessage(e, 'Не удалось обновить'));
+            } finally {
+              setLoading(false);
+            }
+          },
+        },
+      ],
+    );
+  };
+
   return (
     <View style={styles.container}>
       <View style={styles.header}>
         <Text style={styles.headerTitle}>Межгород</Text>
-        <Text style={styles.headerSubtitle}>Готовые к выезду машины</Text>
+        <Text style={styles.headerSubtitle}>Открытые slot'ы из вашего района</Text>
       </View>
 
       <ScrollView
@@ -173,28 +275,35 @@ export default function IntercityScreen(): React.ReactNode {
         )}
 
         {activeTrip && (
-          <ActiveTripCard trip={activeTrip} onStart={handleStart} onComplete={handleComplete} loading={loading} />
+          <ActiveTripCard
+            trip={activeTrip}
+            loading={loading}
+            onClose={handleClose}
+            onStart={handleStart}
+            onComplete={handleComplete}
+            onCancel={handleCancel}
+            onNoShow={handleNoShow}
+          />
         )}
 
-        {!activeTrip && offers.length === 0 && (
+        {!activeTrip && slots.length === 0 && (
           <View style={styles.emptyBlock}>
             <Text style={styles.emptyIcon}>🚌</Text>
-            <Text style={styles.emptyTitle}>Готовых рейсов пока нет</Text>
+            <Text style={styles.emptyTitle}>Открытых рейсов сейчас нет</Text>
             <Text style={styles.emptyText}>
-              Как только пассажиры наберутся на полную машину — рейс появится здесь.
-              Список обновляется каждые 15 сек.
+              Утренний cron создаёт slot'ы по активным расписаниям. Список обновляется каждые 15 сек.
             </Text>
           </View>
         )}
 
-        {!activeTrip && offers.length > 0 && (
+        {!activeTrip && slots.length > 0 && (
           <>
-            <Text style={styles.sectionTitle}>Доступные рейсы ({offers.length})</Text>
-            {offers.map((offer) => (
-              <OfferCard
-                key={`${offer.route_id}_${offer.departure_date}`}
-                offer={offer}
-                onAccept={() => handleAccept(offer)}
+            <Text style={styles.sectionTitle}>Доступные slot'ы ({slots.length})</Text>
+            {slots.map((slot) => (
+              <SlotCard
+                key={slot.trip_id}
+                slot={slot}
+                onClaim={() => handleClaim(slot)}
                 loading={loading}
               />
             ))}
@@ -205,50 +314,53 @@ export default function IntercityScreen(): React.ReactNode {
   );
 }
 
-function OfferCard({
-  offer,
-  onAccept,
+function SlotCard({
+  slot,
+  onClaim,
   loading,
 }: {
-  offer: IntercityOffer;
-  onAccept: () => void;
+  slot: IntercitySlotOffer;
+  onClaim: () => void;
   loading: boolean;
 }): React.ReactNode {
+  const free = slot.max_seats - slot.booked_seats;
   return (
     <View style={styles.offerCard}>
       <View style={styles.offerHeader}>
         <Text style={styles.offerRoute}>
-          {offer.from_region} → {offer.to_region}
+          {slot.from_region} → {slot.to_region}
         </Text>
         <View style={styles.offerBadge}>
-          <Text style={styles.offerBadgeText}>{formatHumanDate(offer.departure_date)}</Text>
+          <Text style={styles.offerBadgeText}>{formatDeparture(slot.departure_at)}</Text>
         </View>
       </View>
 
       <View style={styles.offerMetaRow}>
         <View style={styles.offerMetaCell}>
-          <Text style={styles.offerMetaLabel}>Пассажиров</Text>
-          <Text style={styles.offerMetaValue}>{offer.max_seats}</Text>
+          <Text style={styles.offerMetaLabel}>Мест всего</Text>
+          <Text style={styles.offerMetaValue}>{slot.max_seats}</Text>
         </View>
         <View style={styles.offerMetaCell}>
-          <Text style={styles.offerMetaLabel}>Цена/место</Text>
-          <Text style={styles.offerMetaValue}>{offer.price_per_seat} сом</Text>
+          <Text style={styles.offerMetaLabel}>Уже занято</Text>
+          <Text style={styles.offerMetaValue}>{slot.booked_seats}</Text>
         </View>
         <View style={[styles.offerMetaCell, styles.offerMetaTotal]}>
-          <Text style={styles.offerMetaLabel}>Заработок</Text>
-          <Text style={[styles.offerMetaValue, styles.offerMetaTotalValue]}>
-            {offer.total_revenue} сом
-          </Text>
+          <Text style={styles.offerMetaLabel}>Свободно</Text>
+          <Text style={[styles.offerMetaValue, styles.offerMetaTotalValue]}>{free}</Text>
         </View>
       </View>
 
+      <Text style={styles.priceLine}>
+        {slot.price_per_seat} сом за место · максимум {slot.total_revenue.toLocaleString()} сом
+      </Text>
+
       <TouchableOpacity
         style={[styles.acceptButton, loading && { opacity: 0.5 }]}
-        onPress={onAccept}
+        onPress={onClaim}
         disabled={loading}
         activeOpacity={0.9}
       >
-        <Text style={styles.acceptButtonText}>Принять рейс</Text>
+        <Text style={styles.acceptButtonText}>Беру этот рейс</Text>
       </TouchableOpacity>
     </View>
   );
@@ -256,17 +368,31 @@ function OfferCard({
 
 function ActiveTripCard({
   trip,
+  loading,
+  onClose,
   onStart,
   onComplete,
-  loading,
+  onCancel,
+  onNoShow,
 }: {
   trip: IntercityTrip;
+  loading: boolean;
+  onClose: () => void;
   onStart: () => void;
   onComplete: () => void;
-  loading: boolean;
+  onCancel: () => void;
+  onNoShow: (p: IntercityPassenger) => void;
 }): React.ReactNode {
-  const isMatched = trip.status === 'matched';
+  const isClaimed = trip.status === 'claimed';
+  const isReady = trip.status === 'ready';
   const isEnRoute = trip.status === 'en_route';
+  const seatsBooked = trip.seats_booked ?? 0;
+  const seatsFree = trip.max_seats - seatsBooked;
+
+  let statusLabel = '';
+  if (isClaimed) statusLabel = trip.is_closed ? 'Слот закрыт' : 'Принят — ждём пассажиров';
+  else if (isReady) statusLabel = 'Готов — все места заняты';
+  else if (isEnRoute) statusLabel = 'В пути';
 
   return (
     <View style={styles.activeCard}>
@@ -275,18 +401,20 @@ function ActiveTripCard({
           {trip.route?.from_region} → {trip.route?.to_region}
         </Text>
         <View style={styles.statusPill}>
-          <Text style={styles.statusPillText}>
-            {isMatched ? 'Принято — соберите пассажиров' : 'В пути'}
-          </Text>
+          <Text style={styles.statusPillText}>{statusLabel}</Text>
         </View>
       </View>
 
       <Text style={styles.activeMeta}>
-        {formatHumanDate(trip.departure_date)} · {trip.max_seats} мест × {trip.price_per_seat} сом · всего{' '}
-        {(trip.total_revenue ?? trip.max_seats * trip.price_per_seat).toLocaleString()} сом
+        Выезд: {formatDeparture(trip.departure_at)} · занято {seatsBooked}/{trip.max_seats} · свободно{' '}
+        {seatsFree} · {trip.price_per_seat} сом/место
       </Text>
 
       <Text style={styles.passengersTitle}>Пассажиры ({trip.passengers?.length ?? 0})</Text>
+
+      {(!trip.passengers || trip.passengers.length === 0) && (
+        <Text style={styles.passengersEmpty}>Пока никто не забронировал.</Text>
+      )}
 
       {trip.passengers?.map((p) => (
         <View key={p.id} style={styles.passengerRow}>
@@ -307,10 +435,32 @@ function ActiveTripCard({
               <Text style={styles.passengerCallText}>📞</Text>
             </TouchableOpacity>
           )}
+          {(isClaimed || isReady) && (
+            <TouchableOpacity
+              style={styles.passengerNoShowButton}
+              onPress={() => onNoShow(p)}
+              activeOpacity={0.85}
+            >
+              <Text style={styles.passengerNoShowText}>✕</Text>
+            </TouchableOpacity>
+          )}
         </View>
       ))}
 
-      {isMatched && (
+      {/* Action row: close (when there's room) + start (when ready) +
+          complete (when en_route) + cancel (any pre-departure phase). */}
+      {isClaimed && !trip.is_closed && seatsFree > 0 && (
+        <TouchableOpacity
+          style={[styles.secondaryButton, loading && { opacity: 0.5 }]}
+          onPress={onClose}
+          disabled={loading}
+          activeOpacity={0.9}
+        >
+          <Text style={styles.secondaryButtonText}>Закрыть слот (машина полная)</Text>
+        </TouchableOpacity>
+      )}
+
+      {(isClaimed || isReady) && (
         <TouchableOpacity
           style={[styles.actionButton, loading && { opacity: 0.5 }]}
           onPress={onStart}
@@ -329,6 +479,17 @@ function ActiveTripCard({
           activeOpacity={0.9}
         >
           <Text style={styles.actionButtonText}>Завершить рейс</Text>
+        </TouchableOpacity>
+      )}
+
+      {(isClaimed || isReady) && (
+        <TouchableOpacity
+          style={[styles.dangerButton, loading && { opacity: 0.5 }]}
+          onPress={onCancel}
+          disabled={loading}
+          activeOpacity={0.9}
+        >
+          <Text style={styles.dangerButtonText}>Отменить рейс</Text>
         </TouchableOpacity>
       )}
     </View>
@@ -390,8 +551,6 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     lineHeight: 20,
   },
-
-  // Offer card
   offerCard: {
     backgroundColor: DriverColors.cardBackground,
     borderRadius: 18,
@@ -426,7 +585,7 @@ const styles = StyleSheet.create({
   offerMetaRow: {
     flexDirection: 'row',
     gap: 8,
-    marginBottom: 14,
+    marginBottom: 10,
   },
   offerMetaCell: {
     flex: 1,
@@ -453,6 +612,12 @@ const styles = StyleSheet.create({
   offerMetaTotalValue: {
     color: DriverColors.primaryDark,
   },
+  priceLine: {
+    fontSize: 13,
+    color: DriverColors.textSecondary,
+    marginBottom: 14,
+    paddingHorizontal: 4,
+  },
   acceptButton: {
     height: 50,
     borderRadius: 24,
@@ -466,8 +631,6 @@ const styles = StyleSheet.create({
     color: DriverColors.white,
     letterSpacing: 0.2,
   },
-
-  // Active trip
   activeCard: {
     backgroundColor: DriverColors.cardBackground,
     borderRadius: 18,
@@ -512,13 +675,19 @@ const styles = StyleSheet.create({
     color: DriverColors.textSecondary,
     marginBottom: 8,
   },
+  passengersEmpty: {
+    fontSize: 13,
+    color: DriverColors.textMuted,
+    fontStyle: 'italic',
+    paddingVertical: 8,
+  },
   passengerRow: {
     flexDirection: 'row',
     alignItems: 'center',
     paddingVertical: 10,
     borderBottomWidth: 1,
     borderBottomColor: DriverColors.border,
-    gap: 12,
+    gap: 8,
   },
   passengerName: {
     fontSize: 14,
@@ -541,8 +710,21 @@ const styles = StyleSheet.create({
   passengerCallText: {
     fontSize: 18,
   },
+  passengerNoShowButton: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: '#FFE4E4',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  passengerNoShowText: {
+    fontSize: 14,
+    fontWeight: '800' as const,
+    color: DriverColors.danger,
+  },
   actionButton: {
-    marginTop: 16,
+    marginTop: 14,
     height: 54,
     borderRadius: 27,
     backgroundColor: DriverColors.primary,
@@ -554,5 +736,33 @@ const styles = StyleSheet.create({
     fontWeight: '800' as const,
     color: DriverColors.white,
     letterSpacing: 0.2,
+  },
+  secondaryButton: {
+    marginTop: 14,
+    height: 48,
+    borderRadius: 24,
+    backgroundColor: DriverColors.backgroundSecondary,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  secondaryButtonText: {
+    fontSize: 14,
+    fontWeight: '700' as const,
+    color: DriverColors.primaryDark,
+  },
+  dangerButton: {
+    marginTop: 10,
+    height: 44,
+    borderRadius: 22,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1,
+    borderColor: '#FFD4D4',
+    backgroundColor: '#FFF8F8',
+  },
+  dangerButtonText: {
+    fontSize: 13,
+    fontWeight: '700' as const,
+    color: DriverColors.danger,
   },
 });

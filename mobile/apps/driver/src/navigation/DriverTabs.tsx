@@ -1,7 +1,7 @@
 import React from 'react';
 import { Text } from 'react-native';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
-import { DriverColors, Typography } from '@taxi/shared';
+import { DriverColors, Typography, useAuth } from '@taxi/shared';
 import HomeScreen from '../screens/HomeScreen';
 import IntercityScreen from '../screens/IntercityScreen';
 import ProfileScreen from '../screens/ProfileScreen';
@@ -10,6 +10,9 @@ import { DriverTabParamList } from './types';
 const Tab = createBottomTabNavigator<DriverTabParamList>();
 
 export default function DriverTabs(): React.ReactNode {
+  const { user } = useAuth();
+  const showIntercity = user?.accepts_intercity === true;
+
   return (
     <Tab.Navigator
       screenOptions={{
@@ -37,14 +40,16 @@ export default function DriverTabs(): React.ReactNode {
           tabBarIcon: () => <TabIcon label="🚕" />,
         }}
       />
-      <Tab.Screen
-        name="DriverIntercity"
-        component={IntercityScreen}
-        options={{
-          tabBarLabel: 'Межгород',
-          tabBarIcon: () => <TabIcon label="🚌" />,
-        }}
-      />
+      {showIntercity && (
+        <Tab.Screen
+          name="DriverIntercity"
+          component={IntercityScreen}
+          options={{
+            tabBarLabel: 'Межгород',
+            tabBarIcon: () => <TabIcon label="🚌" />,
+          }}
+        />
+      )}
       <Tab.Screen
         name="DriverProfile"
         component={ProfileScreen}

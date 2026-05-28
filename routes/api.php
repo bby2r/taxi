@@ -63,7 +63,7 @@ Route::prefix('v1')->middleware('auth:sanctum')->group(function () {
         Route::get('/tariffs', [RegionController::class, 'tariffs'])->name('api.v1.client.tariffs');
 
         // Межгород: маршруты + брони клиента
-        Route::get('/intercity/routes', [ClientIntercityController::class, 'routes'])->name('api.v1.client.intercity.routes');
+        Route::get('/intercity/slots', [ClientIntercityController::class, 'slots'])->name('api.v1.client.intercity.slots');
         Route::post('/intercity/bookings', [ClientIntercityController::class, 'store'])->name('api.v1.client.intercity.bookings.store');
         Route::get('/intercity/bookings/active', [ClientIntercityController::class, 'active'])->name('api.v1.client.intercity.bookings.active');
         Route::post('/intercity/bookings/{booking}/cancel', [ClientIntercityController::class, 'cancel'])->name('api.v1.client.intercity.bookings.cancel');
@@ -91,9 +91,12 @@ Route::prefix('v1')->middleware('auth:sanctum')->group(function () {
 
         // Межгород для водителя
         Route::get('/intercity/available', [DriverIntercityController::class, 'available'])->name('api.v1.driver.intercity.available');
-        Route::post('/intercity/accept', [DriverIntercityController::class, 'accept'])->name('api.v1.driver.intercity.accept');
+        Route::post('/intercity/trips/{trip}/claim', [DriverIntercityController::class, 'claim'])->name('api.v1.driver.intercity.trips.claim');
         Route::get('/intercity/trips/active', [DriverIntercityController::class, 'activeTrip'])->name('api.v1.driver.intercity.trips.active');
+        Route::post('/intercity/trips/{trip}/close', [DriverIntercityController::class, 'close'])->name('api.v1.driver.intercity.trips.close');
+        Route::post('/intercity/trips/{trip}/cancel', [DriverIntercityController::class, 'cancel'])->name('api.v1.driver.intercity.trips.cancel');
         Route::post('/intercity/trips/{trip}/start', [DriverIntercityController::class, 'start'])->name('api.v1.driver.intercity.trips.start');
         Route::post('/intercity/trips/{trip}/complete', [DriverIntercityController::class, 'complete'])->name('api.v1.driver.intercity.trips.complete');
+        Route::post('/intercity/bookings/{booking}/no-show', [DriverIntercityController::class, 'noShow'])->name('api.v1.driver.intercity.bookings.no-show');
     });
 });

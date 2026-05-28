@@ -4,17 +4,13 @@ namespace App\Http\Controllers\Api\V1;
 
 use App\Enums\IntercityBookingStatus;
 use App\Http\Controllers\Controller;
-use App\Http\Requests\Api\V1\CreateIntercityBookingRequest;
 use App\Http\Resources\V1\IntercityBookingResource;
-use App\Http\Resources\V1\IntercityRouteResource;
 use App\Models\IntercityBooking;
-use App\Models\IntercityRoute;
+use App\Models\IntercityTrip;
 use App\Models\Region;
 use App\Services\IntercityService;
-use Carbon\Carbon;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
-use Illuminate\Http\Resources\Json\AnonymousResourceCollection;
 use RuntimeException;
 
 class ClientIntercityController extends Controller
@@ -22,54 +18,86 @@ class ClientIntercityController extends Controller
     public function __construct(private readonly IntercityService $service) {}
 
     /**
-     * Список доступных маршрутов от района клиента (определяется по
-     * GPS). Без GPS возвращаем все активные маршруты.
+     * Доступные slot'ы из района клиента (определяется по GPS).
+     * Возвращаем только slot'ы:
+     *   - status bookable (open или claimed, но не ready/en_route/cancelled)
+     *   - не закрыт водителем (is_closed=false)
+     *   - departure_at в будущем
+     *   - есть свободные места
      */
-    public function routes(Request $request): AnonymousResourceCollection
+    public function slots(Request $request): JsonResponse
     {
         $validated = $request->validate([
             'latitude' => ['nullable', 'numeric', 'between:-90,90'],
             'longitude' => ['nullable', 'numeric', 'between:-180,180'],
         ]);
 
-        $query = IntercityRoute::query()
-            ->active()
-            ->with(['fromRegion', 'toRegion']);
+        $query = IntercityTrip::query()
+            ->bookable()
+            ->where('departure_at', '>', now())
+            ->with(['route.fromRegion', 'route.toRegion']);
 
+        // Фильтр по локации клиента — показываем только slot'ы с
+        // pickup в том же районе где он сейчас находится.
         if (isset($validated['latitude'], $validated['longitude'])) {
-            $fromRegion = Region::findNearestByCoordinates(
+            $region = Region::findNearestByCoordinates(
                 (float) $validated['latitude'],
                 (float) $validated['longitude'],
                 Region::detectionMaxKm(),
             );
-            if ($fromRegion !== null) {
-                $query->where('from_region_id', $fromRegion->id);
+            if ($region !== null) {
+                $query->whereHas('route', fn ($q) => $q->where('from_region_id', $region->id));
             }
         }
 
-        $routes = $query->orderBy('sort_order')->orderBy('id')->get();
+        $slots = $query->orderBy('departure_at')->limit(50)->get();
 
-        return IntercityRouteResource::collection($routes);
+        // Sum booked seats one shot for the page.
+        $tripIds = $slots->pluck('id')->all();
+        $bookedByTrip = IntercityBooking::query()
+            ->whereIn('trip_id', $tripIds)
+            ->whereIn('status', [
+                IntercityBookingStatus::Matched,
+                IntercityBookingStatus::EnRoute,
+            ])
+            ->selectRaw('trip_id, SUM(seats_count) as total')
+            ->groupBy('trip_id')
+            ->pluck('total', 'trip_id');
+
+        return response()->json([
+            'slots' => $slots->map(fn (IntercityTrip $slot) => [
+                'trip_id' => $slot->id,
+                'from_region' => $slot->route?->fromRegion?->name,
+                'to_region' => $slot->route?->toRegion?->name,
+                'departure_at' => $slot->departure_at?->toISOString(),
+                'max_seats' => $slot->max_seats,
+                'price_per_seat' => $slot->price_per_seat,
+                'booked_seats' => (int) ($bookedByTrip[$slot->id] ?? 0),
+                'has_driver' => $slot->driver_id !== null,
+                'driver_name' => $slot->driver_name,
+                'car_model' => $slot->car_model,
+                'car_number' => $slot->car_number,
+            ])->all(),
+        ]);
     }
 
-    public function store(CreateIntercityBookingRequest $request): JsonResponse
+    public function store(Request $request): JsonResponse
     {
+        $validated = $request->validate([
+            'trip_id' => ['required', 'integer', 'exists:intercity_trips,id'],
+            'seats_count' => ['required', 'integer', 'between:1,3'],
+            'pickup_address' => ['nullable', 'string', 'max:500'],
+        ]);
+
         try {
-            $route = IntercityRoute::findOrFail($request->validated('route_id'));
+            $trip = IntercityTrip::findOrFail($validated['trip_id']);
             $booking = $this->service->createBooking(
                 client: $request->user(),
-                route: $route,
-                departureDate: Carbon::parse($request->validated('departure_date')),
-                seatsCount: (int) $request->validated('seats_count'),
-                pickupAddress: $request->validated('pickup_address'),
+                trip: $trip,
+                seatsCount: (int) $validated['seats_count'],
+                pickupAddress: $validated['pickup_address'] ?? null,
             );
-
             $booking->load(['route.fromRegion', 'route.toRegion', 'trip']);
-            $booking->seats_booked_total = (int) IntercityBooking::query()
-                ->where('route_id', $booking->route_id)
-                ->whereDate('departure_date', $booking->departure_date)
-                ->whereIn('status', IntercityBookingStatus::activeStatuses())
-                ->sum('seats_count');
 
             return (new IntercityBookingResource($booking))
                 ->response()
@@ -92,13 +120,15 @@ class ClientIntercityController extends Controller
             return response()->json(['message' => 'No active intercity booking.'], 404);
         }
 
-        // Прогресс набора batch'а на эту route+date — одной SQL
-        // агрегацией, чтобы Resource не делал per-row запрос.
-        $booking->seats_booked_total = (int) IntercityBooking::query()
-            ->where('route_id', $booking->route_id)
-            ->whereDate('departure_date', $booking->departure_date)
-            ->whereIn('status', IntercityBookingStatus::activeStatuses())
-            ->sum('seats_count');
+        if ($booking->trip_id !== null) {
+            $booking->seats_booked_total = (int) IntercityBooking::query()
+                ->where('trip_id', $booking->trip_id)
+                ->whereIn('status', [
+                    IntercityBookingStatus::Matched,
+                    IntercityBookingStatus::EnRoute,
+                ])
+                ->sum('seats_count');
+        }
 
         return new IntercityBookingResource($booking);
     }

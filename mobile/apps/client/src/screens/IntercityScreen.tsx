@@ -18,9 +18,6 @@ import {
   useLocation,
   ClientColors,
   Typography,
-  todayDateString,
-  tomorrowDateString,
-  formatHumanDate,
   getApiErrorMessage,
 } from '@taxi/shared';
 import Icon from '../components/Icon';
@@ -28,18 +25,34 @@ import {
   cancelIntercityBooking,
   createIntercityBooking,
   getActiveIntercityBooking,
-  getIntercityRoutes,
+  getIntercitySlots,
   type IntercityBooking,
-  type IntercityRoute,
+  type IntercitySlot,
 } from '../api/intercity';
+
+function formatDeparture(iso: string): string {
+  try {
+    const d = new Date(iso);
+    const hh = String(d.getHours()).padStart(2, '0');
+    const mm = String(d.getMinutes()).padStart(2, '0');
+    const day = d.toLocaleDateString('ru-RU', {
+      weekday: 'short',
+      day: '2-digit',
+      month: 'short',
+    });
+    return `${day}, ${hh}:${mm}`;
+  } catch {
+    return iso;
+  }
+}
 
 export default function IntercityScreen(): React.ReactNode {
   const location = useLocation();
-  const [routes, setRoutes] = useState<IntercityRoute[]>([]);
+  const [slots, setSlots] = useState<IntercitySlot[]>([]);
   const [booking, setBooking] = useState<IntercityBooking | null>(null);
   const [loading, setLoading] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
-  const [selectedRoute, setSelectedRoute] = useState<IntercityRoute | null>(null);
+  const [selectedSlot, setSelectedSlot] = useState<IntercitySlot | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   const reload = useCallback(async (): Promise<void> => {
@@ -47,12 +60,38 @@ export default function IntercityScreen(): React.ReactNode {
     try {
       const lat = location.hasRealFix ? location.latitude : undefined;
       const lng = location.hasRealFix ? location.longitude : undefined;
-      const [r, b] = await Promise.all([
-        getIntercityRoutes(lat, lng),
+      const [s, b] = await Promise.all([
+        getIntercitySlots(lat, lng),
         getActiveIntercityBooking(),
       ]);
-      setRoutes(r);
-      setBooking(b);
+      setSlots((prev) => {
+        if (
+          prev.length === s.length &&
+          prev.every(
+            (p, i) =>
+              p.trip_id === s[i].trip_id &&
+              p.booked_seats === s[i].booked_seats &&
+              p.has_driver === s[i].has_driver,
+          )
+        ) {
+          return prev;
+        }
+        return s;
+      });
+      setBooking((prev) => {
+        if (!b && !prev) return prev;
+        if (
+          b &&
+          prev &&
+          b.id === prev.id &&
+          b.status === prev.status &&
+          (b.trip?.status ?? null) === (prev.trip?.status ?? null) &&
+          b.seats_booked_total === prev.seats_booked_total
+        ) {
+          return prev;
+        }
+        return b;
+      });
     } catch {
       // ignore — пользователь увидит пустой список и сможет потянуть
       // вниз чтобы перезагрузить
@@ -65,39 +104,18 @@ export default function IntercityScreen(): React.ReactNode {
     }, [reload]),
   );
 
-  // Поллинг статуса — без пушей ловим момент когда водитель примет.
-  // Зависим только от id+status, чтобы поллинг не пересоздавался
-  // на каждую новую booking-копию из setBooking. setBooking защищён
-  // от no-op'ов сравнением ключевых полей.
+  // Поллинг — без пушей ловим момент когда водитель claim'нет slot
+  // или выедет в дорогу. Зависим только от id+status чтобы тик не
+  // пересоздавался на каждый идентичный ответ.
   const bookingId = booking?.id ?? null;
   const bookingStatus = booking?.status ?? null;
   useEffect(() => {
     if (bookingId === null || bookingStatus === 'completed' || bookingStatus === 'cancelled') {
       return;
     }
-    const interval = setInterval(async () => {
-      try {
-        const fresh = await getActiveIntercityBooking();
-        setBooking((prev) => {
-          if (!fresh && !prev) return prev;
-          if (
-            fresh &&
-            prev &&
-            fresh.id === prev.id &&
-            fresh.status === prev.status &&
-            fresh.seats_booked_total === prev.seats_booked_total &&
-            (fresh.trip?.id ?? null) === (prev.trip?.id ?? null)
-          ) {
-            return prev;
-          }
-          return fresh;
-        });
-      } catch {
-        // next tick retries
-      }
-    }, 8000);
+    const interval = setInterval(reload, 8000);
     return () => clearInterval(interval);
-  }, [bookingId, bookingStatus]);
+  }, [bookingId, bookingStatus, reload]);
 
   const onRefresh = async (): Promise<void> => {
     setRefreshing(true);
@@ -105,17 +123,16 @@ export default function IntercityScreen(): React.ReactNode {
     setRefreshing(false);
   };
 
-  const handleBook = async (route: IntercityRoute, seats: number, dateStr: string): Promise<void> => {
+  const handleBook = async (slot: IntercitySlot, seats: number): Promise<void> => {
     setLoading(true);
     setError(null);
     try {
       const b = await createIntercityBooking({
-        route_id: route.id,
-        departure_date: dateStr,
+        trip_id: slot.trip_id,
         seats_count: seats,
       });
       setBooking(b);
-      setSelectedRoute(null);
+      setSelectedSlot(null);
     } catch (e: unknown) {
       setError(getApiErrorMessage(e, 'Не удалось забронировать'));
     } finally {
@@ -153,7 +170,7 @@ export default function IntercityScreen(): React.ReactNode {
     <View style={styles.container}>
       <View style={styles.header}>
         <Text style={styles.headerTitle}>Межгород</Text>
-        <Text style={styles.headerSubtitle}>Места в машине между сёлами</Text>
+        <Text style={styles.headerSubtitle}>Рейсы из вашего района</Text>
       </View>
 
       <ScrollView
@@ -169,47 +186,86 @@ export default function IntercityScreen(): React.ReactNode {
 
         {booking && <ActiveBookingCard booking={booking} onCancel={handleCancel} loading={loading} />}
 
-        {!booking && routes.length === 0 && (
+        {!booking && slots.length === 0 && (
           <View style={styles.emptyBlock}>
             <Icon name="route" size={44} color={ClientColors.textMuted} strokeWidth={2} />
             <Text style={styles.emptyText}>
-              Маршрутов из вашего села пока нет. Потяните вниз чтобы обновить.
+              Рейсов из вашего села пока нет. Потяните вниз чтобы обновить.
             </Text>
           </View>
         )}
 
-        {!booking && routes.length > 0 && (
+        {!booking && slots.length > 0 && (
           <>
-            <Text style={styles.sectionTitle}>Доступные направления</Text>
-            {routes.map((r) => (
-              <TouchableOpacity
-                key={r.id}
-                style={styles.routeCard}
-                activeOpacity={0.85}
-                onPress={() => setSelectedRoute(r)}
-              >
-                <View style={{ flex: 1 }}>
-                  <Text style={styles.routeName}>
-                    {r.from_region.name} → {r.to_region.name}
-                  </Text>
-                  <Text style={styles.routeMeta}>
-                    {r.max_seats} мест · {r.price_per_seat} сом/место
-                  </Text>
-                </View>
-                <Icon name="chevron-right" size={20} color={ClientColors.textMuted} strokeWidth={2.4} />
-              </TouchableOpacity>
+            <Text style={styles.sectionTitle}>Ближайшие рейсы</Text>
+            {slots.map((s) => (
+              <SlotCard key={s.trip_id} slot={s} onPress={() => setSelectedSlot(s)} />
             ))}
           </>
         )}
       </ScrollView>
 
       <BookingModal
-        route={selectedRoute}
-        onClose={() => setSelectedRoute(null)}
+        slot={selectedSlot}
+        onClose={() => setSelectedSlot(null)}
         onBook={handleBook}
         loading={loading}
       />
     </View>
+  );
+}
+
+function SlotCard({
+  slot,
+  onPress,
+}: {
+  slot: IntercitySlot;
+  onPress: () => void;
+}): React.ReactNode {
+  const free = slot.max_seats - slot.booked_seats;
+  const isFull = free <= 0;
+  const progress = Math.min(100, (slot.booked_seats / slot.max_seats) * 100);
+  return (
+    <TouchableOpacity
+      style={[styles.slotCard, isFull && styles.slotCardDisabled]}
+      activeOpacity={0.85}
+      onPress={onPress}
+      disabled={isFull}
+    >
+      <View style={styles.slotHeaderRow}>
+        <Text style={styles.slotRoute}>
+          {slot.from_region} → {slot.to_region}
+        </Text>
+        <Text style={styles.slotTime}>{formatDeparture(slot.departure_at)}</Text>
+      </View>
+
+      <View style={styles.progressBar}>
+        <View style={[styles.progressFill, { width: `${progress}%` }]} />
+      </View>
+
+      <View style={styles.slotMetaRow}>
+        <Text style={styles.slotSeats}>
+          {isFull ? 'Машина заполнена' : `Свободно ${free} из ${slot.max_seats}`}
+        </Text>
+        <Text style={styles.slotPrice}>{slot.price_per_seat} сом/место</Text>
+      </View>
+
+      {slot.has_driver && slot.driver_name && (
+        <View style={styles.driverRow}>
+          <Icon name="car" size={14} color={ClientColors.primary} strokeWidth={2.2} />
+          <Text style={styles.driverRowText}>
+            {slot.driver_name}
+            {slot.car_model && ` · ${slot.car_model}`}
+            {slot.car_number && ` ${slot.car_number}`}
+          </Text>
+        </View>
+      )}
+      {!slot.has_driver && (
+        <Text style={styles.noDriverHint}>
+          Водитель пока не назначен — первое бронирование ускорит выезд.
+        </Text>
+      )}
+    </TouchableOpacity>
   );
 }
 
@@ -223,9 +279,18 @@ function ActiveBookingCard({
   loading: boolean;
 }): React.ReactNode {
   const r = booking.route;
-  const remaining = r ? r.max_seats - booking.seats_booked_total : 0;
-  const isWaiting = booking.status === 'pending';
+  const tripDeparture = booking.trip?.departure_at ?? null;
+  const isPending = booking.status === 'pending';
   const isMatched = booking.status === 'matched' || booking.status === 'en_route';
+  const seatsCap = r?.max_seats ?? 0;
+
+  let statusLabel = '';
+  if (booking.status === 'pending') statusLabel = 'Ждём водителя';
+  else if (booking.status === 'matched') statusLabel = 'Водитель назначен';
+  else if (booking.status === 'en_route') statusLabel = 'Водитель в пути';
+  else if (booking.status === 'completed') statusLabel = 'Завершено';
+  else if (booking.status === 'cancelled') statusLabel = 'Отменено';
+  else if (booking.status === 'no_show') statusLabel = 'Вы не пришли';
 
   return (
     <View style={styles.activeCard}>
@@ -235,11 +300,7 @@ function ActiveBookingCard({
         </Text>
         <View style={[styles.statusPill, isMatched && styles.statusPillSuccess]}>
           <Text style={[styles.statusPillText, isMatched && styles.statusPillTextSuccess]}>
-            {booking.status === 'pending' && 'Ждём пассажиров'}
-            {booking.status === 'matched' && 'Водитель найден'}
-            {booking.status === 'en_route' && 'Водитель в пути'}
-            {booking.status === 'completed' && 'Завершено'}
-            {booking.status === 'cancelled' && 'Отменено'}
+            {statusLabel}
           </Text>
         </View>
       </View>
@@ -247,25 +308,23 @@ function ActiveBookingCard({
       <View style={styles.activeRow}>
         <Icon name="clock" size={16} color={ClientColors.textSecondary} strokeWidth={2.2} />
         <Text style={styles.activeRowText}>
-          {formatHumanDate(booking.departure_date)} · {booking.seats_count} {booking.seats_count === 1 ? 'место' : 'места'} · {booking.total_price} сом
+          {tripDeparture ? formatDeparture(tripDeparture) : booking.departure_date} ·{' '}
+          {booking.seats_count} {booking.seats_count === 1 ? 'место' : 'места'} · {booking.total_price} сом
         </Text>
       </View>
 
-      {isWaiting && r && (
+      {(isPending || isMatched) && seatsCap > 0 && (
         <View style={styles.waitingBlock}>
           <View style={styles.progressBar}>
             <View
               style={[
                 styles.progressFill,
-                { width: `${Math.min(100, (booking.seats_booked_total / r.max_seats) * 100)}%` },
+                { width: `${Math.min(100, (booking.seats_booked_total / seatsCap) * 100)}%` },
               ]}
             />
           </View>
           <Text style={styles.waitingText}>
-            {booking.seats_booked_total} из {r.max_seats} мест занято
-          </Text>
-          <Text style={styles.waitingHint}>
-            Как только машина заполнится — пришлём уведомление или водитель сам позвонит вам.
+            {booking.seats_booked_total} из {seatsCap} мест занято
           </Text>
         </View>
       )}
@@ -291,7 +350,7 @@ function ActiveBookingCard({
         </View>
       )}
 
-      {(isWaiting || isMatched) && booking.status !== 'en_route' && (
+      {(isPending || isMatched) && booking.status !== 'en_route' && (
         <TouchableOpacity
           style={styles.cancelButton}
           onPress={onCancel}
@@ -310,33 +369,27 @@ function ActiveBookingCard({
 }
 
 function BookingModal({
-  route,
+  slot,
   onClose,
   onBook,
   loading,
 }: {
-  route: IntercityRoute | null;
+  slot: IntercitySlot | null;
   onClose: () => void;
-  onBook: (r: IntercityRoute, seats: number, dateStr: string) => Promise<void>;
+  onBook: (s: IntercitySlot, seats: number) => Promise<void>;
   loading: boolean;
 }): React.ReactNode {
   const [seats, setSeats] = useState(1);
-  const [date, setDate] = useState(todayDateString());
 
   useEffect(() => {
-    if (route) {
-      setSeats(1);
-      setDate(todayDateString());
-    }
-  }, [route]);
+    if (slot) setSeats(1);
+  }, [slot]);
 
-  if (!route) return null;
+  if (!slot) return null;
 
-  const total = route.price_per_seat * seats;
-  const dates = [
-    { value: todayDateString(), label: 'Сегодня' },
-    { value: tomorrowDateString(), label: 'Завтра' },
-  ];
+  const free = slot.max_seats - slot.booked_seats;
+  const maxBookable = Math.min(3, free);
+  const total = slot.price_per_seat * seats;
 
   return (
     <Modal visible animationType="slide" presentationStyle="fullScreen" onRequestClose={onClose}>
@@ -346,68 +399,80 @@ function BookingModal({
             <Icon name="arrow-right" size={22} color={ClientColors.dark} strokeWidth={2.4} />
           </TouchableOpacity>
           <Text style={styles.modalTitle}>
-            {route.from_region.name} → {route.to_region.name}
+            {slot.from_region} → {slot.to_region}
           </Text>
           <View style={styles.modalCloseButton} />
         </View>
 
         <View style={styles.modalBody}>
-          <Text style={styles.modalLabel}>Когда едете?</Text>
-          <View style={styles.dateRow}>
-            {dates.map((d) => (
-              <TouchableOpacity
-                key={d.value}
-                style={[styles.dateChip, date === d.value && styles.dateChipActive]}
-                onPress={() => setDate(d.value)}
-                activeOpacity={0.85}
-              >
-                <Text style={[styles.dateChipText, date === d.value && styles.dateChipTextActive]}>
-                  {d.label}
-                </Text>
-              </TouchableOpacity>
-            ))}
+          <View style={styles.modalSummary}>
+            <Text style={styles.modalSummaryLabel}>Выезд</Text>
+            <Text style={styles.modalSummaryValue}>{formatDeparture(slot.departure_at)}</Text>
+            <Text style={styles.modalSummaryMeta}>
+              Свободно {free} из {slot.max_seats} мест
+            </Text>
+            {slot.has_driver && slot.driver_name && (
+              <Text style={styles.modalSummaryMeta}>
+                Водитель: {slot.driver_name}
+                {slot.car_model && ` · ${slot.car_model}`}
+                {slot.car_number && ` ${slot.car_number}`}
+              </Text>
+            )}
           </View>
-          <Text style={styles.waitingHintModal}>
-            Как только машина заполнится ({route.max_seats} мест) — пришлём
-            уведомление, либо водитель сам вам позвонит.
-          </Text>
 
           <Text style={[styles.modalLabel, { marginTop: 24 }]}>Сколько мест?</Text>
           <View style={styles.seatsRow}>
-            {[1, 2, 3].map((n) => (
-              <TouchableOpacity
-                key={n}
-                style={[styles.seatChip, seats === n && styles.seatChipActive]}
-                onPress={() => setSeats(n)}
-                activeOpacity={0.85}
-              >
-                <Text style={[styles.seatChipText, seats === n && styles.seatChipTextActive]}>
-                  {n}
-                </Text>
-              </TouchableOpacity>
-            ))}
+            {[1, 2, 3].map((n) => {
+              const disabled = n > maxBookable;
+              const active = seats === n;
+              return (
+                <TouchableOpacity
+                  key={n}
+                  style={[
+                    styles.seatChip,
+                    active && styles.seatChipActive,
+                    disabled && styles.seatChipDisabled,
+                  ]}
+                  onPress={() => !disabled && setSeats(n)}
+                  disabled={disabled}
+                  activeOpacity={0.85}
+                >
+                  <Text
+                    style={[
+                      styles.seatChipText,
+                      active && styles.seatChipTextActive,
+                      disabled && styles.seatChipTextDisabled,
+                    ]}
+                  >
+                    {n}
+                  </Text>
+                </TouchableOpacity>
+              );
+            })}
           </View>
 
           <View style={styles.priceCard}>
             <Text style={styles.priceCardLabel}>К оплате водителю наличными</Text>
             <Text style={styles.priceCardValue}>{total} сом</Text>
             <Text style={styles.priceCardMeta}>
-              {seats} × {route.price_per_seat} сом
+              {seats} × {slot.price_per_seat} сом
             </Text>
           </View>
         </View>
 
         <View style={styles.modalFooter}>
           <TouchableOpacity
-            style={[styles.modalConfirm, loading && { opacity: 0.5 }]}
-            onPress={() => onBook(route, seats, date)}
-            disabled={loading}
+            style={[styles.modalConfirm, (loading || free <= 0) && { opacity: 0.5 }]}
+            onPress={() => onBook(slot, seats)}
+            disabled={loading || free <= 0}
             activeOpacity={0.9}
           >
             {loading ? (
               <ActivityIndicator color={ClientColors.white} />
             ) : (
-              <Text style={styles.modalConfirmText}>Забронировать</Text>
+              <Text style={styles.modalConfirmText}>
+                {free <= 0 ? 'Мест нет' : 'Забронировать'}
+              </Text>
             )}
           </TouchableOpacity>
         </View>
@@ -447,27 +512,72 @@ const styles = StyleSheet.create({
     marginBottom: 10,
     paddingLeft: 4,
   },
-  routeCard: {
-    flexDirection: 'row',
-    alignItems: 'center',
+
+  slotCard: {
     backgroundColor: ClientColors.cardBackground,
     borderRadius: 16,
     paddingHorizontal: 18,
-    paddingVertical: 16,
+    paddingVertical: 14,
     marginBottom: 10,
     borderWidth: 1,
     borderColor: ClientColors.border,
   },
-  routeName: {
+  slotCardDisabled: { opacity: 0.55 },
+  slotHeaderRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 10,
+  },
+  slotRoute: {
+    flex: 1,
     fontSize: 16,
-    fontWeight: '700' as const,
+    fontWeight: '800' as const,
     color: ClientColors.dark,
   },
-  routeMeta: {
+  slotTime: {
     fontSize: 13,
-    color: ClientColors.textSecondary,
-    marginTop: 4,
+    fontWeight: '700' as const,
+    color: ClientColors.primaryDark,
+    backgroundColor: ClientColors.primaryTint,
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 10,
+    overflow: 'hidden',
   },
+  slotMetaRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginTop: 10,
+  },
+  slotSeats: {
+    fontSize: 13,
+    fontWeight: '600' as const,
+    color: ClientColors.dark,
+  },
+  slotPrice: {
+    fontSize: 13,
+    fontWeight: '700' as const,
+    color: ClientColors.primaryDark,
+  },
+  driverRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    marginTop: 8,
+  },
+  driverRowText: {
+    fontSize: 12,
+    color: ClientColors.textSecondary,
+    flex: 1,
+  },
+  noDriverHint: {
+    fontSize: 12,
+    color: ClientColors.textMuted,
+    marginTop: 8,
+    fontStyle: 'italic',
+  },
+
   emptyBlock: {
     alignItems: 'center',
     paddingVertical: 60,
@@ -493,6 +603,7 @@ const styles = StyleSheet.create({
     gap: 10,
   },
   errorText: { color: ClientColors.danger, flex: 1 },
+
   activeCard: {
     backgroundColor: ClientColors.cardBackground,
     borderRadius: 18,
@@ -519,17 +630,13 @@ const styles = StyleSheet.create({
     borderRadius: 10,
     backgroundColor: ClientColors.secondaryTint,
   },
-  statusPillSuccess: {
-    backgroundColor: ClientColors.primaryTint,
-  },
+  statusPillSuccess: { backgroundColor: ClientColors.primaryTint },
   statusPillText: {
     fontSize: 11,
     fontWeight: '700' as const,
     color: ClientColors.secondaryDark,
   },
-  statusPillTextSuccess: {
-    color: ClientColors.primaryDark,
-  },
+  statusPillTextSuccess: { color: ClientColors.primaryDark },
   activeRow: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -539,6 +646,7 @@ const styles = StyleSheet.create({
   activeRowText: {
     fontSize: 14,
     color: ClientColors.textSecondary,
+    flex: 1,
   },
   waitingBlock: { marginTop: 6 },
   progressBar: {
@@ -557,12 +665,6 @@ const styles = StyleSheet.create({
     color: ClientColors.dark,
     fontWeight: '600' as const,
     marginTop: 8,
-  },
-  waitingHint: {
-    fontSize: 12,
-    color: ClientColors.textSecondary,
-    marginTop: 6,
-    lineHeight: 16,
   },
   driverBlock: {
     flexDirection: 'row',
@@ -638,6 +740,31 @@ const styles = StyleSheet.create({
     flex: 1,
     padding: 20,
   },
+  modalSummary: {
+    backgroundColor: ClientColors.cardBackground,
+    borderRadius: 16,
+    padding: 16,
+    borderWidth: 1,
+    borderColor: ClientColors.border,
+  },
+  modalSummaryLabel: {
+    fontSize: 12,
+    fontWeight: '700' as const,
+    color: ClientColors.textSecondary,
+    textTransform: 'uppercase',
+    letterSpacing: 0.6,
+  },
+  modalSummaryValue: {
+    fontSize: 20,
+    fontWeight: '800' as const,
+    color: ClientColors.dark,
+    marginTop: 6,
+  },
+  modalSummaryMeta: {
+    fontSize: 13,
+    color: ClientColors.textSecondary,
+    marginTop: 6,
+  },
   modalLabel: {
     fontSize: 12,
     fontWeight: '700' as const,
@@ -646,42 +773,7 @@ const styles = StyleSheet.create({
     letterSpacing: 0.6,
     marginBottom: 10,
   },
-  dateRow: {
-    flexDirection: 'row',
-    gap: 10,
-  },
-  dateChip: {
-    flex: 1,
-    paddingVertical: 14,
-    borderRadius: 14,
-    borderWidth: 1.5,
-    borderColor: ClientColors.border,
-    backgroundColor: ClientColors.cardBackground,
-    alignItems: 'center',
-  },
-  dateChipActive: {
-    borderColor: ClientColors.primary,
-    backgroundColor: ClientColors.primaryTint,
-  },
-  dateChipText: {
-    fontSize: 15,
-    fontWeight: '700' as const,
-    color: ClientColors.dark,
-  },
-  dateChipTextActive: {
-    color: ClientColors.primaryDark,
-  },
-  waitingHintModal: {
-    fontSize: 12,
-    color: ClientColors.textSecondary,
-    marginTop: 10,
-    lineHeight: 16,
-    paddingHorizontal: 2,
-  },
-  seatsRow: {
-    flexDirection: 'row',
-    gap: 10,
-  },
+  seatsRow: { flexDirection: 'row', gap: 10 },
   seatChip: {
     flex: 1,
     height: 56,
@@ -696,14 +788,14 @@ const styles = StyleSheet.create({
     borderColor: ClientColors.primary,
     backgroundColor: ClientColors.primaryTint,
   },
+  seatChipDisabled: { opacity: 0.4 },
   seatChipText: {
     fontSize: 22,
     fontWeight: '800' as const,
     color: ClientColors.dark,
   },
-  seatChipTextActive: {
-    color: ClientColors.primaryDark,
-  },
+  seatChipTextActive: { color: ClientColors.primaryDark },
+  seatChipTextDisabled: { color: ClientColors.textMuted },
   priceCard: {
     marginTop: 28,
     padding: 18,

@@ -6,6 +6,7 @@ use App\Enums\IntercityBookingStatus;
 use App\Enums\IntercityTripStatus;
 use App\Models\IntercityBooking;
 use App\Models\IntercityRoute;
+use App\Models\IntercityRouteSchedule;
 use App\Models\IntercityTrip;
 use App\Models\Region;
 use App\Models\Setting;
@@ -22,137 +23,115 @@ class IntercityService
         private readonly GeoService $geoService,
     ) {}
 
+    /* ───────────────────────────────────────────────────────────
+     * SCHEDULE → SLOT GENERATION
+     * ─────────────────────────────────────────────────────────── */
+
     /**
-     * Создаёт pending-бронь клиента на route+date+seats. Когда набирается
-     * max_seats — рассылает offer водителям в from_region.
+     * Создаёт slot'ы (intercity_trips status=open) на дату по активным
+     * расписаниям. Идемпотентно — повторный вызов на ту же дату не
+     * создаёт дублей (проверка route+schedule+date уникальности).
      *
-     * @throws RuntimeException если активная бронь уже есть, маршрут
-     *                          неактивен или мест недостаточно
+     * @return int количество созданных slot'ов
      */
-    public function createBooking(
-        User $client,
-        IntercityRoute $route,
-        Carbon $departureDate,
-        int $seatsCount,
-        ?string $pickupAddress = null,
-    ): IntercityBooking {
-        if (! $route->is_active) {
-            throw new RuntimeException('Этот маршрут больше не доступен.');
-        }
-
-        $existing = IntercityBooking::query()
-            ->where('client_id', $client->id)
+    public function generateSlotsForDate(Carbon $date): int
+    {
+        $schedules = IntercityRouteSchedule::query()
             ->active()
-            ->first();
-        if ($existing !== null) {
-            throw new RuntimeException('У вас уже есть активная бронь межгорода.');
+            ->with('route')
+            ->get()
+            ->filter(fn (IntercityRouteSchedule $s) => $s->runsOn($date));
+
+        $created = 0;
+        foreach ($schedules as $schedule) {
+            $exists = IntercityTrip::query()
+                ->where('schedule_id', $schedule->id)
+                ->whereDate('departure_date', $date)
+                ->exists();
+            if ($exists) {
+                continue;
+            }
+
+            IntercityTrip::create([
+                'route_id' => $schedule->route_id,
+                'schedule_id' => $schedule->id,
+                'driver_id' => null,
+                'departure_date' => $date->toDateString(),
+                'departure_at' => $schedule->departureAtFor($date),
+                'max_seats' => $schedule->max_seats,
+                'price_per_seat' => $schedule->price_per_seat,
+                'status' => IntercityTripStatus::Open,
+            ]);
+            $created++;
         }
 
-        return DB::transaction(function () use ($client, $route, $departureDate, $seatsCount, $pickupAddress) {
-            // lockForUpdate — пара клиентов одновременно занимающие
-            // последние места не должны overcommit'нуть batch.
-            $occupied = IntercityBooking::query()
-                ->where('route_id', $route->id)
-                ->whereDate('departure_date', $departureDate)
-                ->whereIn('status', IntercityBookingStatus::activeStatuses())
-                ->lockForUpdate()
-                ->sum('seats_count');
-
-            $remaining = $route->max_seats - (int) $occupied;
-            if ($seatsCount > $remaining) {
-                throw new RuntimeException(
-                    "Свободно только {$remaining} мест(а). Попробуйте другую дату."
-                );
-            }
-
-            $booking = IntercityBooking::create([
-                'route_id' => $route->id,
-                'client_id' => $client->id,
-                'trip_id' => null,
-                'departure_date' => $departureDate->toDateString(),
-                'seats_count' => $seatsCount,
-                'pickup_address' => $pickupAddress,
-                'client_name' => $client->name,
-                'client_phone' => $client->phone,
-                'status' => IntercityBookingStatus::Pending,
-            ]);
-
-            $newTotal = (int) $occupied + $seatsCount;
-            if ($newTotal >= $route->max_seats) {
-                DB::afterCommit(function () use ($route, $departureDate) {
-                    $this->broadcastBatchReadyToDrivers($route, $departureDate);
-                });
-            }
-
-            return $booking->fresh();
-        });
+        return $created;
     }
 
+    /* ───────────────────────────────────────────────────────────
+     * DRIVER ACTIONS (claim / close / cancel / lifecycle)
+     * ─────────────────────────────────────────────────────────── */
+
     /**
-     * Водитель принимает batch — создаёт trip, FIFO привязывает старейшие
-     * pending bookings до max_seats. Меньше — throw (кто-то отменил пока
-     * водитель брал).
+     * Водитель берёт открытый slot. Проверяет: водитель accepts_intercity,
+     * slot ещё open, у водителя нет другого активного intercity-трипа.
      */
-    public function acceptByDriver(
-        User $driver,
-        IntercityRoute $route,
-        Carbon $departureDate,
-    ): IntercityTrip {
+    public function claimSlot(IntercityTrip $trip, User $driver): IntercityTrip
+    {
         $driver->loadMissing('driverProfile');
 
-        return DB::transaction(function () use ($driver, $route, $departureDate) {
-            $pendingBookings = IntercityBooking::query()
-                ->where('route_id', $route->id)
-                ->whereDate('departure_date', $departureDate)
-                ->where('status', IntercityBookingStatus::Pending)
-                ->orderBy('created_at')
-                ->lockForUpdate()
-                ->get();
+        if ($driver->driverProfile?->accepts_intercity !== true) {
+            throw new RuntimeException('У вас не включён межгород. Свяжитесь с диспетчером.');
+        }
 
-            // FIFO: набираем пока не превысим max_seats. Остаток
-            // (если кто-то взял больше мест чем влезло) остаётся
-            // pending для следующего batch.
-            $acceptedIds = [];
-            $totalSeats = 0;
-            foreach ($pendingBookings as $b) {
-                if ($totalSeats + $b->seats_count <= $route->max_seats) {
-                    $acceptedIds[] = $b->id;
-                    $totalSeats += $b->seats_count;
-                }
+        $hasActive = IntercityTrip::query()
+            ->where('driver_id', $driver->id)
+            ->active()
+            ->exists();
+        if ($hasActive) {
+            throw new RuntimeException('У вас уже есть активный межгород-рейс.');
+        }
+
+        return DB::transaction(function () use ($trip, $driver) {
+            $fresh = IntercityTrip::lockForUpdate()->findOrFail($trip->id);
+
+            if ($fresh->status !== IntercityTripStatus::Open) {
+                throw new RuntimeException('Этот рейс уже занят другим водителем.');
             }
 
-            if ($totalSeats < $route->max_seats) {
-                throw new RuntimeException(
-                    'Набор уже не полный — пассажиры отменили брони.'
-                );
-            }
-
-            $trip = IntercityTrip::create([
-                'route_id' => $route->id,
+            $fresh->update([
                 'driver_id' => $driver->id,
-                'departure_date' => $departureDate->toDateString(),
-                'max_seats' => $route->max_seats,
-                'price_per_seat' => $route->price_per_seat,
                 'driver_name' => $driver->name,
                 'driver_phone' => $driver->phone,
                 'car_model' => $driver->driverProfile?->car_model,
                 'car_number' => $driver->driverProfile?->car_number,
-                'status' => IntercityTripStatus::Matched,
+                'status' => IntercityTripStatus::Claimed,
                 'accepted_at' => now(),
             ]);
 
-            IntercityBooking::whereIn('id', $acceptedIds)->update([
-                'trip_id' => $trip->id,
-                'status' => IntercityBookingStatus::Matched,
-                'matched_at' => now(),
-            ]);
+            DB::afterCommit(fn () => $this->notifyPassengersTripClaimed($fresh->fresh()));
 
-            DB::afterCommit(function () use ($trip) {
-                $this->notifyPassengersTripMatched($trip);
-            });
-
-            return $trip->fresh(['bookings']);
+            return $fresh->fresh(['bookings']);
         });
+    }
+
+    /**
+     * Водитель «закрывает» slot вручную — обычно потому что подобрал
+     * пассажира с улицы. Новые брони блокируются (UI пометит «полная»).
+     * Уже забронированные остаются в силе.
+     */
+    public function closeSlot(IntercityTrip $trip, User $driver): IntercityTrip
+    {
+        if ($trip->driver_id !== $driver->id) {
+            throw new RuntimeException('Этот рейс не ваш.');
+        }
+        if (! in_array($trip->status, [IntercityTripStatus::Claimed, IntercityTripStatus::Ready], true)) {
+            throw new RuntimeException('Закрыть можно только принятый рейс.');
+        }
+
+        $trip->update(['is_closed' => true]);
+
+        return $trip->fresh();
     }
 
     public function startTrip(IntercityTrip $trip, User $driver): IntercityTrip
@@ -160,8 +139,8 @@ class IntercityService
         if ($trip->driver_id !== $driver->id) {
             throw new RuntimeException('Эта поездка не ваша.');
         }
-        if ($trip->status !== IntercityTripStatus::Matched) {
-            throw new RuntimeException('Поездку можно начать только из статуса «принята».');
+        if (! in_array($trip->status, [IntercityTripStatus::Claimed, IntercityTripStatus::Ready], true)) {
+            throw new RuntimeException('Поездку можно начать только из принятого или готового статуса.');
         }
 
         DB::transaction(function () use ($trip) {
@@ -169,14 +148,12 @@ class IntercityService
                 'status' => IntercityTripStatus::EnRoute,
                 'departed_at' => now(),
             ]);
-            $trip->bookings()->update([
-                'status' => IntercityBookingStatus::EnRoute,
-            ]);
+            $trip->bookings()
+                ->where('status', IntercityBookingStatus::Matched)
+                ->update(['status' => IntercityBookingStatus::EnRoute]);
         });
 
-        DB::afterCommit(function () use ($trip) {
-            $this->notifyPassengersDriverEnRoute($trip->fresh());
-        });
+        DB::afterCommit(fn () => $this->notifyPassengersDriverEnRoute($trip->fresh()));
 
         return $trip->fresh();
     }
@@ -216,10 +193,142 @@ class IntercityService
     }
 
     /**
-     * Клиент отменяет бронь. Если уже matched к trip — водитель
-     * получает пуш «освободилось место»; trip продолжает действовать
-     * с меньшим числом пассажиров (для MVP).
+     * Водитель отменяет принятый slot (сломалась машина, болезнь).
+     * Все active бронь возвращаются как Cancelled, пассажирам пуш
+     * «водитель отменил, поищите другой рейс». Slot не удаляем —
+     * status=Cancelled, чтоб видна история.
      */
+    public function cancelTripByDriver(IntercityTrip $trip, User $driver): IntercityTrip
+    {
+        if ($trip->driver_id !== $driver->id) {
+            throw new RuntimeException('Эта поездка не ваша.');
+        }
+        if ($trip->status === IntercityTripStatus::Completed) {
+            throw new RuntimeException('Завершённую поездку нельзя отменить.');
+        }
+        if ($trip->status === IntercityTripStatus::Cancelled) {
+            throw new RuntimeException('Поездка уже отменена.');
+        }
+
+        DB::transaction(function () use ($trip) {
+            $trip->update([
+                'status' => IntercityTripStatus::Cancelled,
+                'cancelled_at' => now(),
+                'cancelled_by' => 'driver',
+            ]);
+            $trip->bookings()
+                ->whereIn('status', [
+                    IntercityBookingStatus::Matched,
+                    IntercityBookingStatus::EnRoute,
+                ])
+                ->update([
+                    'status' => IntercityBookingStatus::Cancelled,
+                    'cancelled_at' => now(),
+                    'cancelled_by' => 'driver',
+                ]);
+        });
+
+        DB::afterCommit(fn () => $this->notifyPassengersTripCancelledByDriver($trip->fresh()));
+
+        return $trip->fresh();
+    }
+
+    /**
+     * Водитель отмечает не-явку пассажира. Trip продолжается, no-show
+     * считается для отчётности.
+     */
+    public function markPassengerNoShow(IntercityBooking $booking, User $driver): IntercityBooking
+    {
+        $booking->loadMissing('trip');
+        if ($booking->trip?->driver_id !== $driver->id) {
+            throw new RuntimeException('Эта бронь не вашего рейса.');
+        }
+        if (! in_array($booking->status, [
+            IntercityBookingStatus::Matched,
+            IntercityBookingStatus::EnRoute,
+        ], true)) {
+            throw new RuntimeException('Можно отметить только активную бронь.');
+        }
+
+        $booking->update([
+            'status' => IntercityBookingStatus::NoShow,
+        ]);
+
+        return $booking->fresh();
+    }
+
+    /* ───────────────────────────────────────────────────────────
+     * CLIENT BOOKINGS
+     * ─────────────────────────────────────────────────────────── */
+
+    /**
+     * Клиент бронит место(а) в конкретном slot'е. Trip автоматически
+     * переходит в Ready когда seats заполнены.
+     */
+    public function createBooking(
+        User $client,
+        IntercityTrip $trip,
+        int $seatsCount,
+        ?string $pickupAddress = null,
+    ): IntercityBooking {
+        if ($seatsCount < 1 || $seatsCount > 3) {
+            throw new RuntimeException('Можно забронировать от 1 до 3 мест.');
+        }
+
+        $existing = IntercityBooking::query()
+            ->where('client_id', $client->id)
+            ->active()
+            ->first();
+        if ($existing !== null) {
+            throw new RuntimeException('У вас уже есть активная бронь межгорода.');
+        }
+
+        return DB::transaction(function () use ($client, $trip, $seatsCount, $pickupAddress) {
+            $fresh = IntercityTrip::lockForUpdate()->findOrFail($trip->id);
+
+            if (! in_array($fresh->status, IntercityTripStatus::bookableStatuses(), true) || $fresh->is_closed) {
+                throw new RuntimeException('В этот рейс больше нельзя забронировать место.');
+            }
+
+            $occupied = (int) IntercityBooking::query()
+                ->where('trip_id', $fresh->id)
+                ->whereIn('status', [
+                    IntercityBookingStatus::Matched,
+                    IntercityBookingStatus::EnRoute,
+                ])
+                ->sum('seats_count');
+
+            $remaining = $fresh->max_seats - $occupied;
+            if ($seatsCount > $remaining) {
+                throw new RuntimeException(
+                    "Свободно только {$remaining} мест(а)."
+                );
+            }
+
+            $booking = IntercityBooking::create([
+                'route_id' => $fresh->route_id,
+                'client_id' => $client->id,
+                'trip_id' => $fresh->id,
+                'departure_date' => $fresh->departure_date->toDateString(),
+                'seats_count' => $seatsCount,
+                'pickup_address' => $pickupAddress,
+                'client_name' => $client->name,
+                'client_phone' => $client->phone,
+                'status' => IntercityBookingStatus::Matched,
+                'matched_at' => now(),
+            ]);
+
+            // Slot заполнился → status Ready (если был Claimed).
+            // Водителю пуш «можно выезжать».
+            if ($occupied + $seatsCount >= $fresh->max_seats && $fresh->status === IntercityTripStatus::Claimed) {
+                $fresh->update(['status' => IntercityTripStatus::Ready]);
+                DB::afterCommit(fn () => $this->notifyDriverSlotReady($fresh->fresh()));
+            }
+
+            return $booking->fresh();
+        });
+    }
+
     public function cancelBookingByClient(IntercityBooking $booking, User $client): IntercityBooking
     {
         if ($booking->client_id !== $client->id) {
@@ -240,9 +349,13 @@ class IntercityService
             'cancelled_by' => 'client',
         ]);
 
+        // Slot был Ready (полон) → опять Claimed (есть свободное место).
         if ($tripId !== null) {
             $trip = IntercityTrip::find($tripId);
             if ($trip !== null) {
+                if ($trip->status === IntercityTripStatus::Ready) {
+                    $trip->update(['status' => IntercityTripStatus::Claimed]);
+                }
                 DB::afterCommit(fn () => $this->notifyDriverPassengerCancelled($trip));
             }
         }
@@ -250,25 +363,75 @@ class IntercityService
         return $booking->fresh();
     }
 
+    /* ───────────────────────────────────────────────────────────
+     * EXPIRY (cron)
+     * ─────────────────────────────────────────────────────────── */
+
     /**
-     * Активные водители в зоне обслуживания from_region маршрута —
-     * GPS-фильтр через GeoService (radius=detection_max_km). Те же
-     * критерии что для обычных заказов (online, не заблокированы,
-     * не в активном межгород-трипе).
+     * Слоты у которых departure_at прошло 30 мин назад и трип всё ещё
+     * Open/Claimed → отменяем. Возвращает количество отменённых.
+     * Вызывается ExpireStaleSlotsCommand раз в час.
+     */
+    public function expireStaleSlots(): int
+    {
+        $cutoff = now()->subMinutes(30);
+        $stale = IntercityTrip::query()
+            ->whereIn('status', [IntercityTripStatus::Open, IntercityTripStatus::Claimed])
+            ->where('departure_at', '<', $cutoff)
+            ->with(['bookings.client', 'driver'])
+            ->get();
+
+        foreach ($stale as $trip) {
+            DB::transaction(function () use ($trip) {
+                $trip->update([
+                    'status' => IntercityTripStatus::Cancelled,
+                    'cancelled_at' => now(),
+                    'cancelled_by' => 'system',
+                ]);
+                $trip->bookings()
+                    ->whereIn('status', [
+                        IntercityBookingStatus::Matched,
+                        IntercityBookingStatus::EnRoute,
+                    ])
+                    ->update([
+                        'status' => IntercityBookingStatus::Cancelled,
+                        'cancelled_at' => now(),
+                        'cancelled_by' => 'system',
+                    ]);
+            });
+
+            DB::afterCommit(fn () => $this->notifyPassengersSlotExpired($trip->fresh()));
+        }
+
+        return $stale->count();
+    }
+
+    /* ───────────────────────────────────────────────────────────
+     * PUSH NOTIFICATIONS
+     * ─────────────────────────────────────────────────────────── */
+
+    /**
+     * Подходящие водители для рассылки оффера «есть открытый slot».
+     * Фильтры: accepts_intercity=true, в зоне обслуживания from_region
+     * (GPS-фильтр), без активного intercity-трипа.
      *
      * @return Collection<int, User>
      */
-    private function availableDriversInRegion(IntercityRoute $route): Collection
+    private function eligibleIntercityDrivers(IntercityRoute $route): Collection
     {
         $route->loadMissing('fromRegion');
         $from = $route->fromRegion;
+
+        $base = User::query()
+            ->whereHas('driverProfile', function ($q) {
+                $q->where('accepts_intercity', true)
+                    ->online()
+                    ->notBlocked();
+            })
+            ->whereDoesntHave('intercityDriverTrips', fn ($q) => $q->active());
+
         if ($from === null || $from->center_latitude === null || $from->center_longitude === null) {
-            // Регион без координат — fallback к старому поведению
-            // (все online водители без активного межгород-трипа).
-            return User::query()
-                ->whereHas('driverProfile', fn ($q) => $q->online()->notBlocked())
-                ->whereDoesntHave('intercityDriverTrips', fn ($q) => $q->active())
-                ->get();
+            return $base->get();
         }
 
         $nearby = $this->geoService->findNearestDrivers(
@@ -277,57 +440,60 @@ class IntercityService
             limit: 100,
             maxRadiusKm: Region::detectionMaxKm(),
         );
-
         $userIds = $nearby->pluck('user_id')->all();
         if ($userIds === []) {
             return new Collection;
         }
 
-        return User::query()
-            ->whereIn('id', $userIds)
-            ->whereDoesntHave('intercityDriverTrips', fn ($q) => $q->active())
-            ->get();
+        return $base->whereIn('id', $userIds)->get();
     }
 
-    private function broadcastBatchReadyToDrivers(IntercityRoute $route, Carbon $departureDate): void
+    private function notifyDriverSlotReady(IntercityTrip $trip): void
     {
-        $route->loadMissing(['fromRegion', 'toRegion']);
-        $drivers = $this->availableDriversInRegion($route);
-
-        $body = "{$route->fromRegion->name} → {$route->toRegion->name} · "
-            ."{$route->max_seats} мест · "
-            .number_format($route->price_per_seat * $route->max_seats)
-            .' сом всего · '.$departureDate->format('d.m');
-
-        foreach ($drivers as $driver) {
-            $this->pushService->sendOfferToDriver(
-                $driver,
-                'Межгород: пассажиры собраны',
-                $body,
-                [
-                    'type' => 'intercity_batch_ready',
-                    'route_id' => $route->id,
-                    'departure_date' => $departureDate->toDateString(),
-                ],
-            );
+        $driver = $trip->driver;
+        if ($driver === null) {
+            return;
         }
+        $trip->loadMissing(['route.fromRegion', 'route.toRegion']);
+        $this->pushService->sendToUser(
+            $driver,
+            'Машина полная — можно выезжать',
+            "{$trip->route->fromRegion->name} → {$trip->route->toRegion->name}, ".
+            "{$trip->max_seats} пассажиров",
+            ['type' => 'intercity_slot_ready', 'trip_id' => $trip->id],
+        );
     }
 
-    private function notifyPassengersTripMatched(IntercityTrip $trip): void
+    private function notifyPassengersTripClaimed(IntercityTrip $trip): void
     {
         $trip->loadMissing(['bookings.client', 'route.fromRegion', 'route.toRegion']);
-        $body = "{$trip->driver_name} ({$trip->car_model} {$trip->car_number}) "
-            ."везёт вас {$trip->route->fromRegion->name} → {$trip->route->toRegion->name}";
-
-        $this->notifyTripPassengers($trip, 'Водитель найден!', $body, 'intercity_matched');
+        $body = "{$trip->driver_name} ({$trip->car_model} {$trip->car_number}) ".
+            "везёт вас {$trip->route->fromRegion->name} → {$trip->route->toRegion->name}";
+        $this->notifyTripPassengers($trip, 'Водитель найден!', $body, 'intercity_claimed');
     }
 
     private function notifyPassengersDriverEnRoute(IntercityTrip $trip): void
     {
         $trip->loadMissing('bookings.client');
         $body = "{$trip->driver_name} едет за вами. {$trip->car_model} {$trip->car_number}";
-
         $this->notifyTripPassengers($trip, 'Водитель выехал', $body, 'intercity_en_route');
+    }
+
+    private function notifyPassengersTripCancelledByDriver(IntercityTrip $trip): void
+    {
+        $trip->loadMissing(['bookings.client', 'route.fromRegion', 'route.toRegion']);
+        $body = "{$trip->route->fromRegion->name} → {$trip->route->toRegion->name} в ".
+            $trip->departure_at?->timezone('Asia/Bishkek')->format('H:i').
+            ' — водитель отменил. Поищите другой рейс.';
+        $this->notifyTripPassengers($trip, 'Рейс отменён водителем', $body, 'intercity_driver_cancelled');
+    }
+
+    private function notifyPassengersSlotExpired(IntercityTrip $trip): void
+    {
+        $trip->loadMissing(['bookings.client', 'route.fromRegion', 'route.toRegion']);
+        $body = "{$trip->route->fromRegion->name} → {$trip->route->toRegion->name} — ".
+            'не нашлось водителя. Попробуйте другой рейс.';
+        $this->notifyTripPassengers($trip, 'Рейс отменён', $body, 'intercity_slot_expired');
     }
 
     private function notifyTripPassengers(
@@ -340,10 +506,6 @@ class IntercityService
             if ($booking->client === null) {
                 continue;
             }
-            // sendToUser — обычный visible push (нечего тут озвучивать как
-            // ringtone-оверлей; это пассажирские уведомления, а не offer
-            // водителю). sendOfferToDriver был бы багом — TTL 30s и high
-            // priority overlay не для пассажирского UX.
             $this->pushService->sendToUser(
                 $booking->client,
                 $title,
@@ -368,10 +530,7 @@ class IntercityService
             $driver,
             'Пассажир отменил бронь',
             "В рейсе {$trip->route->fromRegion->name} → {$trip->route->toRegion->name} освободилось место",
-            [
-                'type' => 'intercity_passenger_cancelled',
-                'trip_id' => $trip->id,
-            ],
+            ['type' => 'intercity_passenger_cancelled', 'trip_id' => $trip->id],
         );
     }
 }

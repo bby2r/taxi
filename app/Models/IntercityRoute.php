@@ -71,4 +71,12 @@ class IntercityRoute extends Model
     {
         return $this->hasMany(IntercityTrip::class, 'route_id');
     }
+
+    /**
+     * @return HasMany<IntercityRouteSchedule, $this>
+     */
+    public function schedules(): HasMany
+    {
+        return $this->hasMany(IntercityRouteSchedule::class, 'route_id');
+    }
 }

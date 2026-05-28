@@ -1,11 +1,17 @@
 import { apiClient } from '@taxi/shared';
 
-export type IntercityRoute = {
-  id: number;
-  from_region: { id: number; name: string };
-  to_region: { id: number; name: string };
+export type IntercitySlot = {
+  trip_id: number;
+  from_region: string | null;
+  to_region: string | null;
+  departure_at: string;
   max_seats: number;
   price_per_seat: number;
+  booked_seats: number;
+  has_driver: boolean;
+  driver_name: string | null;
+  car_model: string | null;
+  car_number: string | null;
 };
 
 export type IntercityBookingStatus =
@@ -26,43 +32,43 @@ export type IntercityBooking = {
     max_seats: number;
     price_per_seat: number;
   };
-  departure_date: string; // YYYY-MM-DD
+  departure_date: string;
   seats_count: number;
   pickup_address?: string | null;
   total_price: number;
   seats_booked_total: number;
   trip?: {
     id: number;
-    status: 'matched' | 'en_route' | 'completed' | 'cancelled';
-    driver_name?: string;
-    driver_phone?: string;
-    car_model?: string;
-    car_number?: string;
+    status: 'open' | 'claimed' | 'ready' | 'en_route' | 'completed' | 'cancelled';
+    departure_at?: string | null;
+    driver_name?: string | null;
+    driver_phone?: string | null;
+    car_model?: string | null;
+    car_number?: string | null;
     departed_at?: string | null;
   } | null;
   matched_at?: string | null;
   created_at: string;
 };
 
-export async function getIntercityRoutes(
+export async function getIntercitySlots(
   latitude?: number,
   longitude?: number,
-): Promise<IntercityRoute[]> {
+): Promise<IntercitySlot[]> {
   const params: Record<string, number> = {};
   if (typeof latitude === 'number' && typeof longitude === 'number') {
     params.latitude = latitude;
     params.longitude = longitude;
   }
-  const { data } = await apiClient.get<{ data: IntercityRoute[] }>(
-    '/api/v1/client/intercity/routes',
+  const { data } = await apiClient.get<{ slots: IntercitySlot[] }>(
+    '/api/v1/client/intercity/slots',
     { params },
   );
-  return data.data;
+  return data.slots;
 }
 
 export async function createIntercityBooking(payload: {
-  route_id: number;
-  departure_date: string; // YYYY-MM-DD
+  trip_id: number;
   seats_count: number;
   pickup_address?: string;
 }): Promise<IntercityBooking> {

@@ -102,7 +102,9 @@ class DriverController extends Controller
             'insurance' => 'nullable|image|max:5120',
         ]);
 
-        DB::transaction(function () use ($driver, $validated, $request) {
+        $acceptsIntercity = $request->boolean('accepts_intercity');
+
+        DB::transaction(function () use ($driver, $validated, $request, $acceptsIntercity) {
             $userData = [
                 'name' => $validated['name'],
                 'phone' => $validated['phone'],
@@ -121,6 +123,7 @@ class DriverController extends Controller
             $profileData = [
                 'car_model' => $validated['car_model'],
                 'car_number' => $validated['car_number'],
+                'accepts_intercity' => $acceptsIntercity,
             ];
 
             $docMap = [

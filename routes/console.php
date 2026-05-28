@@ -18,3 +18,12 @@ Schedule::command('orders:cancel-stale')
 Schedule::command('drivers:monitor-stale')
     ->everyMinute()
     ->withoutOverlapping();
+
+Schedule::command('intercity:generate-slots --days=2')
+    ->dailyAt('05:00')
+    ->timezone('Asia/Bishkek')
+    ->withoutOverlapping();
+
+Schedule::command('intercity:expire-stale-slots')
+    ->hourly()
+    ->withoutOverlapping();

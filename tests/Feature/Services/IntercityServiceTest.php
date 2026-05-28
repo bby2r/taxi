@@ -8,6 +8,8 @@ use App\Enums\UserRole;
 use App\Models\DriverProfile;
 use App\Models\IntercityBooking;
 use App\Models\IntercityRoute;
+use App\Models\IntercityRouteSchedule;
+use App\Models\IntercityTrip;
 use App\Models\Region;
 use App\Models\Setting;
 use App\Models\User;
@@ -15,18 +17,19 @@ use App\Services\ExpoPushService;
 use App\Services\IntercityService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Carbon;
-use Illuminate\Support\Facades\Event;
 use RuntimeException;
 use Tests\TestCase;
 
 /**
- * Маршрутка-модель межгорода. Покрываем:
- *  - createBooking ваидация и happy-path
- *  - matching: набор max_seats → готово к принятию
- *  - acceptByDriver FIFO + race safety
- *  - state machine trip (matched→en_route→completed)
- *  - cancellation by client (освобождение места)
- *  - расчёт комиссии
+ * Slot-модель межгорода (Option C: admin-scheduled + driver-claimed).
+ *  - generateSlotsForDate из расписаний
+ *  - claimSlot гонка/валидация accepts_intercity
+ *  - createBooking → auto-promote Claimed → Ready
+ *  - cancelBookingByClient → Ready → Claimed (освобождение места)
+ *  - lifecycle: claim → start → complete (+ комиссия)
+ *  - cancelTripByDriver: пассажирам пуш отмены
+ *  - expireStaleSlots
+ *  - markPassengerNoShow
  */
 class IntercityServiceTest extends TestCase
 {
@@ -46,21 +49,22 @@ class IntercityServiceTest extends TestCase
     {
         parent::setUp();
 
-        // Push-уведомления — фейкаем чтобы не пытались отправлять
-        // реальные FCM в тестах.
-        $this->app->bind(ExpoPushService::class, function () {
-            return new class
-            {
-                public function sendOfferToDriver(...$args): void {}
+        // Push отключаем — иначе тесты пытались бы лезть в Expo API.
+        $this->app->bind(ExpoPushService::class, fn () => new class extends ExpoPushService
+        {
+            public function __construct() {}
 
-                public function sendToUser(...$args): bool
-                {
-                    return true;
-                }
-            };
+            public function sendOfferToDriver(User $driver, string $title, string $body, array $data = []): bool
+            {
+                return true;
+            }
+
+            public function sendToUser(User $user, string $title, string $body, array $data = [], array $options = []): bool
+            {
+                return true;
+            }
         });
 
-        Event::fake();
         $this->service = app(IntercityService::class);
 
         $this->talas = Region::factory()->create(['name' => 'Талас']);
@@ -75,250 +79,322 @@ class IntercityServiceTest extends TestCase
         ]);
 
         $this->driver = User::factory()->driver()->create();
-        DriverProfile::factory()->for($this->driver)->online()->create();
+        DriverProfile::factory()
+            ->for($this->driver)
+            ->online()
+            ->create(['accepts_intercity' => true]);
     }
 
-    public function test_create_booking_validates_seats_range(): void
+    private function makeSlot(?Carbon $departureAt = null, ?int $maxSeats = null): IntercityTrip
     {
-        $client = User::factory()->create(['role' => UserRole::Client]);
+        $at = $departureAt ?? Carbon::now('Asia/Bishkek')->addDay()->setTime(7, 0);
+
+        return IntercityTrip::create([
+            'route_id' => $this->route->id,
+            'driver_id' => null,
+            'departure_date' => $at->copy()->toDateString(),
+            'departure_at' => $at,
+            'max_seats' => $maxSeats ?? $this->route->max_seats,
+            'price_per_seat' => $this->route->price_per_seat,
+            'status' => IntercityTripStatus::Open,
+        ]);
+    }
+
+    public function test_generate_slots_creates_one_per_active_schedule_for_today(): void
+    {
+        $today = Carbon::now('Asia/Bishkek');
+        // bit-mask со всеми днями недели — гарантированно runsOn=true
+        $allDays = (1 << 7) - 1;
+
+        IntercityRouteSchedule::create([
+            'route_id' => $this->route->id,
+            'days_of_week' => $allDays,
+            'departure_time' => '07:00:00',
+            'max_seats' => 7,
+            'price_per_seat' => 600,
+            'is_active' => true,
+        ]);
+        IntercityRouteSchedule::create([
+            'route_id' => $this->route->id,
+            'days_of_week' => $allDays,
+            'departure_time' => '12:00:00',
+            'max_seats' => 7,
+            'price_per_seat' => 600,
+            'is_active' => false, // не активно — не должно создаться
+        ]);
+
+        $created = $this->service->generateSlotsForDate($today);
+        $this->assertSame(1, $created);
+
+        // Повторный запуск идемпотентен — не дублирует.
+        $again = $this->service->generateSlotsForDate($today);
+        $this->assertSame(0, $again);
+    }
+
+    public function test_claim_slot_requires_accepts_intercity(): void
+    {
+        $slot = $this->makeSlot();
+        $otherDriver = User::factory()->driver()->create();
+        DriverProfile::factory()->for($otherDriver)->online()->create([
+            'accepts_intercity' => false,
+        ]);
 
         $this->expectException(RuntimeException::class);
-        $this->expectExceptionMessage('от 1 до 3 мест');
+        $this->expectExceptionMessage('не включён межгород');
 
-        $this->service->createBooking($client, $this->route, Carbon::tomorrow(), 4);
+        $this->service->claimSlot($slot, $otherDriver);
     }
 
-    public function test_create_booking_rejects_inactive_route(): void
+    public function test_claim_slot_rejects_when_driver_has_active_trip(): void
     {
-        $client = User::factory()->create(['role' => UserRole::Client]);
-        $this->route->update(['is_active' => false]);
+        $first = $this->makeSlot();
+        $second = $this->makeSlot(Carbon::now('Asia/Bishkek')->addDays(2)->setTime(7, 0));
+        $this->service->claimSlot($first, $this->driver);
 
         $this->expectException(RuntimeException::class);
-        $this->expectExceptionMessage('маршрут больше не доступен');
+        $this->expectExceptionMessage('активный межгород');
 
-        $this->service->createBooking($client, $this->route, Carbon::tomorrow(), 1);
+        $this->service->claimSlot($second, $this->driver);
     }
 
-    public function test_create_booking_rejects_when_client_has_active_one(): void
+    public function test_claim_slot_rejects_when_already_taken(): void
     {
-        $client = User::factory()->create(['role' => UserRole::Client]);
-        $this->service->createBooking($client, $this->route, Carbon::tomorrow(), 1);
+        $slot = $this->makeSlot();
+        $this->service->claimSlot($slot, $this->driver);
+
+        $other = User::factory()->driver()->create();
+        DriverProfile::factory()->for($other)->online()->create(['accepts_intercity' => true]);
 
         $this->expectException(RuntimeException::class);
-        $this->expectExceptionMessage('уже есть активная бронь');
+        $this->expectExceptionMessage('занят другим водителем');
 
-        $this->service->createBooking($client, $this->route, Carbon::tomorrow()->addDay(), 1);
+        $this->service->claimSlot($slot->fresh(), $other);
     }
 
-    public function test_create_booking_rejects_when_no_seats_left(): void
+    public function test_claim_slot_snapshots_driver_and_car(): void
     {
-        $date = Carbon::tomorrow();
-        // 4 клиента занимают все 4 места
-        for ($i = 0; $i < 4; $i++) {
-            $c = User::factory()->create(['role' => UserRole::Client]);
-            $this->service->createBooking($c, $this->route, $date, 1);
-        }
+        $slot = $this->makeSlot();
+        $claimed = $this->service->claimSlot($slot, $this->driver);
 
-        $extraClient = User::factory()->create(['role' => UserRole::Client]);
+        $this->assertSame(IntercityTripStatus::Claimed, $claimed->status);
+        $this->assertSame($this->driver->id, $claimed->driver_id);
+        $this->assertSame($this->driver->name, $claimed->driver_name);
+        $this->assertSame($this->driver->phone, $claimed->driver_phone);
+        $this->assertSame($this->driver->driverProfile->car_model, $claimed->car_model);
+        $this->assertSame($this->driver->driverProfile->car_number, $claimed->car_number);
+        $this->assertNotNull($claimed->accepted_at);
+    }
+
+    public function test_create_booking_promotes_claimed_slot_to_ready_when_full(): void
+    {
+        $slot = $this->makeSlot(maxSeats: 2);
+        $this->service->claimSlot($slot, $this->driver);
+
+        $c1 = User::factory()->create(['role' => UserRole::Client]);
+        $c2 = User::factory()->create(['role' => UserRole::Client]);
+
+        $this->service->createBooking($c1, $slot->fresh(), 1);
+        $this->assertSame(IntercityTripStatus::Claimed, $slot->fresh()->status);
+
+        $this->service->createBooking($c2, $slot->fresh(), 1);
+        $this->assertSame(IntercityTripStatus::Ready, $slot->fresh()->status);
+    }
+
+    public function test_create_booking_rejects_more_seats_than_remaining(): void
+    {
+        $slot = $this->makeSlot(maxSeats: 2);
+        $this->service->claimSlot($slot, $this->driver);
+
+        $c1 = User::factory()->create(['role' => UserRole::Client]);
+        $this->service->createBooking($c1, $slot->fresh(), 1);
+
+        $c2 = User::factory()->create(['role' => UserRole::Client]);
         $this->expectException(RuntimeException::class);
         $this->expectExceptionMessage('Свободно только');
 
-        $this->service->createBooking($extraClient, $this->route, $date, 1);
+        $this->service->createBooking($c2, $slot->fresh(), 2);
     }
 
-    public function test_create_booking_persists_snapshot(): void
+    public function test_create_booking_rejects_when_slot_closed(): void
     {
-        $client = User::factory()->create([
-            'role' => UserRole::Client,
-            'name' => 'Айбек',
-            'phone' => '+996700111222',
-        ]);
+        $slot = $this->makeSlot();
+        $this->service->claimSlot($slot, $this->driver);
+        $this->service->closeSlot($slot->fresh(), $this->driver);
 
-        $booking = $this->service->createBooking($client, $this->route, Carbon::tomorrow(), 2, 'У школы');
-
-        $this->assertSame(IntercityBookingStatus::Pending, $booking->status);
-        $this->assertSame(2, $booking->seats_count);
-        $this->assertSame('Айбек', $booking->client_name);
-        $this->assertSame('+996700111222', $booking->client_phone);
-        $this->assertSame('У школы', $booking->pickup_address);
-        $this->assertNull($booking->trip_id);
-    }
-
-    public function test_driver_accepts_when_max_seats_reached_assigns_fifo(): void
-    {
-        $date = Carbon::tomorrow();
-        $clients = collect(range(1, 4))->map(fn ($i) => User::factory()->create([
-            'role' => UserRole::Client,
-            'name' => "Client$i",
-        ]));
-
-        // Заполняем 4 места 4-мя клиентами по 1 месту.
-        foreach ($clients as $c) {
-            $this->service->createBooking($c, $this->route, $date, 1);
-        }
-
-        $trip = $this->service->acceptByDriver($this->driver, $this->route, $date);
-
-        $this->assertSame(IntercityTripStatus::Matched, $trip->status);
-        $this->assertSame($this->driver->id, $trip->driver_id);
-        $this->assertSame(4, $trip->bookings->count());
-        $this->assertSame(600, $trip->price_per_seat);
-
-        // Все 4 booking переключились в matched
-        foreach ($clients as $c) {
-            $b = IntercityBooking::where('client_id', $c->id)->first();
-            $this->assertSame(IntercityBookingStatus::Matched, $b->status);
-            $this->assertSame($trip->id, $b->trip_id);
-        }
-    }
-
-    public function test_driver_cant_accept_if_seats_not_full(): void
-    {
-        $date = Carbon::tomorrow();
         $client = User::factory()->create(['role' => UserRole::Client]);
-        $this->service->createBooking($client, $this->route, $date, 1);
-
-        // Только 1 место занято, max_seats=4
         $this->expectException(RuntimeException::class);
-        $this->expectExceptionMessage('не полный');
+        $this->expectExceptionMessage('больше нельзя забронировать');
 
-        $this->service->acceptByDriver($this->driver, $this->route, $date);
+        $this->service->createBooking($client, $slot->fresh(), 1);
     }
 
-    public function test_start_and_complete_trip_lifecycle(): void
+    public function test_cancel_booking_reverts_ready_slot_to_claimed(): void
     {
-        $date = Carbon::tomorrow();
+        $slot = $this->makeSlot(maxSeats: 1);
+        $this->service->claimSlot($slot, $this->driver);
+
+        $client = User::factory()->create(['role' => UserRole::Client]);
+        $booking = $this->service->createBooking($client, $slot->fresh(), 1);
+        $this->assertSame(IntercityTripStatus::Ready, $slot->fresh()->status);
+
+        $this->service->cancelBookingByClient($booking, $client);
+        $this->assertSame(IntercityTripStatus::Claimed, $slot->fresh()->status);
+    }
+
+    public function test_start_and_complete_trip_lifecycle_with_commission(): void
+    {
+        $slot = $this->makeSlot();
+        $this->service->claimSlot($slot, $this->driver);
+
         for ($i = 0; $i < 4; $i++) {
             $c = User::factory()->create(['role' => UserRole::Client]);
-            $this->service->createBooking($c, $this->route, $date, 1);
+            $this->service->createBooking($c, $slot->fresh(), 1);
         }
-        $trip = $this->service->acceptByDriver($this->driver, $this->route, $date);
 
-        $trip = $this->service->startTrip($trip, $this->driver);
-        $this->assertSame(IntercityTripStatus::EnRoute, $trip->status);
-        $this->assertNotNull($trip->departed_at);
-        foreach ($trip->bookings as $b) {
+        $started = $this->service->startTrip($slot->fresh(), $this->driver);
+        $this->assertSame(IntercityTripStatus::EnRoute, $started->status);
+        $this->assertNotNull($started->departed_at);
+        foreach ($started->bookings as $b) {
             $this->assertSame(IntercityBookingStatus::EnRoute, $b->status);
         }
 
-        $trip = $this->service->completeTrip($trip, $this->driver);
-        $this->assertSame(IntercityTripStatus::Completed, $trip->status);
-        $this->assertNotNull($trip->completed_at);
-        // 4 места × 600 сом = 2400 сом, комиссия 7% = 168 сом
-        $this->assertSame(168, $trip->commission_amount);
-
-        foreach ($trip->bookings as $b) {
+        $completed = $this->service->completeTrip($started, $this->driver);
+        $this->assertSame(IntercityTripStatus::Completed, $completed->status);
+        // 4 × 600 = 2400, по дефолту 7% = 168.
+        $this->assertSame(168, $completed->commission_amount);
+        foreach ($completed->bookings as $b) {
             $this->assertSame(IntercityBookingStatus::Completed, $b->status);
         }
     }
 
     public function test_only_owner_driver_can_start_trip(): void
     {
-        $date = Carbon::tomorrow();
-        for ($i = 0; $i < 4; $i++) {
-            $c = User::factory()->create(['role' => UserRole::Client]);
-            $this->service->createBooking($c, $this->route, $date, 1);
-        }
-        $trip = $this->service->acceptByDriver($this->driver, $this->route, $date);
+        $slot = $this->makeSlot();
+        $this->service->claimSlot($slot, $this->driver);
 
-        $otherDriver = User::factory()->driver()->create();
+        $other = User::factory()->driver()->create();
+        DriverProfile::factory()->for($other)->online()->create(['accepts_intercity' => true]);
 
         $this->expectException(RuntimeException::class);
         $this->expectExceptionMessage('не ваша');
 
-        $this->service->startTrip($trip, $otherDriver);
+        $this->service->startTrip($slot->fresh(), $other);
     }
 
-    public function test_complete_trip_uses_custom_commission_rate(): void
+    public function test_complete_uses_custom_commission_rate(): void
     {
         Setting::updateOrCreate(['key' => 'commission_rate'], ['value' => '10']);
 
-        $date = Carbon::tomorrow();
+        $slot = $this->makeSlot();
+        $this->service->claimSlot($slot, $this->driver);
         for ($i = 0; $i < 4; $i++) {
             $c = User::factory()->create(['role' => UserRole::Client]);
-            $this->service->createBooking($c, $this->route, $date, 1);
+            $this->service->createBooking($c, $slot->fresh(), 1);
         }
-        $trip = $this->service->acceptByDriver($this->driver, $this->route, $date);
-        $trip = $this->service->startTrip($trip, $this->driver);
-        $trip = $this->service->completeTrip($trip, $this->driver);
+        $this->service->startTrip($slot->fresh(), $this->driver);
+        $done = $this->service->completeTrip($slot->fresh(), $this->driver);
 
-        // 4 × 600 = 2400, 10% = 240
-        $this->assertSame(240, $trip->commission_amount);
+        $this->assertSame(240, $done->commission_amount);
     }
 
-    public function test_client_can_cancel_pending_booking(): void
+    public function test_cancel_trip_by_driver_cascades_to_bookings(): void
     {
+        $slot = $this->makeSlot();
+        $this->service->claimSlot($slot, $this->driver);
         $client = User::factory()->create(['role' => UserRole::Client]);
-        $booking = $this->service->createBooking($client, $this->route, Carbon::tomorrow(), 1);
+        $this->service->createBooking($client, $slot->fresh(), 1);
+
+        $cancelled = $this->service->cancelTripByDriver($slot->fresh(), $this->driver);
+        $this->assertSame(IntercityTripStatus::Cancelled, $cancelled->status);
+        $this->assertSame('driver', $cancelled->cancelled_by);
+
+        $booking = IntercityBooking::where('client_id', $client->id)->firstOrFail();
+        $this->assertSame(IntercityBookingStatus::Cancelled, $booking->status);
+        $this->assertSame('driver', $booking->cancelled_by);
+    }
+
+    public function test_client_can_cancel_own_booking(): void
+    {
+        $slot = $this->makeSlot();
+        $this->service->claimSlot($slot, $this->driver);
+        $client = User::factory()->create(['role' => UserRole::Client]);
+        $booking = $this->service->createBooking($client, $slot->fresh(), 1);
 
         $cancelled = $this->service->cancelBookingByClient($booking, $client);
-
         $this->assertSame(IntercityBookingStatus::Cancelled, $cancelled->status);
         $this->assertSame('client', $cancelled->cancelled_by);
-        $this->assertNotNull($cancelled->cancelled_at);
     }
 
-    public function test_other_client_cant_cancel_booking(): void
+    public function test_other_client_cannot_cancel(): void
     {
+        $slot = $this->makeSlot();
+        $this->service->claimSlot($slot, $this->driver);
         $client = User::factory()->create(['role' => UserRole::Client]);
-        $booking = $this->service->createBooking($client, $this->route, Carbon::tomorrow(), 1);
-        $otherClient = User::factory()->create(['role' => UserRole::Client]);
+        $booking = $this->service->createBooking($client, $slot->fresh(), 1);
 
+        $stranger = User::factory()->create(['role' => UserRole::Client]);
         $this->expectException(RuntimeException::class);
         $this->expectExceptionMessage('не ваша');
 
-        $this->service->cancelBookingByClient($booking, $otherClient);
+        $this->service->cancelBookingByClient($booking, $stranger);
     }
 
-    public function test_cancelling_matched_booking_frees_seat_in_pool(): void
+    public function test_no_show_only_for_owners_active_booking(): void
     {
-        $date = Carbon::tomorrow();
-        $clients = collect(range(1, 4))->map(fn () => User::factory()->create(['role' => UserRole::Client]));
-        foreach ($clients as $c) {
-            $this->service->createBooking($c, $this->route, $date, 1);
-        }
-        $trip = $this->service->acceptByDriver($this->driver, $this->route, $date);
-
-        // Отменяем 1-ю бронь
-        $firstBooking = $trip->bookings->first();
-        $this->service->cancelBookingByClient($firstBooking, $firstBooking->client);
-
-        $remainingActive = IntercityBooking::query()
-            ->where('route_id', $this->route->id)
-            ->whereDate('departure_date', $date)
-            ->whereIn('status', [
-                IntercityBookingStatus::Matched,
-                IntercityBookingStatus::EnRoute,
-            ])
-            ->sum('seats_count');
-
-        $this->assertSame(3, (int) $remainingActive);
-    }
-
-    public function test_completed_booking_cant_be_cancelled(): void
-    {
+        $slot = $this->makeSlot();
+        $this->service->claimSlot($slot, $this->driver);
         $client = User::factory()->create(['role' => UserRole::Client]);
-        $booking = $this->service->createBooking($client, $this->route, Carbon::tomorrow(), 1);
-        $booking->update(['status' => IntercityBookingStatus::Completed]);
+        $booking = $this->service->createBooking($client, $slot->fresh(), 1);
+
+        $updated = $this->service->markPassengerNoShow($booking->fresh(), $this->driver);
+        $this->assertSame(IntercityBookingStatus::NoShow, $updated->status);
+
+        $other = User::factory()->driver()->create();
+        DriverProfile::factory()->for($other)->online()->create(['accepts_intercity' => true]);
+
+        $newClient = User::factory()->create(['role' => UserRole::Client]);
+        $newBooking = IntercityBooking::create([
+            'route_id' => $this->route->id,
+            'client_id' => $newClient->id,
+            'trip_id' => $slot->id,
+            'departure_date' => $slot->departure_date,
+            'seats_count' => 1,
+            'status' => IntercityBookingStatus::Matched,
+            'matched_at' => now(),
+        ]);
 
         $this->expectException(RuntimeException::class);
-        $this->expectExceptionMessage('уже нельзя отменить');
+        $this->expectExceptionMessage('не вашего рейса');
 
-        $this->service->cancelBookingByClient($booking->fresh(), $client);
+        $this->service->markPassengerNoShow($newBooking, $other);
     }
 
-    public function test_total_revenue_calculation_handles_multi_seat_bookings(): void
+    public function test_expire_stale_slots_cancels_slots_past_grace_window(): void
     {
-        $date = Carbon::tomorrow();
-        // 2 клиента: один на 2 места, второй на 2 места = 4 места всего
+        // Slot, время выезда 1 час назад, никто не claim.
+        $stale = $this->makeSlot(Carbon::now('Asia/Bishkek')->subHour());
+        // Свежий slot — не трогаем.
+        $fresh = $this->makeSlot(Carbon::now('Asia/Bishkek')->addHour());
+
+        $count = $this->service->expireStaleSlots();
+
+        $this->assertSame(1, $count);
+        $this->assertSame(IntercityTripStatus::Cancelled, $stale->fresh()->status);
+        $this->assertSame('system', $stale->fresh()->cancelled_by);
+        $this->assertSame(IntercityTripStatus::Open, $fresh->fresh()->status);
+    }
+
+    public function test_total_revenue_handles_multi_seat_bookings(): void
+    {
+        $slot = $this->makeSlot();
+        $this->service->claimSlot($slot, $this->driver);
+
         $c1 = User::factory()->create(['role' => UserRole::Client]);
         $c2 = User::factory()->create(['role' => UserRole::Client]);
-        $this->service->createBooking($c1, $this->route, $date, 2);
-        $this->service->createBooking($c2, $this->route, $date, 2);
+        $this->service->createBooking($c1, $slot->fresh(), 2);
+        $this->service->createBooking($c2, $slot->fresh(), 2);
 
-        $trip = $this->service->acceptByDriver($this->driver, $this->route, $date);
-
-        // 2 booking × (2 seats × 600 сом) = 2400 всего
-        $this->assertSame(2400, $trip->totalRevenue());
+        $loaded = $slot->fresh(['bookings']);
+        $this->assertSame(2400, $loaded->totalRevenue());
     }
 }

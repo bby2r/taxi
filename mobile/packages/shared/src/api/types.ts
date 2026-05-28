@@ -71,6 +71,7 @@ export interface User {
   // the driver app can restore its "online" state on cold start instead
   // of waiting for the user to manually toggle the switch again.
   is_online?: boolean;
+  accepts_intercity?: boolean;
 }
 
 export interface AuthResponse {
