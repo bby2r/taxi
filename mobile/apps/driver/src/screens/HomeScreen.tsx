@@ -17,6 +17,7 @@ import { useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import type { CompositeNavigationProp } from '@react-navigation/native';
 import type { BottomTabNavigationProp } from '@react-navigation/bottom-tabs';
+import { useBottomTabBarHeight } from '@react-navigation/bottom-tabs';
 import { useAuth, useLocation, DriverColors, Typography, DEFAULT_MAP_REGION } from '@taxi/shared';
 import { DriverStackParamList, DriverTabParamList } from '../navigation/types';
 import { useDriverOrder } from '../hooks/useDriverOrder';
@@ -61,6 +62,9 @@ type NavigationProp = CompositeNavigationProp<
 export default function HomeScreen(): React.ReactNode {
   const navigation = useNavigation<NavigationProp>();
   const auth = useAuth();
+  // Высота нижнего таб-бара — нужна чтобы поднять bottomPanel
+  // (кнопка «Выйти на линию») над таб-баром, иначе её закрывает.
+  const tabBarHeight = useBottomTabBarHeight();
   const {
     state,
     isOnline,
@@ -469,7 +473,7 @@ export default function HomeScreen(): React.ReactNode {
       )}
 
       {state.phase !== 'offer' && (
-        <View style={styles.bottomPanel}>
+        <View style={[styles.bottomPanel, { bottom: tabBarHeight }]}>
           {isOnline && state.phase === 'online_idle' && (
           <View style={styles.statusPill}>
             <View style={styles.statusDot} />
@@ -511,7 +515,7 @@ export default function HomeScreen(): React.ReactNode {
       )}
 
       {state.phase === 'offer' && (
-        <View style={styles.offerOverlay}>
+        <View style={[styles.offerOverlay, { bottom: tabBarHeight }]}>
           <OrderOfferCard
             order={state.order}
             onAccept={acceptOffer}
