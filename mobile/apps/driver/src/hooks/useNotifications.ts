@@ -13,7 +13,7 @@ let moduleLoadError: string | null = null;
 // is to give the channel a NEW id.
 const DRIVER_OFFER_CHANNEL = 'driver_offers_v3';
 const RIDE_OFFER_CATEGORY = 'ride_offer';
-const PROJECT_ID = 'ca4f91d1-a8f4-488b-9c14-0eb60aa286b8';
+const PROJECT_ID = '6a367005-44a7-40d0-a95a-ec0d133c661c';
 
 if (Platform.OS !== 'web') {
   try {

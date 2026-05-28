@@ -88,6 +88,11 @@
           "RNMapboxMapsImpl": "mapbox"
         }
       ]
-    ]
+    ],
+    "extra": {
+      "eas": {
+        "projectId": "6a367005-44a7-40d0-a95a-ec0d133c661c"
+      }
+    }
   }
 }
