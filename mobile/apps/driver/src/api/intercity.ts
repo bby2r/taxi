@@ -45,9 +45,18 @@ export type IntercityTrip = {
   completed_at?: string | null;
 };
 
-export async function getAvailableIntercitySlots(): Promise<IntercitySlotOffer[]> {
+export async function getAvailableIntercitySlots(
+  latitude?: number,
+  longitude?: number,
+): Promise<IntercitySlotOffer[]> {
+  const params: Record<string, number> = {};
+  if (typeof latitude === 'number' && typeof longitude === 'number') {
+    params.latitude = latitude;
+    params.longitude = longitude;
+  }
   const { data } = await apiClient.get<{ offers: IntercitySlotOffer[] }>(
     '/api/v1/driver/intercity/available',
+    { params },
   );
   return data.offers;
 }

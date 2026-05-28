@@ -16,6 +16,7 @@ import {
   DriverColors,
   Typography,
   getApiErrorMessage,
+  useLocation,
 } from '@taxi/shared';
 import {
   cancelIntercityTrip,
@@ -44,6 +45,7 @@ function formatDeparture(iso: string): string {
 }
 
 export default function IntercityScreen(): React.ReactNode {
+  const location = useLocation();
   const [slots, setSlots] = useState<IntercitySlotOffer[]>([]);
   const [activeTrip, setActiveTrip] = useState<IntercityTrip | null>(null);
   const [refreshing, setRefreshing] = useState(false);
@@ -53,9 +55,11 @@ export default function IntercityScreen(): React.ReactNode {
   const reload = useCallback(async (): Promise<void> => {
     setError(null);
     try {
+      const lat = location.hasRealFix ? location.latitude : undefined;
+      const lng = location.hasRealFix ? location.longitude : undefined;
       const [t, s] = await Promise.all([
         getActiveIntercityTrip(),
-        getAvailableIntercitySlots(),
+        getAvailableIntercitySlots(lat, lng),
       ]);
       setActiveTrip((prev) => {
         if (!t && !prev) return prev;
@@ -88,7 +92,7 @@ export default function IntercityScreen(): React.ReactNode {
     } catch {
       // next tick retries
     }
-  }, []);
+  }, [location.hasRealFix, location.latitude, location.longitude]);
 
   useFocusEffect(
     useCallback(() => {

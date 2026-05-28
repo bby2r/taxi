@@ -25,6 +25,11 @@ class DriverIntercityController extends Controller
      */
     public function available(Request $request): JsonResponse
     {
+        $validated = $request->validate([
+            'latitude' => ['nullable', 'numeric', 'between:-90,90'],
+            'longitude' => ['nullable', 'numeric', 'between:-180,180'],
+        ]);
+
         $user = $request->user();
         $user->loadMissing('driverProfile');
 
@@ -40,27 +45,36 @@ class DriverIntercityController extends Controller
             return response()->json(['offers' => []]);
         }
 
-        $query = IntercityTrip::query()
-            ->where('status', IntercityTripStatus::Open)
-            ->where('departure_at', '>', now())
-            ->with(['route.fromRegion', 'route.toRegion']);
+        // Фильтр по локации водителя. Свежий GPS из запроса перебивает
+        // profile.latitude/longitude — последнее обновляется только на
+        // линии и устаревает когда водитель сменил район offline.
+        $lat = $validated['latitude'] ?? $user->driverProfile?->latitude;
+        $lng = $validated['longitude'] ?? $user->driverProfile?->longitude;
 
-        // Фильтр по локации водителя — показываем только slot'ы из
-        // зон где он может реально подобрать пассажиров.
-        $lat = $user->driverProfile?->latitude;
-        $lng = $user->driverProfile?->longitude;
-        if ($lat !== null && $lng !== null) {
-            $region = Region::findNearestByCoordinates(
-                (float) $lat,
-                (float) $lng,
-                Region::detectionMaxKm(),
-            );
-            if ($region !== null) {
-                $query->whereHas('route', fn ($q) => $q->where('from_region_id', $region->id));
-            }
+        // Без координат показывать всё подряд опасно — водитель из
+        // Таласа увидит покровские slot'ы. Лучше пустой список +
+        // подсказка в UI «включите геолокацию» чем показывать чужое.
+        if ($lat === null || $lng === null) {
+            return response()->json(['offers' => []]);
         }
 
-        $slots = $query->orderBy('departure_at')->limit(50)->get();
+        $region = Region::findNearestByCoordinates(
+            (float) $lat,
+            (float) $lng,
+            Region::detectionMaxKm(),
+        );
+        if ($region === null) {
+            return response()->json(['offers' => []]);
+        }
+
+        $slots = IntercityTrip::query()
+            ->where('status', IntercityTripStatus::Open)
+            ->where('departure_at', '>', now())
+            ->whereHas('route', fn ($q) => $q->where('from_region_id', $region->id))
+            ->with(['route.fromRegion', 'route.toRegion'])
+            ->orderBy('departure_at')
+            ->limit(50)
+            ->get();
 
         return response()->json([
             'offers' => $slots->map(fn (IntercityTrip $slot) => $this->slotToOfferArray($slot))->all(),
