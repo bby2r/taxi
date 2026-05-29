@@ -81,6 +81,18 @@ services:
         value: v21.0
       - key: WHATSAPP_ENABLED
         value: "false"
+      - key: NIKITA_LOGIN
+        sync: false
+      - key: NIKITA_PASSWORD
+        sync: false
+      - key: NIKITA_SENDER
+        sync: false
+      - key: NIKITA_MESSAGE_TEMPLATE
+        value: "Alif Taxi: код подтверждения {code}. Никому не сообщайте."
+      - key: NIKITA_API_URL
+        value: https://smspro.nikita.kg/api/message
+      - key: NIKITA_ENABLED
+        value: "false"
       - key: ADMIN_NAME
         sync: false
       - key: ADMIN_PHONE

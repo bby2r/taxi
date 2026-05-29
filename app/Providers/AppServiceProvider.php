@@ -4,7 +4,7 @@ namespace App\Providers;
 
 use App\Models\DriverChangeRequest;
 use App\Models\User;
-use App\Services\NoOpSmsChannel;
+use App\Services\NikitaSmsChannel;
 use App\Services\OtpDispatcher;
 use App\Services\WhatsAppCloudApiChannel;
 use Illuminate\Cache\RateLimiting\Limit;
@@ -30,11 +30,18 @@ class AppServiceProvider extends ServiceProvider
             enabled: (bool) config('whatsapp.enabled', false),
         ));
 
-        $this->app->singleton(NoOpSmsChannel::class, fn () => new NoOpSmsChannel);
+        $this->app->singleton(NikitaSmsChannel::class, fn () => new NikitaSmsChannel(
+            login: (string) config('nikita.login', ''),
+            password: (string) config('nikita.password', ''),
+            sender: (string) config('nikita.sender', 'SMSPRO.KG'),
+            messageTemplate: (string) config('nikita.message_template'),
+            apiUrl: (string) config('nikita.api_url'),
+            enabled: (bool) config('nikita.enabled', false),
+        ));
 
         $this->app->singleton(OtpDispatcher::class, fn ($app) => new OtpDispatcher(
             primary: $app->make(WhatsAppCloudApiChannel::class),
-            fallback: $app->make(NoOpSmsChannel::class),
+            fallback: $app->make(NikitaSmsChannel::class),
         ));
     }
 
