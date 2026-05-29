@@ -10,6 +10,7 @@ import android.content.pm.PackageManager
 import android.content.pm.ServiceInfo
 import android.location.Location
 import android.os.Build
+import android.os.Handler
 import android.os.HandlerThread
 import android.os.IBinder
 import android.os.PowerManager
@@ -61,6 +62,27 @@ class LocationPingService : Service() {
     // CPU to normal Doze behaviour.
     private var wakeLock: PowerManager.WakeLock? = null
     @Volatile private var lastTickStatus: String = "ожидание GPS"
+    // Last fix we received from FusedLocationProvider. Cached so the
+    // heartbeat timer can re-post it when the driver is stationary —
+    // without this the provider stays silent (no movement, no callback)
+    // and the server flips the driver to stale after ~30 s.
+    @Volatile private var lastKnownLocation: Location? = null
+    @Volatile private var lastUploadAtMs: Long = 0L
+    private var heartbeatHandler: Handler? = null
+    private val heartbeatRunnable = object : Runnable {
+        override fun run() {
+            val cached = lastKnownLocation
+            val sinceLast = System.currentTimeMillis() - lastUploadAtMs
+            // Re-upload last known coords only if normal flow has gone
+            // quiet (>= HEARTBEAT_INTERVAL_MS without a successful or
+            // attempted post). Driving drivers already hit the server
+            // every 3 s via onLocationResult — no reason to double-post.
+            if (cached != null && sinceLast >= HEARTBEAT_INTERVAL_MS) {
+                uploadLocation(cached)
+            }
+            heartbeatHandler?.postDelayed(this, HEARTBEAT_INTERVAL_MS)
+        }
+    }
 
     override fun onBind(intent: Intent?): IBinder? = null
 
@@ -110,6 +132,8 @@ class LocationPingService : Service() {
     }
 
     override fun onDestroy() {
+        heartbeatHandler?.removeCallbacks(heartbeatRunnable)
+        heartbeatHandler = null
         locationCallback?.let { fusedClient.removeLocationUpdates(it) }
         locationCallback = null
         callbackThread?.quitSafely()
@@ -135,17 +159,25 @@ class LocationPingService : Service() {
             return
         }
 
+        // No setMinUpdateDistanceMeters — a stationary driver (parked,
+        // waiting for a fare, sitting at a light) doesn't move, so a
+        // distance gate makes the provider stay silent and the server
+        // marks them stale within 30 s. Tick on time alone (every 3 s)
+        // and rely on the heartbeat below as a safety net when the
+        // provider itself goes quiet.
         val request = LocationRequest.Builder(
             Priority.PRIORITY_BALANCED_POWER_ACCURACY,
             3_000L,
         )
             .setMinUpdateIntervalMillis(2_000L)
-            .setMinUpdateDistanceMeters(3f)
             .build()
 
         locationCallback = object : LocationCallback() {
             override fun onLocationResult(result: LocationResult) {
-                result.lastLocation?.let { uploadLocation(it) }
+                result.lastLocation?.let {
+                    lastKnownLocation = it
+                    uploadLocation(it)
+                }
             }
         }
 
@@ -161,11 +193,23 @@ class LocationPingService : Service() {
         } catch (_: SecurityException) {
             updateNotification("нет разрешения")
             stopSelf()
+            return
+        }
+
+        // Safety-net heartbeat: re-post last known coords if the
+        // provider stopped delivering fixes (weak GPS, OEM background
+        // throttling, indoor parking lot). Posted to the callback
+        // thread so it shares the same looper as the location callback.
+        callbackThread?.looper?.let { looper ->
+            heartbeatHandler = Handler(looper).apply {
+                postDelayed(heartbeatRunnable, HEARTBEAT_INTERVAL_MS)
+            }
         }
     }
 
     private fun uploadLocation(loc: Location) {
         val ctx = applicationContext
+        lastUploadAtMs = System.currentTimeMillis()
         uploadExecutor.execute {
             val token = OfferOverlayManager.getAuthToken(ctx)
             val apiBase = OfferOverlayManager.getApiBaseUrl(ctx)
@@ -221,6 +265,10 @@ class LocationPingService : Service() {
     companion object {
         const val NOTIFICATION_ID = 7421
         const val CHANNEL_ID = "aiyl_location_v1"
+        // Safety-net cadence — well inside the server's 60 s heartbeat
+        // window so a single missed tick still leaves margin before
+        // the dispatcher excludes us.
+        private const val HEARTBEAT_INTERVAL_MS = 25_000L
         private val TIME_FMT = SimpleDateFormat("HH:mm:ss", Locale.US)
 
         fun ensureChannel(context: Context) {

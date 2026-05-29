@@ -15,15 +15,20 @@ class MonitorStaleDriversCommand extends Command
 
     /**
      * Three-stage escalation for online drivers whose location ping
-     * stopped flowing. Runs once a minute via the scheduler.
+     * stopped flowing. Runs once a minute via the scheduler. All three
+     * windows scale with the `live_heartbeat_seconds` setting so an
+     * admin lowering the heartbeat for faster dead-driver detection
+     * also pulls the visible nudge and auto-offline cutoffs forward.
      *
-     *   1-2 min stale  → silent FCM push to wake the native ping
-     *                    service (Doze recovery). No UI on device.
-     *   2-10 min stale → visible "open app" nudge (silent didn't work,
-     *                    probably need user interaction).
-     *   >10 min stale  → auto-offline. The flag is cleared, the
-     *                    driver sees "Не на линии" next time they
-     *                    open the app and toggles back themselves.
+     *   silent push   → pinged stale by `H` seconds (silent FCM to
+     *                   wake the native ping service, no UI).
+     *   visible nudge → stale by `H + 120s` (silent didn't recover,
+     *                   ask the driver to open the app).
+     *   auto-offline  → stale by `max(H × 3, 600s)`. Floor of 10 min
+     *                   prevents short heartbeats from auto-offlining
+     *                   before the nudge has had time to work. With
+     *                   the default `H = 300s` this preserves the
+     *                   original 15-minute total.
      *
      * Per-stage timestamps (stale_silent_pinged_at / stale_nudge_sent_at)
      * make every escalation fire once per episode, not every minute.
@@ -34,13 +39,9 @@ class MonitorStaleDriversCommand extends Command
     {
         $heartbeat = (int) Setting::getValue('live_heartbeat_seconds', 300);
 
-        // Three windows, escalating in patience. Tuned for the 5-min
-        // default heartbeat — give silent recovery two full minutes
-        // to take effect before bothering the driver with a visible
-        // nudge, and 15 minutes total before assuming they're gone.
         $silentCutoff = now()->subSeconds($heartbeat);
         $nudgeCutoff = now()->subSeconds($heartbeat + 120);
-        $offlineCutoff = now()->subMinutes(15);
+        $offlineCutoff = now()->subSeconds(max($heartbeat * 3, 600));
 
         $silent = 0;
         $nudge = 0;
