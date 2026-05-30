@@ -19,17 +19,21 @@ const LOCKUP_WIDTH = 230;
 const LOCKUP_HEIGHT = 205;
 const HALO_SIZE = 320;
 const RING_SIZE = 264;
+// Native splash на Android 12+ принудительно вписывает картинку в
+// круглую маску 192dp. Поэтому в app.json `imageWidth: 130` — лого на
+// native splash рендерится 130dp шириной без обрезки. BrandIntro
+// стартует лого в том же размере (scale = 130/230 ≈ 0.565) и плавно
+// масштабирует до полного 230dp — handoff без «прыжка» по размеру.
+const LOCKUP_INITIAL_SCALE = 130 / LOCKUP_WIDTH;
 
 /**
  * Brand intro — optimised for low-end Android phones.
  *
- * Seamless handoff with the native Expo splash: app.json points the
- * native splash to alif-lockup.png on a mint background, so the lockup
- * is already in its final position when JS takes over. The lockup is
- * therefore rendered immediately at opacity 1 / scale 1 — no fade or
- * scale on the lockup itself. Only the ambient decorations (halo +
- * orbital ring) fade in around it, which keeps the entrance feeling
- * "alive" without the heavy first-frame work of the previous cut.
+ * Seamless handoff with the native Expo splash: native splash renders
+ * the lockup at 130dp (the max that fits inside Android 12+'s circular
+ * splash mask without clipping), and BrandIntro starts the lockup at
+ * that same scale, then animates up to full 230dp width. Halo + ring
+ * fade in around it.
  *
  * Performance choices:
  *   • No light-glint sweep — that was a screen-height-tall SVG layer.
@@ -50,6 +54,7 @@ export default function BrandIntro({ onFinish }: Props): React.ReactNode {
   const ringOpacity = useRef(new Animated.Value(0)).current;
   const ringScale = useRef(new Animated.Value(0.94)).current;
   const ringRotation = useRef(new Animated.Value(0)).current;
+  const lockupScale = useRef(new Animated.Value(LOCKUP_INITIAL_SCALE)).current;
 
   const mountedAtRef = useRef<number>(Date.now());
   const exitedRef = useRef<boolean>(false);
@@ -75,6 +80,15 @@ export default function BrandIntro({ onFinish }: Props): React.ReactNode {
         duration: 640,
         delay: 240,
         easing: Easing.out(Easing.back(1.3)),
+        useNativeDriver: true,
+      }),
+      // Лого «вырастает» с native-splash размера (130dp) до полного
+      // 230dp — handoff без видимого прыжка по размеру.
+      Animated.timing(lockupScale, {
+        toValue: 1,
+        duration: 700,
+        delay: 80,
+        easing: Easing.out(Easing.cubic),
         useNativeDriver: true,
       }),
     ]).start();
@@ -214,13 +228,13 @@ export default function BrandIntro({ onFinish }: Props): React.ReactNode {
         </Svg>
       </Animated.View>
 
-      {/* The lockup is rendered at its final position from frame zero —
-          identical to the native Expo splash. No fade, no scale, no
-          per-frame work on the hero. */}
+      {/* Лого стартует в размере native splash (130dp ≈ scale 0.565) и
+          плавно растёт до полного 230dp. Это превращает обязательный
+          размерный gap Android 12+ в полированную «бренд-распаковку». */}
       <Animated.Image
         source={require('../../assets/alif-lockup.png')}
         resizeMode="contain"
-        style={styles.lockup}
+        style={[styles.lockup, { transform: [{ scale: lockupScale }] }]}
       />
     </Animated.View>
   );

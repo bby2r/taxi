@@ -6,11 +6,6 @@
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "light",
-    "splash": {
-      "image": "./assets/alif-lockup.png",
-      "resizeMode": "contain",
-      "backgroundColor": "#F4FBFA"
-    },
     "ios": {
       "supportsTablet": false,
       "bundleIdentifier": "kg.aliftaxi.client",
@@ -56,7 +51,7 @@
         "expo-splash-screen",
         {
           "image": "./assets/alif-lockup.png",
-          "imageWidth": 230,
+          "imageWidth": 130,
           "resizeMode": "contain",
           "backgroundColor": "#F4FBFA"
         }
