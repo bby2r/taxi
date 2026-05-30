@@ -52,6 +52,15 @@
           }
         }
       ],
+      [
+        "expo-splash-screen",
+        {
+          "image": "./assets/alif-lockup.png",
+          "imageWidth": 230,
+          "resizeMode": "contain",
+          "backgroundColor": "#F4FBFA"
+        }
+      ],
       "expo-secure-store"
     ]
   }

@@ -87,6 +87,10 @@ export default function HomeScreen(): React.ReactNode {
   const [batteryWhitelisted, setBatteryWhitelisted] = useState<boolean>(true);
   const [oemWizardVisible, setOemWizardVisible] = useState(false);
   const [manufacturer, setManufacturer] = useState<string>('');
+  // Локальный pending до того как loading из useDriverOrder поднимется —
+  // спиннер должен крутиться с самого тапа, иначе пока GPS фиксируется
+  // (10-30с в помещении), водитель думает что кнопка не сработала.
+  const [togglePending, setTogglePending] = useState(false);
 
   // Android 14+ requires a separate manual grant for full-screen
   // notifications. Without it the offer notification falls back to a
@@ -224,15 +228,30 @@ export default function HomeScreen(): React.ReactNode {
   ]);
 
   const performToggle = async (): Promise<void> => {
-    const { status } = await Location.requestForegroundPermissionsAsync();
-    if (status !== 'granted') {
-      Alert.alert('Ошибка', 'Необходим доступ к геолокации');
-      return;
+    setTogglePending(true);
+    try {
+      const { status } = await Location.requestForegroundPermissionsAsync();
+      if (status !== 'granted') {
+        Alert.alert('Ошибка', 'Необходим доступ к геолокации');
+        return;
+      }
+      // GPS-фикс может зависнуть на 30+ секунд в помещении / при слабом
+      // сигнале. Параллельно берём last-known (мгновенно) и гоняем
+      // current с таймаутом 6с — что вернётся первым, то и шлём в
+      // toggleOnline. Если оба пусто — показываем понятную ошибку
+      // вместо вечного спиннера.
+      const coords = await resolveCoordsFast();
+      if (!coords) {
+        Alert.alert(
+          'Не удалось определить местоположение',
+          'Проверьте, включён ли GPS, и попробуйте выйти на улицу или к окну.',
+        );
+        return;
+      }
+      await toggleOnline(coords.latitude, coords.longitude);
+    } finally {
+      setTogglePending(false);
     }
-    const loc = await Location.getCurrentPositionAsync({
-      accuracy: Location.Accuracy.Balanced,
-    });
-    await toggleOnline(loc.coords.latitude, loc.coords.longitude);
   };
 
   // Подтягиваем активный межгород чтобы скрыть «Выйти на линию» —
@@ -535,14 +554,14 @@ export default function HomeScreen(): React.ReactNode {
 
               <TouchableOpacity
                 onPress={handleToggle}
-                disabled={loading}
+                disabled={loading || togglePending}
                 activeOpacity={0.85}
                 style={[
                   styles.shiftButton,
                   isOnline ? styles.shiftButtonOnline : styles.shiftButtonOffline,
                 ]}
               >
-                {loading ? (
+                {loading || togglePending ? (
                   <ActivityIndicator
                     color={isOnline ? DriverColors.textPrimary : DriverColors.background}
                   />
@@ -597,6 +616,45 @@ export default function HomeScreen(): React.ReactNode {
 }
 
 const TOP_INSET = Platform.OS === 'android' ? (StatusBar.currentHeight ?? 24) + 8 : 56;
+
+interface Coords {
+  latitude: number;
+  longitude: number;
+}
+
+// Берём last-known (мгновенно из системного кэша) параллельно с
+// current (свежий fix). Что первое вернёт валидные координаты — то и
+// используем. Current ограничиваем 6 секундами; если и он и cache
+// пустые — возвращаем null, чтобы вызвавший показал понятную ошибку
+// вместо вечного спиннера на кнопке «Выйти на линию».
+async function resolveCoordsFast(): Promise<Coords | null> {
+  const lastKnown = Location.getLastKnownPositionAsync({
+    maxAge: 60_000,
+    requiredAccuracy: 200,
+  }).then((p) =>
+    p ? { latitude: p.coords.latitude, longitude: p.coords.longitude } : null,
+  );
+
+  const current = Promise.race<Coords | null>([
+    Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced }).then((p) => ({
+      latitude: p.coords.latitude,
+      longitude: p.coords.longitude,
+    })),
+    new Promise<null>((resolve) => setTimeout(() => resolve(null), 6000)),
+  ]);
+
+  try {
+    const cached = await lastKnown;
+    if (cached) return cached;
+  } catch {
+    // ignore — fall through to current
+  }
+  try {
+    return await current;
+  } catch {
+    return null;
+  }
+}
 
 const styles = StyleSheet.create({
   container: {
