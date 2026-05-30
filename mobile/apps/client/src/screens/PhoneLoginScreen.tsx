@@ -77,7 +77,6 @@ export default function PhoneLoginScreen({ navigation }: Props): React.ReactNode
                 placeholderTextColor={ClientColors.textMuted}
                 keyboardType="phone-pad"
                 maxLength={11}
-                autoFocus
                 accessibilityLabel="Номер телефона"
               />
             </View>

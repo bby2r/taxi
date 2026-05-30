@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useRef } from 'react';
-import { Animated, Easing, StyleSheet } from 'react-native';
+import { Animated, Easing, StyleSheet, View } from 'react-native';
 import Svg, {
   Circle,
   Defs,
@@ -14,23 +14,38 @@ interface Props {
   onFinish: () => void;
 }
 
-const MIN_HOLD_MS = 1200;
-const LOGO_SIZE = 220;
-const HALO_SIZE = 380;
-const RING_SIZE = 268;
-const PULSE_SIZE = 200;
+const MIN_HOLD_MS = 1400;
+const LOCKUP_WIDTH = 220;
+const MARK_HEIGHT = 138;
+const HALO_SIZE = 360;
+const RING_SIZE = 256;
+
+const BRAND_ORANGE = '#FF7B1A';
+const BRAND_VIOLET = '#6C2BD9';
+const BRAND_TEAL = '#14B8A6';
 
 /**
- * Brand intro choreographed around the Alif lockup.
+ * Brand intro — lightweight Alif lockup with assembly choreography.
  *
- * Layers (back → front): solid background, soft radial halo, slowly
- * rotating orbital arc with a leading dot, a sonar-style pulse ring,
- * and the lockup itself with a gentle breath. Decorations start at
- * opacity 0 so frame zero is pixel-identical to the Expo native
- * splash — the handoff stays invisible, the life arrives a beat later.
+ * Performance budget for low-end phones is strict:
+ *   • Every continuous animation runs through the native driver.
+ *   • The entrance uses only translate / scale / opacity — no
+ *     strokeDashoffset, no JS-thread interpolations.
+ *   • No sonar pulse (one fewer loop), no per-stroke SVG mounts.
+ *   • SVG renders once per element (halo, ring, A-mark) and is then
+ *     transformed via wrapping Animated.Views on the GPU.
  *
- * Exit fires once AuthProvider's first profile fetch is done AND
- * MIN_HOLD_MS has elapsed since mount. No visible loading gap.
+ * Choreography:
+ *   1. A-mark fades + scales in as a single block (300ms).
+ *   2. The orange tittle pops in.
+ *   3. Wordmark letters slide in from alternating directions with a
+ *      70ms stagger — A↓ L↑ I↓ F↑.
+ *   4. Halo + slowly rotating orbital ring fade in around the lockup.
+ *   5. Continuous: gentle breath on the lockup, ring rotates linearly.
+ *   6. Exit fires once auth is ready AND MIN_HOLD_MS has elapsed.
+ *
+ * Native splash is configured as a solid mint screen (no image) so the
+ * lockup arrives via this animation — no jarring "white card" frame.
  */
 export default function BrandIntro({ onFinish }: Props): React.ReactNode {
   const { isLoading } = useAuth();
@@ -38,72 +53,143 @@ export default function BrandIntro({ onFinish }: Props): React.ReactNode {
   const containerOpacity = useRef(new Animated.Value(1)).current;
   const containerTranslate = useRef(new Animated.Value(0)).current;
 
-  const logoScale = useRef(new Animated.Value(1)).current;
+  const markOpacity = useRef(new Animated.Value(0)).current;
+  const markScale = useRef(new Animated.Value(0.82)).current;
+  const dotOpacity = useRef(new Animated.Value(0)).current;
+  const dotScale = useRef(new Animated.Value(0.4)).current;
+
+  const letterA_y = useRef(new Animated.Value(-26)).current;
+  const letterA_o = useRef(new Animated.Value(0)).current;
+  const letterL_y = useRef(new Animated.Value(26)).current;
+  const letterL_o = useRef(new Animated.Value(0)).current;
+  const letterI_y = useRef(new Animated.Value(-26)).current;
+  const letterI_o = useRef(new Animated.Value(0)).current;
+  const letterF_y = useRef(new Animated.Value(26)).current;
+  const letterF_o = useRef(new Animated.Value(0)).current;
+
+  const lockupScale = useRef(new Animated.Value(1)).current;
   const haloOpacity = useRef(new Animated.Value(0)).current;
-  const haloScale = useRef(new Animated.Value(0.86)).current;
   const ringOpacity = useRef(new Animated.Value(0)).current;
-  const ringScale = useRef(new Animated.Value(0.92)).current;
+  const ringScale = useRef(new Animated.Value(0.94)).current;
   const ringRotation = useRef(new Animated.Value(0)).current;
-  const pulseProgress = useRef(new Animated.Value(0)).current;
 
   const mountedAtRef = useRef<number>(Date.now());
   const exitedRef = useRef<boolean>(false);
 
   useEffect(() => {
-    // Entrance: halo and ring fade in over the lockup, slightly staggered.
-    const entrance = Animated.parallel([
-      Animated.timing(haloOpacity, {
+    // A-mark enters as one block — much cheaper than 3 separate animated
+    // SVG paths and still reads as "appearing" because the dot + letters
+    // follow with their own choreography.
+    Animated.parallel([
+      Animated.timing(markOpacity, {
         toValue: 1,
-        duration: 560,
-        delay: 80,
+        duration: 380,
+        delay: 60,
         easing: Easing.out(Easing.cubic),
         useNativeDriver: true,
       }),
-      Animated.timing(haloScale, {
+      Animated.timing(markScale, {
         toValue: 1,
-        duration: 760,
-        delay: 80,
-        easing: Easing.out(Easing.back(1.2)),
+        duration: 520,
+        delay: 60,
+        easing: Easing.out(Easing.back(1.4)),
+        useNativeDriver: true,
+      }),
+    ]).start();
+
+    Animated.parallel([
+      Animated.timing(dotOpacity, {
+        toValue: 1,
+        duration: 220,
+        delay: 360,
+        easing: Easing.out(Easing.cubic),
+        useNativeDriver: true,
+      }),
+      Animated.spring(dotScale, {
+        toValue: 1,
+        delay: 360,
+        speed: 14,
+        bounciness: 10,
+        useNativeDriver: true,
+      }),
+    ]).start();
+
+    // Letters assemble from alternating sides. Pure transform + opacity
+    // = 100% native-driver, smooth on low-end devices.
+    const slideLetter = (
+      y: Animated.Value,
+      o: Animated.Value,
+      delay: number,
+    ): void => {
+      Animated.parallel([
+        Animated.timing(o, {
+          toValue: 1,
+          duration: 300,
+          delay,
+          easing: Easing.out(Easing.cubic),
+          useNativeDriver: true,
+        }),
+        Animated.timing(y, {
+          toValue: 0,
+          duration: 360,
+          delay,
+          easing: Easing.out(Easing.back(1.5)),
+          useNativeDriver: true,
+        }),
+      ]).start();
+    };
+    slideLetter(letterA_y, letterA_o, 480);
+    slideLetter(letterL_y, letterL_o, 550);
+    slideLetter(letterI_y, letterI_o, 620);
+    slideLetter(letterF_y, letterF_o, 690);
+
+    // Ambient halo + ring fade in after the lockup has settled.
+    Animated.parallel([
+      Animated.timing(haloOpacity, {
+        toValue: 1,
+        duration: 480,
+        delay: 240,
+        easing: Easing.out(Easing.cubic),
         useNativeDriver: true,
       }),
       Animated.timing(ringOpacity, {
         toValue: 1,
-        duration: 520,
-        delay: 220,
+        duration: 480,
+        delay: 460,
         easing: Easing.out(Easing.cubic),
         useNativeDriver: true,
       }),
       Animated.timing(ringScale, {
         toValue: 1,
-        duration: 760,
-        delay: 220,
-        easing: Easing.out(Easing.back(1.4)),
+        duration: 640,
+        delay: 460,
+        easing: Easing.out(Easing.back(1.3)),
         useNativeDriver: true,
       }),
-    ]);
-    entrance.start();
+    ]).start();
 
-    // Orbital ring: continuous rotation reads as "alive, working".
+    // Two continuous loops, both on the native driver:
+    //   • Ring rotation (linear, 6s) — gives "alive" feel.
+    //   • Lockup breath — slow sin, 2.8s round trip.
     const ringLoop = Animated.loop(
       Animated.timing(ringRotation, {
         toValue: 1,
-        duration: 5200,
+        duration: 6000,
         easing: Easing.linear,
         useNativeDriver: true,
       }),
     );
     ringLoop.start();
 
-    // Gentle breath on the lockup — slow sine for "calm", not "anxious".
     const breathLoop = Animated.loop(
       Animated.sequence([
-        Animated.timing(logoScale, {
-          toValue: 1.045,
+        Animated.timing(lockupScale, {
+          toValue: 1.035,
           duration: 1400,
           easing: Easing.inOut(Easing.sin),
           useNativeDriver: true,
         }),
-        Animated.timing(logoScale, {
+        Animated.timing(lockupScale, {
           toValue: 1,
           duration: 1400,
           easing: Easing.inOut(Easing.sin),
@@ -113,30 +199,10 @@ export default function BrandIntro({ onFinish }: Props): React.ReactNode {
     );
     breathLoop.start();
 
-    // Sonar pulse — single phase, slow cadence, emanates from logo center.
-    const pulseLoop = Animated.loop(
-      Animated.sequence([
-        Animated.timing(pulseProgress, {
-          toValue: 1,
-          duration: 1800,
-          easing: Easing.out(Easing.cubic),
-          useNativeDriver: true,
-        }),
-        Animated.timing(pulseProgress, {
-          toValue: 0,
-          duration: 0,
-          useNativeDriver: true,
-        }),
-      ]),
-    );
-    pulseLoop.start();
-
     return () => {
       ringLoop.stop();
       breathLoop.stop();
-      pulseLoop.stop();
     };
-    // Animated.Value refs are stable — no deps needed.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -151,27 +217,25 @@ export default function BrandIntro({ onFinish }: Props): React.ReactNode {
       Animated.parallel([
         Animated.timing(containerOpacity, {
           toValue: 0,
-          duration: 360,
+          duration: 340,
           easing: Easing.in(Easing.cubic),
           useNativeDriver: true,
         }),
         Animated.timing(containerTranslate, {
-          toValue: -28,
-          duration: 360,
+          toValue: -26,
+          duration: 340,
           easing: Easing.in(Easing.cubic),
           useNativeDriver: true,
         }),
-        // Decorations dim a touch earlier than the lockup so the
-        // logo is the last thing the eye sees before the home screen.
         Animated.timing(ringOpacity, {
           toValue: 0,
-          duration: 220,
+          duration: 200,
           easing: Easing.in(Easing.cubic),
           useNativeDriver: true,
         }),
         Animated.timing(haloOpacity, {
           toValue: 0,
-          duration: 280,
+          duration: 260,
           easing: Easing.in(Easing.cubic),
           useNativeDriver: true,
         }),
@@ -188,21 +252,7 @@ export default function BrandIntro({ onFinish }: Props): React.ReactNode {
     inputRange: [0, 1],
     outputRange: ['0deg', '360deg'],
   });
-  const pulseScale = pulseProgress.interpolate({
-    inputRange: [0, 1],
-    outputRange: [0.6, 1.55],
-  });
-  const pulseOpacity = pulseProgress.interpolate({
-    inputRange: [0, 0.15, 1],
-    outputRange: [0, 0.45, 0],
-  });
-  const haloBreath = pulseProgress.interpolate({
-    inputRange: [0, 0.5, 1],
-    outputRange: [1, 1.04, 1],
-  });
 
-  // Orbital ring geometry — arc spans 260° leaving a 100° gap; the
-  // gap rotating around the logo is what reads as the "sweep".
   const ringPath = useMemo(() => {
     const cx = RING_SIZE / 2;
     const cy = RING_SIZE / 2;
@@ -228,7 +278,6 @@ export default function BrandIntro({ onFinish }: Props): React.ReactNode {
         },
       ]}
     >
-      {/* Soft radial halo — gives the lockup a warm "lit-from-behind" feel. */}
       <Animated.View
         style={[
           styles.absoluteCenter,
@@ -236,15 +285,14 @@ export default function BrandIntro({ onFinish }: Props): React.ReactNode {
             width: HALO_SIZE,
             height: HALO_SIZE,
             opacity: haloOpacity,
-            transform: [{ scale: Animated.multiply(haloScale, haloBreath) }],
           },
         ]}
       >
         <Svg width={HALO_SIZE} height={HALO_SIZE}>
           <Defs>
             <RadialGradient id="haloGrad" cx="50%" cy="50%" rx="50%" ry="50%">
-              <Stop offset="0%" stopColor={ClientColors.primary} stopOpacity="0.32" />
-              <Stop offset="55%" stopColor={ClientColors.primary} stopOpacity="0.08" />
+              <Stop offset="0%" stopColor={ClientColors.primary} stopOpacity="0.28" />
+              <Stop offset="55%" stopColor={ClientColors.primary} stopOpacity="0.07" />
               <Stop offset="100%" stopColor={ClientColors.primary} stopOpacity="0" />
             </RadialGradient>
           </Defs>
@@ -257,23 +305,6 @@ export default function BrandIntro({ onFinish }: Props): React.ReactNode {
         </Svg>
       </Animated.View>
 
-      {/* Sonar pulse — expanding ring, single phase, slow cadence. */}
-      <Animated.View
-        style={[
-          styles.absoluteCenter,
-          styles.pulse,
-          {
-            width: PULSE_SIZE,
-            height: PULSE_SIZE,
-            borderRadius: PULSE_SIZE / 2,
-            opacity: pulseOpacity,
-            transform: [{ scale: pulseScale }],
-          },
-        ]}
-      />
-
-      {/* Orbital ring with gradient stroke + leading dot. Rotation
-          continues until the exit dims it out. */}
       <Animated.View
         style={[
           styles.absoluteCenter,
@@ -289,8 +320,8 @@ export default function BrandIntro({ onFinish }: Props): React.ReactNode {
           <Defs>
             <LinearGradient id="ringGrad" x1="0%" y1="50%" x2="100%" y2="50%">
               <Stop offset="0%" stopColor={ClientColors.primary} stopOpacity="0" />
-              <Stop offset="55%" stopColor={ClientColors.primary} stopOpacity="0.55" />
-              <Stop offset="100%" stopColor={ClientColors.secondary} stopOpacity="1" />
+              <Stop offset="55%" stopColor={ClientColors.primary} stopOpacity="0.5" />
+              <Stop offset="100%" stopColor={ClientColors.secondary} stopOpacity="0.95" />
             </LinearGradient>
           </Defs>
           <Path
@@ -309,13 +340,85 @@ export default function BrandIntro({ onFinish }: Props): React.ReactNode {
         </Svg>
       </Animated.View>
 
-      {/* The lockup itself — same artwork and position as the native
-          Expo splash, so frame zero is a pixel-identical handoff. */}
-      <Animated.Image
-        source={require('../../assets/splash-icon.png')}
-        style={[styles.logo, { transform: [{ scale: logoScale }] }]}
-        resizeMode="contain"
-      />
+      <Animated.View
+        style={[styles.lockup, { transform: [{ scale: lockupScale }] }]}
+      >
+        <Animated.View
+          style={{
+            opacity: markOpacity,
+            transform: [{ scale: markScale }],
+          }}
+        >
+          <Svg width={LOCKUP_WIDTH} height={MARK_HEIGHT} viewBox="0 0 200 138">
+            <Path
+              d="M 42 130 L 100 28"
+              stroke={BRAND_ORANGE}
+              strokeWidth={20}
+              strokeLinecap="round"
+              fill="none"
+            />
+            <Path
+              d="M 100 28 L 100 130"
+              stroke={BRAND_VIOLET}
+              strokeWidth={20}
+              strokeLinecap="round"
+              fill="none"
+            />
+            <Path
+              d="M 100 28 L 158 130"
+              stroke={BRAND_TEAL}
+              strokeWidth={20}
+              strokeLinecap="round"
+              fill="none"
+            />
+          </Svg>
+        </Animated.View>
+
+        <Animated.View
+          style={[
+            styles.dot,
+            {
+              opacity: dotOpacity,
+              transform: [{ scale: dotScale }],
+            },
+          ]}
+        />
+
+        <View style={styles.wordmark}>
+          <Animated.Text
+            style={[
+              styles.letter,
+              { color: BRAND_VIOLET, opacity: letterA_o, transform: [{ translateY: letterA_y }] },
+            ]}
+          >
+            A
+          </Animated.Text>
+          <Animated.Text
+            style={[
+              styles.letter,
+              { color: BRAND_VIOLET, opacity: letterL_o, transform: [{ translateY: letterL_y }] },
+            ]}
+          >
+            L
+          </Animated.Text>
+          <Animated.Text
+            style={[
+              styles.letter,
+              { color: BRAND_TEAL, opacity: letterI_o, transform: [{ translateY: letterI_y }] },
+            ]}
+          >
+            I
+          </Animated.Text>
+          <Animated.Text
+            style={[
+              styles.letter,
+              { color: BRAND_ORANGE, opacity: letterF_o, transform: [{ translateY: letterF_y }] },
+            ]}
+          >
+            F
+          </Animated.Text>
+        </View>
+      </Animated.View>
     </Animated.View>
   );
 }
@@ -359,12 +462,28 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  pulse: {
-    borderWidth: 1.5,
-    borderColor: ClientColors.primary,
+  lockup: {
+    alignItems: 'center',
+    justifyContent: 'center',
   },
-  logo: {
-    width: LOGO_SIZE,
-    height: LOGO_SIZE,
+  dot: {
+    position: 'absolute',
+    top: MARK_HEIGHT * 0.78,
+    width: 16,
+    height: 16,
+    borderRadius: 8,
+    backgroundColor: BRAND_ORANGE,
+  },
+  wordmark: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginTop: 14,
+  },
+  letter: {
+    fontSize: 44,
+    fontWeight: '900' as const,
+    letterSpacing: 2,
+    marginHorizontal: 2,
   },
 });
