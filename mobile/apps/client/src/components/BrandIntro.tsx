@@ -1,65 +1,86 @@
 import React, { useEffect, useRef } from 'react';
 import { Animated, Easing, Image, StyleSheet } from 'react-native';
-import { ClientColors } from '@taxi/shared';
+import { ClientColors, useAuth } from '@taxi/shared';
 
 interface Props {
   onFinish: () => void;
 }
 
+const MIN_HOLD_MS = 1000;
+
 /**
- * Cold-start brand moment. Expo's native splash (background
- * #F4FBFA + splash-icon.png centered, resizeMode contain) hands off
- * to React; this component starts in the same position with the same
- * artwork so the transition reads as one continuous moment — no
- * "second splash" jump. We then add a single subtle gesture: a
- * gentle scale breath, then slide-up + fade out into the app.
+ * Brand intro tied to auth readiness — not a fixed timer.
  *
- * Total ~900ms. All transforms run on the native driver.
+ * The Expo native splash hands off to React with the same artwork
+ * (splash-icon.png on background #F4FBFA). We continue the moment by
+ * gently "breathing" the logo until BOTH conditions are true:
+ *   1. AuthProvider has finished its first profile fetch.
+ *   2. At least MIN_HOLD_MS has elapsed since mount — keeps the
+ *      brand visible long enough to register on fast connections.
+ *
+ * Only then do we slide up + fade out. This guarantees there is no
+ * visible ActivityIndicator gap between the intro and the app,
+ * which was the "зависание" effect in the first cut.
  */
 export default function BrandIntro({ onFinish }: Props): React.ReactNode {
+  const { isLoading } = useAuth();
+
   const containerOpacity = useRef(new Animated.Value(1)).current;
   const containerTranslate = useRef(new Animated.Value(0)).current;
   const logoScale = useRef(new Animated.Value(1)).current;
+  const mountedAtRef = useRef<number>(Date.now());
+  const exitedRef = useRef<boolean>(false);
 
+  // Continuous breath loop — runs until the auth-ready exit kicks in.
   useEffect(() => {
-    Animated.sequence([
-      // Subtle breath — confirms "we're alive", not a frozen screen.
+    const loop = Animated.loop(
       Animated.sequence([
         Animated.timing(logoScale, {
           toValue: 1.06,
-          duration: 320,
+          duration: 900,
           easing: Easing.inOut(Easing.cubic),
           useNativeDriver: true,
         }),
         Animated.timing(logoScale, {
           toValue: 1,
-          duration: 260,
+          duration: 900,
           easing: Easing.inOut(Easing.cubic),
           useNativeDriver: true,
         }),
       ]),
-      Animated.delay(150),
-      // Exit — lift and fade.
+    );
+    loop.start();
+    return () => loop.stop();
+  }, [logoScale]);
+
+  // Trigger exit when auth is ready AND minimum hold has elapsed.
+  useEffect(() => {
+    if (isLoading || exitedRef.current) return;
+    exitedRef.current = true;
+    const elapsed = Date.now() - mountedAtRef.current;
+    const remaining = Math.max(0, MIN_HOLD_MS - elapsed);
+    const timer = setTimeout(() => {
       Animated.parallel([
         Animated.timing(containerOpacity, {
           toValue: 0,
-          duration: 260,
+          duration: 320,
           easing: Easing.in(Easing.cubic),
           useNativeDriver: true,
         }),
         Animated.timing(containerTranslate, {
           toValue: -32,
-          duration: 260,
+          duration: 320,
           easing: Easing.in(Easing.cubic),
           useNativeDriver: true,
         }),
-      ]),
-    ]).start(({ finished }) => {
-      if (finished) {
-        onFinish();
-      }
-    });
-  }, [logoScale, containerOpacity, containerTranslate, onFinish]);
+      ]).start(({ finished }) => {
+        if (finished) {
+          onFinish();
+        }
+      });
+    }, remaining);
+    return () => clearTimeout(timer);
+  }, [isLoading, containerOpacity, containerTranslate, onFinish]);
 
   return (
     <Animated.View
@@ -84,15 +105,14 @@ export default function BrandIntro({ onFinish }: Props): React.ReactNode {
 
 const styles = StyleSheet.create({
   container: {
-    // Match expo splash backgroundColor in app.json — keeps the
-    // handoff visually identical: same colour, same image, just the
-    // breath/exit animation is new.
+    // Identical to expo splash backgroundColor in app.json so the
+    // handoff is invisible — same colour, same logo, same position.
     backgroundColor: ClientColors.background,
     alignItems: 'center',
     justifyContent: 'center',
   },
   logo: {
-    width: 200,
-    height: 200,
+    width: 220,
+    height: 220,
   },
 });
