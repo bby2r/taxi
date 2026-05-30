@@ -1,107 +1,55 @@
 import React, { useEffect, useRef } from 'react';
-import { Animated, Easing, StyleSheet, Text, View } from 'react-native';
-import { ClientColors, Spacing } from '@taxi/shared';
+import { Animated, Easing, Image, StyleSheet } from 'react-native';
+import { ClientColors } from '@taxi/shared';
 
 interface Props {
   onFinish: () => void;
 }
 
 /**
- * Brand intro shown once per cold start. Native splash hands off
- * to React, this component fades over the first frame so there is
- * no visible "ActivityIndicator" gap between the launch image and
- * the app. ~1.3s total: scale-in badge → glow pulse → fade out up.
+ * Cold-start brand moment. Expo's native splash (background
+ * #F4FBFA + splash-icon.png centered, resizeMode contain) hands off
+ * to React; this component starts in the same position with the same
+ * artwork so the transition reads as one continuous moment — no
+ * "second splash" jump. We then add a single subtle gesture: a
+ * gentle scale breath, then slide-up + fade out into the app.
  *
- * Lives in client/components rather than shared because the Driver
- * app gets its own brand moment in a darker treatment.
+ * Total ~900ms. All transforms run on the native driver.
  */
 export default function BrandIntro({ onFinish }: Props): React.ReactNode {
   const containerOpacity = useRef(new Animated.Value(1)).current;
   const containerTranslate = useRef(new Animated.Value(0)).current;
-
-  // Badge: scale + opacity for the entry pop.
-  const badgeScale = useRef(new Animated.Value(0.6)).current;
-  const badgeOpacity = useRef(new Animated.Value(0)).current;
-
-  // Glow halo: independent pulse behind the badge.
-  const glowScale = useRef(new Animated.Value(0.6)).current;
-  const glowOpacity = useRef(new Animated.Value(0)).current;
-
-  // Wordmark slides up and fades in slightly after the badge lands —
-  // the eye reads the badge first, then the wordmark anchors the brand.
-  const wordmarkOpacity = useRef(new Animated.Value(0)).current;
-  const wordmarkTranslate = useRef(new Animated.Value(8)).current;
+  const logoScale = useRef(new Animated.Value(1)).current;
 
   useEffect(() => {
     Animated.sequence([
-      Animated.parallel([
-        Animated.spring(badgeScale, {
-          toValue: 1,
-          damping: 12,
-          stiffness: 180,
-          mass: 0.9,
+      // Subtle breath — confirms "we're alive", not a frozen screen.
+      Animated.sequence([
+        Animated.timing(logoScale, {
+          toValue: 1.06,
+          duration: 320,
+          easing: Easing.inOut(Easing.cubic),
           useNativeDriver: true,
         }),
-        Animated.timing(badgeOpacity, {
+        Animated.timing(logoScale, {
           toValue: 1,
-          duration: 280,
-          easing: Easing.out(Easing.cubic),
+          duration: 260,
+          easing: Easing.inOut(Easing.cubic),
           useNativeDriver: true,
         }),
-        Animated.sequence([
-          Animated.delay(120),
-          Animated.parallel([
-            Animated.timing(glowScale, {
-              toValue: 1.6,
-              duration: 700,
-              easing: Easing.out(Easing.cubic),
-              useNativeDriver: true,
-            }),
-            Animated.sequence([
-              Animated.timing(glowOpacity, {
-                toValue: 0.55,
-                duration: 220,
-                easing: Easing.out(Easing.cubic),
-                useNativeDriver: true,
-              }),
-              Animated.timing(glowOpacity, {
-                toValue: 0,
-                duration: 500,
-                easing: Easing.in(Easing.cubic),
-                useNativeDriver: true,
-              }),
-            ]),
-          ]),
-        ]),
-        Animated.sequence([
-          Animated.delay(220),
-          Animated.parallel([
-            Animated.timing(wordmarkOpacity, {
-              toValue: 1,
-              duration: 320,
-              easing: Easing.out(Easing.cubic),
-              useNativeDriver: true,
-            }),
-            Animated.timing(wordmarkTranslate, {
-              toValue: 0,
-              duration: 320,
-              easing: Easing.out(Easing.cubic),
-              useNativeDriver: true,
-            }),
-          ]),
-        ]),
       ]),
-      Animated.delay(280),
+      Animated.delay(150),
+      // Exit — lift and fade.
       Animated.parallel([
         Animated.timing(containerOpacity, {
           toValue: 0,
-          duration: 280,
+          duration: 260,
           easing: Easing.in(Easing.cubic),
           useNativeDriver: true,
         }),
         Animated.timing(containerTranslate, {
-          toValue: -24,
-          duration: 280,
+          toValue: -32,
+          duration: 260,
           easing: Easing.in(Easing.cubic),
           useNativeDriver: true,
         }),
@@ -111,17 +59,7 @@ export default function BrandIntro({ onFinish }: Props): React.ReactNode {
         onFinish();
       }
     });
-  }, [
-    badgeScale,
-    badgeOpacity,
-    glowScale,
-    glowOpacity,
-    wordmarkOpacity,
-    wordmarkTranslate,
-    containerOpacity,
-    containerTranslate,
-    onFinish,
-  ]);
+  }, [logoScale, containerOpacity, containerTranslate, onFinish]);
 
   return (
     <Animated.View
@@ -135,112 +73,26 @@ export default function BrandIntro({ onFinish }: Props): React.ReactNode {
         },
       ]}
     >
-      <View style={styles.badgeStack}>
-        <Animated.View
-          style={[
-            styles.glow,
-            {
-              opacity: glowOpacity,
-              transform: [{ scale: glowScale }],
-            },
-          ]}
-        />
-        <Animated.View
-          style={[
-            styles.badge,
-            {
-              opacity: badgeOpacity,
-              transform: [{ scale: badgeScale }],
-            },
-          ]}
-        >
-          <Text style={styles.badgeLetter}>A</Text>
-        </Animated.View>
-      </View>
-
-      <Animated.Text
-        style={[
-          styles.wordmark,
-          {
-            opacity: wordmarkOpacity,
-            transform: [{ translateY: wordmarkTranslate }],
-          },
-        ]}
-      >
-        Alif Taxi
-      </Animated.Text>
-      <Animated.Text
-        style={[
-          styles.tagline,
-          {
-            opacity: wordmarkOpacity,
-            transform: [{ translateY: wordmarkTranslate }],
-          },
-        ]}
-      >
-        В село и до города за пару минут
-      </Animated.Text>
+      <Animated.Image
+        source={require('../../assets/splash-icon.png')}
+        style={[styles.logo, { transform: [{ scale: logoScale }] }]}
+        resizeMode="contain"
+      />
     </Animated.View>
   );
 }
 
-const BADGE_SIZE = 104;
-
 const styles = StyleSheet.create({
   container: {
+    // Match expo splash backgroundColor in app.json — keeps the
+    // handoff visually identical: same colour, same image, just the
+    // breath/exit animation is new.
     backgroundColor: ClientColors.background,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  badgeStack: {
-    width: BADGE_SIZE,
-    height: BADGE_SIZE,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginBottom: Spacing.xl,
-  },
-  glow: {
-    position: 'absolute',
-    width: BADGE_SIZE,
-    height: BADGE_SIZE,
-    borderRadius: BADGE_SIZE / 2,
-    backgroundColor: ClientColors.primary,
-  },
-  badge: {
-    width: BADGE_SIZE,
-    height: BADGE_SIZE,
-    borderRadius: 30,
-    backgroundColor: ClientColors.primary,
-    alignItems: 'center',
-    justifyContent: 'center',
-    shadowColor: ClientColors.primary,
-    shadowOpacity: 0.45,
-    shadowRadius: 24,
-    shadowOffset: { width: 0, height: 14 },
-    elevation: 14,
-    transform: [{ rotate: '-6deg' }],
-  },
-  badgeLetter: {
-    color: ClientColors.white,
-    fontSize: 56,
-    fontWeight: '800',
-    letterSpacing: -2,
-    // Visual centring: the optical centre of "A" sits slightly above
-    // its bounding box centre, so nudge it down a hair.
-    marginTop: 4,
-    transform: [{ rotate: '6deg' }],
-  },
-  wordmark: {
-    fontSize: 32,
-    fontWeight: '700',
-    color: ClientColors.dark,
-    letterSpacing: -0.6,
-  },
-  tagline: {
-    fontSize: 14,
-    color: ClientColors.textSecondary,
-    marginTop: Spacing.sm,
-    textAlign: 'center',
-    paddingHorizontal: Spacing.xxl,
+  logo: {
+    width: 200,
+    height: 200,
   },
 });
