@@ -17,6 +17,10 @@ import {
 import {
   useLocation,
   ClientColors,
+  EmptyState,
+  ErrorPill,
+  Radius,
+  Spacing,
   Typography,
   formatDeparture,
   getApiErrorMessage,
@@ -187,21 +191,22 @@ export default function IntercityScreen(): React.ReactNode {
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={ClientColors.primary} />}
       >
         {error && (
-          <View style={styles.errorPill}>
-            <Icon name="alert" size={18} color={ClientColors.danger} strokeWidth={2.2} />
-            <Text style={[Typography.caption, styles.errorText]}>{error}</Text>
-          </View>
+          <ErrorPill
+            message={error}
+            leading={
+              <Icon name="alert" size={18} color={ClientColors.danger} strokeWidth={2.2} />
+            }
+          />
         )}
 
         {booking && <ActiveBookingCard booking={booking} onCancel={handleCancel} loading={loading} />}
 
         {!booking && slots.length === 0 && (
-          <View style={styles.emptyBlock}>
-            <Icon name="route" size={44} color={ClientColors.textMuted} strokeWidth={2} />
-            <Text style={styles.emptyText}>
-              Рейсов из вашего села пока нет. Потяните вниз чтобы обновить.
-            </Text>
-          </View>
+          <EmptyState
+            icon={<Icon name="route" size={36} color={ClientColors.primary} strokeWidth={1.8} />}
+            title="Рейсов из вашего села пока нет"
+            subtitle="Потяните вниз, чтобы обновить список."
+          />
         )}
 
         {!booking && slots.length > 0 && (
@@ -429,7 +434,7 @@ function BookingModal({
             )}
           </View>
 
-          <Text style={[styles.modalLabel, { marginTop: 24 }]}>Сколько мест?</Text>
+          <Text style={[styles.modalLabel, { marginTop: Spacing.xxl }]}>Сколько мест?</Text>
           <View style={styles.seatsRow}>
             {[1, 2, 3].map((n) => {
               const disabled = n > maxBookable;
@@ -494,8 +499,8 @@ const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: ClientColors.background },
   header: {
     paddingTop: (Platform.OS === 'android' ? StatusBar.currentHeight ?? 0 : 50) + 12,
-    paddingHorizontal: 20,
-    paddingBottom: 16,
+    paddingHorizontal: Spacing.xl,
+    paddingBottom: Spacing.lg,
     backgroundColor: ClientColors.cardBackground,
     borderBottomWidth: 1,
     borderBottomColor: ClientColors.border,
@@ -511,20 +516,18 @@ const styles = StyleSheet.create({
     color: ClientColors.textSecondary,
     marginTop: 2,
   },
-  scrollContent: { padding: 16, paddingBottom: 80 },
+  scrollContent: { padding: Spacing.lg, paddingBottom: 80 },
   sectionTitle: {
-    fontSize: 13,
-    fontWeight: '700' as const,
+    ...Typography.overline,
     textTransform: 'uppercase',
-    letterSpacing: 0.6,
     color: ClientColors.textSecondary,
     marginBottom: 10,
-    paddingLeft: 4,
+    paddingLeft: Spacing.xs,
   },
 
   slotCard: {
     backgroundColor: ClientColors.cardBackground,
-    borderRadius: 16,
+    borderRadius: Radius.lg,
     paddingHorizontal: 18,
     paddingVertical: 14,
     marginBottom: 10,
@@ -539,9 +542,8 @@ const styles = StyleSheet.create({
     marginBottom: 10,
   },
   slotRoute: {
+    ...Typography.h4,
     flex: 1,
-    fontSize: 16,
-    fontWeight: '800' as const,
     color: ClientColors.dark,
   },
   slotTime: {
@@ -587,32 +589,6 @@ const styles = StyleSheet.create({
     fontStyle: 'italic',
   },
 
-  emptyBlock: {
-    alignItems: 'center',
-    paddingVertical: 60,
-    paddingHorizontal: 20,
-  },
-  emptyText: {
-    marginTop: 14,
-    fontSize: 14,
-    color: ClientColors.textMuted,
-    textAlign: 'center',
-    lineHeight: 20,
-  },
-  errorPill: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#FFF1F1',
-    borderColor: '#FFD4D4',
-    borderWidth: 1,
-    borderRadius: 12,
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-    marginBottom: 12,
-    gap: 10,
-  },
-  errorText: { color: ClientColors.danger, flex: 1 },
-
   activeCard: {
     backgroundColor: ClientColors.cardBackground,
     borderRadius: 18,
@@ -649,8 +625,8 @@ const styles = StyleSheet.create({
   activeRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
-    marginBottom: 12,
+    gap: Spacing.sm,
+    marginBottom: Spacing.md,
   },
   activeRowText: {
     fontSize: 14,
@@ -678,11 +654,11 @@ const styles = StyleSheet.create({
   driverBlock: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 12,
+    gap: Spacing.md,
     backgroundColor: ClientColors.primaryTint,
     borderRadius: 14,
-    padding: 12,
-    marginTop: 8,
+    padding: Spacing.md,
+    marginTop: Spacing.sm,
   },
   driverName: {
     fontSize: 15,
@@ -706,9 +682,9 @@ const styles = StyleSheet.create({
     marginTop: 14,
     paddingVertical: 10,
     alignItems: 'center',
-    borderRadius: 12,
+    borderRadius: Radius.md,
     borderWidth: 1.5,
-    borderColor: '#FFD4D4',
+    borderColor: ClientColors.dangerBorder,
   },
   cancelButtonText: {
     fontSize: 14,
@@ -725,8 +701,8 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingHorizontal: 16,
-    paddingVertical: 12,
+    paddingHorizontal: Spacing.lg,
+    paddingVertical: Spacing.md,
     backgroundColor: ClientColors.cardBackground,
     borderBottomWidth: 1,
     borderBottomColor: ClientColors.border,
@@ -739,20 +715,20 @@ const styles = StyleSheet.create({
     transform: [{ rotate: '180deg' }],
   },
   modalTitle: {
+    ...Typography.h4,
     fontSize: 17,
-    fontWeight: '800' as const,
     color: ClientColors.dark,
     flex: 1,
     textAlign: 'center',
   },
   modalBody: {
     flex: 1,
-    padding: 20,
+    padding: Spacing.xl,
   },
   modalSummary: {
     backgroundColor: ClientColors.cardBackground,
-    borderRadius: 16,
-    padding: 16,
+    borderRadius: Radius.lg,
+    padding: Spacing.lg,
     borderWidth: 1,
     borderColor: ClientColors.border,
   },
@@ -830,9 +806,9 @@ const styles = StyleSheet.create({
     opacity: 0.7,
   },
   modalFooter: {
-    paddingHorizontal: 20,
-    paddingTop: 12,
-    paddingBottom: Platform.OS === 'android' ? 24 : 34,
+    paddingHorizontal: Spacing.xl,
+    paddingTop: Spacing.md,
+    paddingBottom: Platform.OS === 'android' ? Spacing.xxl : 34,
     borderTopWidth: 1,
     borderTopColor: ClientColors.border,
     backgroundColor: ClientColors.cardBackground,

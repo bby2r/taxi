@@ -17,6 +17,8 @@ import {
   sendChangePhoneOtp,
   verifyChangePhone,
   ClientColors,
+  Radius,
+  Spacing,
   Typography,
   OTP_LENGTH,
 } from '@taxi/shared';
@@ -270,18 +272,18 @@ const styles = StyleSheet.create({
     backgroundColor: ClientColors.background,
   },
   scrollContent: {
-    paddingHorizontal: 16,
-    paddingBottom: 40,
+    paddingHorizontal: Spacing.lg,
+    paddingBottom: Spacing.huge,
   },
   header: {
     ...Typography.h2,
     color: ClientColors.dark,
-    paddingTop: 12,
-    paddingBottom: 24,
+    paddingTop: Spacing.md,
+    paddingBottom: Spacing.xxl,
   },
   avatarContainer: {
     alignItems: 'center',
-    marginBottom: 32,
+    marginBottom: Spacing.xxxl,
   },
   avatar: {
     width: 80,
@@ -297,9 +299,9 @@ const styles = StyleSheet.create({
   },
   card: {
     backgroundColor: ClientColors.cardBackground,
-    borderRadius: 16,
-    padding: 16,
-    marginBottom: 16,
+    borderRadius: Radius.lg,
+    padding: Spacing.lg,
+    marginBottom: Spacing.lg,
   },
   fieldLabel: {
     ...Typography.caption,
@@ -312,12 +314,12 @@ const styles = StyleSheet.create({
     ...Typography.body,
     color: ClientColors.textPrimary,
     backgroundColor: ClientColors.background,
-    borderRadius: 12,
-    paddingHorizontal: 16,
-    paddingVertical: 12,
+    borderRadius: Radius.md,
+    paddingHorizontal: Spacing.lg,
+    paddingVertical: Spacing.md,
     borderWidth: 1,
     borderColor: ClientColors.border,
-    marginBottom: 12,
+    marginBottom: Spacing.md,
   },
   inputReadonly: {
     color: ClientColors.textSecondary,
@@ -325,7 +327,7 @@ const styles = StyleSheet.create({
   },
   primaryButton: {
     backgroundColor: ClientColors.primary,
-    borderRadius: 12,
+    borderRadius: Radius.md,
     paddingVertical: 14,
     alignItems: 'center',
   },
@@ -339,10 +341,10 @@ const styles = StyleSheet.create({
   divider: {
     height: 1,
     backgroundColor: ClientColors.border,
-    marginVertical: 20,
+    marginVertical: Spacing.xl,
   },
   changePhoneButton: {
-    paddingVertical: 8,
+    paddingVertical: Spacing.sm,
     alignItems: 'center',
   },
   changePhoneButtonText: {
@@ -351,12 +353,12 @@ const styles = StyleSheet.create({
     fontSize: 13,
   },
   phoneFlow: {
-    gap: 12,
+    gap: Spacing.md,
   },
   cancelButton: {
     borderWidth: 1.5,
     borderColor: ClientColors.border,
-    borderRadius: 12,
+    borderRadius: Radius.md,
     paddingVertical: 10,
     alignItems: 'center',
   },
@@ -368,7 +370,7 @@ const styles = StyleSheet.create({
   menuCard: {
     backgroundColor: ClientColors.cardBackground,
     borderRadius: 18,
-    marginTop: 16,
+    marginTop: Spacing.lg,
     overflow: 'hidden',
     borderWidth: 1,
     borderColor: ClientColors.border,
@@ -383,7 +385,7 @@ const styles = StyleSheet.create({
   menuIconBox: {
     width: 40,
     height: 40,
-    borderRadius: 12,
+    borderRadius: Radius.md,
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -412,10 +414,10 @@ const styles = StyleSheet.create({
     gap: 10,
     backgroundColor: 'transparent',
     borderWidth: 1.5,
-    borderColor: '#FFD4D4',
+    borderColor: ClientColors.dangerBorder,
     borderRadius: 14,
     paddingVertical: 14,
-    marginTop: 20,
+    marginTop: Spacing.xl,
   },
   logoutButtonText: {
     color: ClientColors.danger,

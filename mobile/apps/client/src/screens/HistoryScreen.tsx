@@ -1,17 +1,31 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import {
-  View,
   Text,
+  View,
   FlatList,
   StyleSheet,
   ActivityIndicator,
-  TouchableOpacity,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { Order, ClientColors, Typography } from '@taxi/shared';
+import { Order, ClientColors, EmptyState, ErrorPill, Skeleton, Spacing, Typography } from '@taxi/shared';
 import { getOrderHistory } from '../api/orders';
 import OrderHistoryItem from '../components/OrderHistoryItem';
 import Icon from '../components/Icon';
+
+function HistorySkeletonCard(): React.ReactNode {
+  return (
+    <View style={styles.skeletonCard}>
+      <View style={styles.skeletonRow}>
+        <Skeleton width={120} height={12} />
+        <Skeleton width={70} height={20} radius={8} />
+      </View>
+      <View style={[styles.skeletonRow, { marginTop: Spacing.sm }]}>
+        <Skeleton width="60%" height={16} />
+        <Skeleton width={60} height={16} />
+      </View>
+    </View>
+  );
+}
 
 export default function HistoryScreen(): React.ReactNode {
   const [orders, setOrders] = useState<Order[]>([]);
@@ -65,8 +79,13 @@ export default function HistoryScreen(): React.ReactNode {
 
   if (loading) {
     return (
-      <SafeAreaView style={styles.centered}>
-        <ActivityIndicator size="large" color={ClientColors.primary} />
+      <SafeAreaView style={styles.container} edges={['top']}>
+        <Text style={styles.header}>История поездок</Text>
+        <View style={styles.skeletonList}>
+          {[0, 1, 2, 3].map((i) => (
+            <HistorySkeletonCard key={i} />
+          ))}
+        </View>
       </SafeAreaView>
     );
   }
@@ -74,12 +93,13 @@ export default function HistoryScreen(): React.ReactNode {
   if (error && orders.length === 0) {
     return (
       <SafeAreaView style={styles.centered}>
-        <Text style={[Typography.body, { color: ClientColors.textSecondary, marginBottom: 16 }]}>
-          {error}
-        </Text>
-        <TouchableOpacity style={styles.retryButton} onPress={() => fetchOrders(1)}>
-          <Text style={[Typography.button, { color: ClientColors.white }]}>Повторить</Text>
-        </TouchableOpacity>
+        <ErrorPill
+          message={error}
+          leading={
+            <Icon name="alert" size={18} color={ClientColors.danger} strokeWidth={2.2} />
+          }
+          onRetry={() => fetchOrders(1)}
+        />
       </SafeAreaView>
     );
   }
@@ -101,21 +121,16 @@ export default function HistoryScreen(): React.ReactNode {
             <ActivityIndicator
               size="small"
               color={ClientColors.primary}
-              style={{ paddingVertical: 16 }}
+              style={{ paddingVertical: Spacing.lg }}
             />
           ) : null
         }
         ListEmptyComponent={
-          <View style={styles.emptyContainer}>
-            <View style={styles.emptyIconBox}>
-              <Icon name="clock" size={36} color={ClientColors.primary} strokeWidth={1.8} />
-            </View>
-            <Text style={styles.emptyTitle}>Здесь будет история ваших поездок</Text>
-            <Text style={styles.emptySubtitle}>
-              После первой поездки увидите её на этом экране — куда ездили, кто
-              был водителем, сколько заплатили.
-            </Text>
-          </View>
+          <EmptyState
+            icon={<Icon name="clock" size={36} color={ClientColors.primary} strokeWidth={1.8} />}
+            title="Здесь будет история ваших поездок"
+            subtitle="После первой поездки увидите её на этом экране — куда ездили, кто был водителем, сколько заплатили."
+          />
         }
       />
     </SafeAreaView>
@@ -132,49 +147,28 @@ const styles = StyleSheet.create({
     backgroundColor: ClientColors.background,
     justifyContent: 'center',
     alignItems: 'center',
-    paddingHorizontal: 32,
+    paddingHorizontal: Spacing.xxxl,
   },
   header: {
     ...Typography.h2,
     color: ClientColors.dark,
-    paddingHorizontal: 16,
-    paddingTop: 12,
-    paddingBottom: 16,
+    paddingHorizontal: Spacing.lg,
+    paddingTop: Spacing.md,
+    paddingBottom: Spacing.lg,
   },
-  emptyContainer: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    paddingHorizontal: 36,
-    paddingTop: 64,
+  skeletonList: {
+    paddingHorizontal: Spacing.lg,
+    gap: Spacing.md,
   },
-  emptyIconBox: {
-    width: 96,
-    height: 96,
-    borderRadius: 30,
-    backgroundColor: ClientColors.primaryTint,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginBottom: 20,
-  },
-  emptyTitle: {
-    fontSize: 18,
-    fontWeight: '700' as const,
-    color: ClientColors.dark,
-    textAlign: 'center',
-    marginBottom: 8,
-    letterSpacing: -0.2,
-  },
-  emptySubtitle: {
-    fontSize: 14,
-    color: ClientColors.textSecondary,
-    textAlign: 'center',
-    lineHeight: 20,
-  },
-  retryButton: {
-    backgroundColor: ClientColors.primary,
+  skeletonCard: {
+    backgroundColor: ClientColors.cardBackground,
     borderRadius: 12,
-    paddingHorizontal: 24,
-    paddingVertical: 12,
+    paddingHorizontal: Spacing.lg,
+    paddingVertical: 14,
+  },
+  skeletonRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
   },
 });

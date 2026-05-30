@@ -10,7 +10,7 @@ import {
   Platform,
   StatusBar,
 } from 'react-native';
-import { ClientColors, Region } from '@taxi/shared';
+import { ClientColors, Radius, Region, Spacing } from '@taxi/shared';
 import Icon from './Icon';
 import CollapsiblePicker from './CollapsiblePicker';
 import { priceFor, type TariffRoute } from '../api/regions';
@@ -139,7 +139,7 @@ export default function IntervillageModal({
         <View style={styles.body}>
           <Text style={styles.subtitle}>Выберите направление</Text>
 
-          <View style={{ gap: 12 }}>
+          <View style={{ gap: Spacing.md }}>
             {/* Откуда залочено — определяется по GPS сервером. Меняется
                 только если клиент физически переместится в другое село. */}
             <View style={styles.fromLocked}>
@@ -234,8 +234,8 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingHorizontal: 16,
-    paddingVertical: 12,
+    paddingHorizontal: Spacing.lg,
+    paddingVertical: Spacing.md,
     borderBottomWidth: 1,
     borderBottomColor: ClientColors.border,
     backgroundColor: ClientColors.cardBackground,
@@ -245,7 +245,7 @@ const styles = StyleSheet.create({
     height: 40,
     alignItems: 'center',
     justifyContent: 'center',
-    borderRadius: 20,
+    borderRadius: Radius.xl,
     transform: [{ rotate: '180deg' }],
   },
   headerTitle: {
@@ -256,20 +256,20 @@ const styles = StyleSheet.create({
   },
   body: {
     flex: 1,
-    paddingHorizontal: 20,
-    paddingTop: 20,
+    paddingHorizontal: Spacing.xl,
+    paddingTop: Spacing.xl,
   },
   subtitle: {
     fontSize: 14,
     color: ClientColors.textSecondary,
-    marginBottom: 16,
+    marginBottom: Spacing.lg,
   },
   fromLocked: {
     borderWidth: 1.5,
     borderColor: ClientColors.primaryTint,
     backgroundColor: ClientColors.primaryTint,
-    borderRadius: 16,
-    paddingHorizontal: 16,
+    borderRadius: Radius.lg,
+    paddingHorizontal: Spacing.lg,
     paddingVertical: 14,
   },
   fromLockedLabel: {
@@ -298,7 +298,7 @@ const styles = StyleSheet.create({
     marginTop: 18,
   },
   priceCardError: {
-    backgroundColor: '#FFF1F1',
+    backgroundColor: ClientColors.dangerTint,
   },
   priceCardLabel: {
     fontSize: 13,
@@ -321,8 +321,8 @@ const styles = StyleSheet.create({
   roundTripRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 12,
-    paddingVertical: 12,
+    gap: Spacing.md,
+    paddingVertical: Spacing.md,
     paddingHorizontal: 14,
     borderRadius: 14,
     borderWidth: 1.5,
@@ -355,7 +355,7 @@ const styles = StyleSheet.create({
   },
   roundTripBadge: {
     paddingHorizontal: 10,
-    paddingVertical: 4,
+    paddingVertical: Spacing.xs,
     borderRadius: 10,
     backgroundColor: ClientColors.primary,
   },
@@ -368,13 +368,13 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: ClientColors.primaryDark,
     marginTop: 6,
-    paddingHorizontal: 4,
+    paddingHorizontal: Spacing.xs,
     lineHeight: 16,
   },
   footer: {
-    paddingHorizontal: 20,
-    paddingBottom: Platform.OS === 'android' ? 24 : 34,
-    paddingTop: 12,
+    paddingHorizontal: Spacing.xl,
+    paddingBottom: Platform.OS === 'android' ? Spacing.xxl : 34,
+    paddingTop: Spacing.md,
     borderTopWidth: 1,
     borderTopColor: ClientColors.border,
     backgroundColor: ClientColors.cardBackground,
@@ -386,7 +386,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 12,
+    gap: Spacing.md,
     shadowColor: ClientColors.primary,
     shadowOpacity: 0.35,
     shadowRadius: 14,

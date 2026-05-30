@@ -2,7 +2,7 @@ import React from 'react';
 import { View, Text, StyleSheet } from 'react-native';
 import dayjs from 'dayjs';
 import 'dayjs/locale/ru';
-import { Order, OrderStatus, ClientColors, Typography } from '@taxi/shared';
+import { Order, OrderStatus, ClientColors, Radius, Spacing, Typography } from '@taxi/shared';
 
 dayjs.locale('ru');
 
@@ -21,7 +21,7 @@ function getStatusBadge(status: OrderStatus): StatusBadgeConfig {
     case 'completed':
       return { label: 'Завершён', backgroundColor: ClientColors.primaryTint, color: ClientColors.primaryDark };
     case 'cancelled':
-      return { label: 'Отменён', backgroundColor: '#FFE6E6', color: '#B91C1C' };
+      return { label: 'Отменён', backgroundColor: ClientColors.dangerTint, color: ClientColors.danger };
     default:
       return { label: 'В процессе', backgroundColor: ClientColors.secondaryTint, color: ClientColors.secondaryDark };
   }
@@ -65,10 +65,10 @@ export default function OrderHistoryItem({ order }: OrderHistoryItemProps): Reac
 const styles = StyleSheet.create({
   container: {
     backgroundColor: ClientColors.cardBackground,
-    borderRadius: 12,
-    paddingHorizontal: 16,
+    borderRadius: Radius.md,
+    paddingHorizontal: Spacing.lg,
     paddingVertical: 14,
-    marginHorizontal: 16,
+    marginHorizontal: Spacing.lg,
     marginBottom: 10,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 1 },
@@ -80,7 +80,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 8,
+    marginBottom: Spacing.sm,
   },
   bottomRow: {
     flexDirection: 'row',
@@ -88,7 +88,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   badge: {
-    borderRadius: 8,
+    borderRadius: Radius.sm,
     paddingHorizontal: 10,
     paddingVertical: 3,
   },

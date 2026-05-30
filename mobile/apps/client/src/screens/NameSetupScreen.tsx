@@ -13,6 +13,8 @@ import {
 } from 'react-native';
 import {
   ClientColors,
+  Radius,
+  Spacing,
   updateClientProfile,
   useAuth,
 } from '@taxi/shared';
@@ -112,7 +114,7 @@ export default function NameSetupScreen(): React.ReactNode {
 const styles = StyleSheet.create({
   safe: { flex: 1, backgroundColor: ClientColors.background },
   container: { flex: 1 },
-  content: { flex: 1, justifyContent: 'center', paddingHorizontal: 24 },
+  content: { flex: 1, justifyContent: 'center', paddingHorizontal: Spacing.xxl },
   heroBlock: { alignItems: 'center', marginBottom: 36 },
   brandMark: {
     width: 72,
@@ -134,7 +136,7 @@ const styles = StyleSheet.create({
     fontWeight: '800' as const,
     color: ClientColors.dark,
     letterSpacing: -0.5,
-    marginBottom: 8,
+    marginBottom: Spacing.sm,
   },
   subtitle: {
     fontSize: 15,
@@ -144,9 +146,9 @@ const styles = StyleSheet.create({
   },
   formCard: {
     backgroundColor: ClientColors.white,
-    borderRadius: 24,
-    paddingHorizontal: 20,
-    paddingTop: 20,
+    borderRadius: Radius.xxl,
+    paddingHorizontal: Spacing.xl,
+    paddingTop: Spacing.xl,
     paddingBottom: 22,
     shadowColor: '#000',
     shadowOpacity: 0.08,
@@ -164,11 +166,11 @@ const styles = StyleSheet.create({
   },
   input: {
     height: 56,
-    borderRadius: 16,
+    borderRadius: Radius.lg,
     borderWidth: 1.5,
     borderColor: ClientColors.border,
     backgroundColor: ClientColors.background,
-    paddingHorizontal: 16,
+    paddingHorizontal: Spacing.lg,
     fontSize: 18,
     fontWeight: '600' as const,
     color: ClientColors.dark,

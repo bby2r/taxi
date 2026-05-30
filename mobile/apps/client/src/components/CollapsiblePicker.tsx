@@ -8,7 +8,7 @@ import {
   Platform,
   UIManager,
 } from 'react-native';
-import { ClientColors, Region } from '@taxi/shared';
+import { ClientColors, Radius, Region, Spacing } from '@taxi/shared';
 import Icon from './Icon';
 
 // LayoutAnimation для Android требует одноразовой включалки.
@@ -109,7 +109,7 @@ const styles = StyleSheet.create({
   wrapper: {
     borderWidth: 1.5,
     borderColor: ClientColors.border,
-    borderRadius: 16,
+    borderRadius: Radius.lg,
     backgroundColor: ClientColors.cardBackground,
     overflow: 'hidden',
   },
@@ -120,8 +120,8 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingHorizontal: 16,
-    paddingVertical: 16,
+    paddingHorizontal: Spacing.lg,
+    paddingVertical: Spacing.lg,
   },
   label: {
     fontSize: 12,
@@ -133,7 +133,7 @@ const styles = StyleSheet.create({
   headerValue: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
+    gap: Spacing.sm,
   },
   value: {
     fontSize: 17,
@@ -149,13 +149,13 @@ const styles = StyleSheet.create({
   list: {
     borderTopWidth: 1,
     borderTopColor: ClientColors.border,
-    paddingVertical: 4,
+    paddingVertical: Spacing.xs,
   },
   option: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingHorizontal: 16,
+    paddingHorizontal: Spacing.lg,
     paddingVertical: 14,
   },
   optionActive: {

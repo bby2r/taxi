@@ -50,7 +50,7 @@ const DARK_MAP_STYLE = [
   { featureType: 'water', elementType: 'geometry', stylers: [{ color: '#13111f' }] },
   { featureType: 'water', elementType: 'labels.text.fill', stylers: [{ color: '#3d3658' }] },
 ];
-import { useLocation, ActionButton, ClientColors, Typography, reverseGeocode, Region } from '@taxi/shared';
+import { useLocation, ActionButton, ClientColors, ErrorPill, Radius, Spacing, Typography, reverseGeocode, Region } from '@taxi/shared';
 import { useOrder } from '../hooks/useOrder';
 import DriverCard from '../components/DriverCard';
 import AnimatedDriverMarker from '../components/AnimatedDriverMarker';
@@ -104,15 +104,12 @@ function PickupPinMarker(): React.ReactNode {
   return (
     <View style={pickupPinStyles.wrapper}>
       <View style={pickupPinStyles.badge}>
-        <Icon name="user" size={26} color={pickupPinStyles.iconColor.color} strokeWidth={2.4} />
+        <Icon name="user" size={26} color={ClientColors.pickupDark} strokeWidth={2.4} />
       </View>
       <View style={pickupPinStyles.stem} />
     </View>
   );
 }
-
-const PICKUP_YELLOW = '#FFCE2B';
-const PICKUP_DARK = '#1E1B2E';
 
 const pickupPinStyles = StyleSheet.create({
   wrapper: {
@@ -122,7 +119,7 @@ const pickupPinStyles = StyleSheet.create({
     width: 48,
     height: 48,
     borderRadius: 14,
-    backgroundColor: PICKUP_YELLOW,
+    backgroundColor: ClientColors.pickupYellow,
     alignItems: 'center',
     justifyContent: 'center',
     shadowColor: '#000',
@@ -134,12 +131,9 @@ const pickupPinStyles = StyleSheet.create({
   stem: {
     width: 2,
     height: 14,
-    backgroundColor: PICKUP_DARK,
+    backgroundColor: ClientColors.pickupDark,
     opacity: 0.65,
     marginTop: -1,
-  },
-  iconColor: {
-    color: PICKUP_DARK,
   },
 });
 
@@ -555,10 +549,12 @@ export default function HomeScreen(): React.ReactNode {
         </TouchableOpacity>
 
         {error && (
-          <View style={styles.errorPill}>
-            <Icon name="alert" size={18} color={ClientColors.danger} strokeWidth={2.2} />
-            <Text style={[Typography.caption, styles.errorText]}>{error}</Text>
-          </View>
+          <ErrorPill
+            message={error}
+            leading={
+              <Icon name="alert" size={18} color={ClientColors.danger} strokeWidth={2.2} />
+            }
+          />
         )}
 
         {state.phase === 'idle' && (
@@ -757,10 +753,10 @@ const styles = StyleSheet.create({
     left: 0,
     right: 0,
     backgroundColor: ClientColors.cardBackground,
-    borderTopLeftRadius: 32,
-    borderTopRightRadius: 32,
-    paddingHorizontal: 24,
-    paddingBottom: 24,
+    borderTopLeftRadius: Radius.xxxl,
+    borderTopRightRadius: Radius.xxxl,
+    paddingHorizontal: Spacing.xxl,
+    paddingBottom: Spacing.xxl,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: -4 },
     shadowOpacity: 0.12,
@@ -771,8 +767,8 @@ const styles = StyleSheet.create({
   peekHeader: {
     paddingTop: 10,
     paddingBottom: 14,
-    marginHorizontal: -24,
-    paddingHorizontal: 24,
+    marginHorizontal: -Spacing.xxl,
+    paddingHorizontal: Spacing.xxl,
   },
   handle: {
     width: 44,
@@ -794,7 +790,7 @@ const styles = StyleSheet.create({
     backgroundColor: ClientColors.primaryTint,
     paddingHorizontal: 10,
     paddingVertical: 5,
-    borderRadius: 999,
+    borderRadius: Radius.round,
   },
   peekVillageText: {
     fontSize: 13,
@@ -802,9 +798,8 @@ const styles = StyleSheet.create({
     color: ClientColors.primaryDark,
   },
   peekTitle: {
+    ...Typography.bodyMedium,
     flex: 1,
-    fontSize: 15,
-    fontWeight: '600' as const,
     color: ClientColors.dark,
   },
   peekPrice: {
@@ -819,7 +814,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 12,
+    gap: Spacing.md,
     paddingVertical: 36,
   },
   loadingText: {
@@ -828,24 +823,24 @@ const styles = StyleSheet.create({
   },
   serviceUnavailable: {
     alignItems: 'center',
-    paddingVertical: 20,
-    paddingHorizontal: 4,
+    paddingVertical: Spacing.xl,
+    paddingHorizontal: Spacing.xs,
   },
   serviceUnavailableIcon: {
     width: 64,
     height: 64,
-    borderRadius: 32,
+    borderRadius: Radius.xxxl,
     backgroundColor: ClientColors.secondaryTint,
     alignItems: 'center',
     justifyContent: 'center',
-    marginBottom: 16,
+    marginBottom: Spacing.lg,
   },
   serviceUnavailableTitle: {
     fontSize: 18,
     fontWeight: '800' as const,
     color: ClientColors.dark,
     textAlign: 'center',
-    marginBottom: 8,
+    marginBottom: Spacing.sm,
     letterSpacing: -0.2,
   },
   serviceUnavailableBody: {
@@ -857,11 +852,11 @@ const styles = StyleSheet.create({
   serviceUnavailableButton: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
+    gap: Spacing.sm,
     marginTop: 18,
     paddingHorizontal: 18,
-    paddingVertical: 12,
-    borderRadius: 24,
+    paddingVertical: Spacing.md,
+    borderRadius: Radius.xxl,
     borderWidth: 1.5,
     borderColor: ClientColors.primary,
   },
@@ -874,8 +869,8 @@ const styles = StyleSheet.create({
     fontSize: 22,
     fontWeight: '700' as const,
     color: ClientColors.dark,
-    marginTop: 4,
-    marginBottom: 12,
+    marginTop: Spacing.xs,
+    marginBottom: Spacing.md,
     letterSpacing: -0.3,
   },
   priceCard: {
@@ -906,9 +901,9 @@ const styles = StyleSheet.create({
   roundTripRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 12,
+    gap: Spacing.md,
     paddingVertical: 10,
-    paddingHorizontal: 12,
+    paddingHorizontal: Spacing.md,
     borderRadius: 14,
     borderWidth: 1.5,
     borderColor: ClientColors.border,
@@ -940,7 +935,7 @@ const styles = StyleSheet.create({
   },
   roundTripBadge: {
     paddingHorizontal: 10,
-    paddingVertical: 4,
+    paddingVertical: Spacing.xs,
     borderRadius: 10,
     backgroundColor: ClientColors.primary,
   },
@@ -956,7 +951,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 12,
+    gap: Spacing.md,
     shadowColor: ClientColors.primary,
     shadowOpacity: 0.35,
     shadowRadius: 14,
@@ -977,9 +972,9 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     gap: 10,
-    marginTop: 12,
+    marginTop: Spacing.md,
     height: 50,
-    borderRadius: 24,
+    borderRadius: Radius.xxl,
     backgroundColor: ClientColors.secondaryTint,
   },
   intervillageButtonText: {
@@ -987,26 +982,10 @@ const styles = StyleSheet.create({
     fontWeight: '700' as const,
     color: ClientColors.secondaryDark,
   },
-  errorPill: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#FFF1F1',
-    borderColor: '#FFD4D4',
-    borderWidth: 1,
-    borderRadius: 12,
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-    marginBottom: 12,
-    gap: 10,
-  },
-  errorText: {
-    color: ClientColors.danger,
-    flex: 1,
-  },
   // «Моя локация» FAB — приклеен к верхней грани шторки
   myLocationFab: {
     position: 'absolute',
-    right: 16,
+    right: Spacing.lg,
     alignItems: 'flex-end',
   },
   myLocationFabInner: {
@@ -1031,7 +1010,7 @@ const styles = StyleSheet.create({
   },
   modalContent: {
     backgroundColor: ClientColors.white,
-    borderRadius: 32,
+    borderRadius: Radius.xxxl,
     paddingHorizontal: 28,
     paddingTop: 36,
     paddingBottom: 28,
@@ -1086,8 +1065,8 @@ const styles = StyleSheet.create({
   },
   modalButton: {
     backgroundColor: ClientColors.primary,
-    borderRadius: 24,
-    paddingHorizontal: 40,
+    borderRadius: Radius.xxl,
+    paddingHorizontal: Spacing.huge,
     height: 52,
     justifyContent: 'center',
     alignItems: 'center',
@@ -1101,12 +1080,12 @@ const styles = StyleSheet.create({
   cancelledToast: {
     position: 'absolute',
     top: Platform.OS === 'android' ? (StatusBar.currentHeight ?? 40) + 12 : 56,
-    left: 16,
-    right: 16,
+    left: Spacing.lg,
+    right: Spacing.lg,
     backgroundColor: ClientColors.dark,
     borderRadius: 14,
     paddingVertical: 14,
-    paddingHorizontal: 16,
+    paddingHorizontal: Spacing.lg,
     flexDirection: 'row',
     alignItems: 'center',
     gap: 10,

@@ -12,7 +12,7 @@ import {
   ActivityIndicator,
 } from 'react-native';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
-import { ClientColors, sendOtp, formatPhoneDigits, extractDigits } from '@taxi/shared';
+import { ClientColors, Radius, Spacing, sendOtp, formatPhoneDigits, extractDigits } from '@taxi/shared';
 import { AuthStackParamList } from '../navigation/types';
 import Icon from '../components/Icon';
 
@@ -121,7 +121,7 @@ const styles = StyleSheet.create({
   content: {
     flex: 1,
     justifyContent: 'center',
-    paddingHorizontal: 24,
+    paddingHorizontal: Spacing.xxl,
   },
   heroBlock: {
     alignItems: 'center',
@@ -147,7 +147,7 @@ const styles = StyleSheet.create({
     fontWeight: '800' as const,
     color: ClientColors.dark,
     letterSpacing: -0.5,
-    marginBottom: 8,
+    marginBottom: Spacing.sm,
   },
   subtitle: {
     fontSize: 15,
@@ -157,9 +157,9 @@ const styles = StyleSheet.create({
   },
   formCard: {
     backgroundColor: ClientColors.white,
-    borderRadius: 24,
-    paddingHorizontal: 20,
-    paddingTop: 20,
+    borderRadius: Radius.xxl,
+    paddingHorizontal: Spacing.xl,
+    paddingTop: Spacing.xl,
     paddingBottom: 22,
     shadowColor: '#000',
     shadowOpacity: 0.08,
@@ -182,8 +182,8 @@ const styles = StyleSheet.create({
   },
   prefixBox: {
     height: 56,
-    paddingHorizontal: 16,
-    borderRadius: 16,
+    paddingHorizontal: Spacing.lg,
+    borderRadius: Radius.lg,
     backgroundColor: ClientColors.primaryTint,
     justifyContent: 'center',
   },
@@ -195,11 +195,11 @@ const styles = StyleSheet.create({
   phoneInput: {
     flex: 1,
     height: 56,
-    borderRadius: 16,
+    borderRadius: Radius.lg,
     borderWidth: 1.5,
     borderColor: ClientColors.border,
     backgroundColor: ClientColors.background,
-    paddingHorizontal: 16,
+    paddingHorizontal: Spacing.lg,
     fontSize: 18,
     fontWeight: '600' as const,
     color: ClientColors.dark,

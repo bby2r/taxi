@@ -1,6 +1,6 @@
 import React from 'react';
 import { View, Text, TouchableOpacity, StyleSheet, Linking } from 'react-native';
-import { Driver, ClientColors, Typography } from '@taxi/shared';
+import { Driver, ClientColors, Radius, Spacing } from '@taxi/shared';
 
 interface DriverCardProps {
   driver: Driver;
@@ -83,15 +83,15 @@ export default function DriverCard({ driver, status }: DriverCardProps): React.R
 
 const styles = StyleSheet.create({
   container: {
-    marginBottom: 8,
+    marginBottom: Spacing.sm,
   },
   statusPill: {
     alignSelf: 'flex-start',
     flexDirection: 'row',
     alignItems: 'center',
-    paddingHorizontal: 12,
+    paddingHorizontal: Spacing.md,
     paddingVertical: 6,
-    borderRadius: 999,
+    borderRadius: Radius.round,
     marginBottom: 14,
     gap: 6,
   },
@@ -140,7 +140,7 @@ const styles = StyleSheet.create({
     backgroundColor: ClientColors.success,
     alignItems: 'center',
     justifyContent: 'center',
-    marginLeft: 12,
+    marginLeft: Spacing.md,
     shadowColor: ClientColors.success,
     shadowOpacity: 0.3,
     shadowRadius: 8,

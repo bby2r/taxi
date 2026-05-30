@@ -23,10 +23,16 @@ export const ClientColors = {
   textMuted: '#94A3B8',
   success: '#10B981',
   danger: '#EF4444',
+  dangerTint: '#FFF1F1', // soft danger background — error pills, destructive surfaces
+  dangerBorder: '#FFD4D4', // matching border for dangerTint surfaces
   white: '#FFFFFF',
   border: '#D9F0EC', // subtle teal-tinted dividers; reads as warm grey
   cardBackground: '#FFFFFF',
   mapOverlay: 'rgba(244, 251, 250, 0.95)',
+  // Pickup pin palette — Yandex-Go-style yellow badge with a dark
+  // pictogram. Kept here so other map markers can reuse the duo.
+  pickupYellow: '#FFCE2B',
+  pickupDark: '#1E1B2E',
 } as const;
 
 export const DriverColors = {
