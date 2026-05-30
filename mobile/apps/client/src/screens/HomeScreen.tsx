@@ -104,7 +104,7 @@ function PickupPinMarker(): React.ReactNode {
   return (
     <View style={pickupPinStyles.wrapper}>
       <View style={pickupPinStyles.badge}>
-        <Icon name="user" size={26} color={ClientColors.pickupDark} strokeWidth={2.4} />
+        <Icon name="user" size={26} color={ClientColors.white} strokeWidth={2.4} />
       </View>
       <View style={pickupPinStyles.stem} />
     </View>
@@ -119,12 +119,12 @@ const pickupPinStyles = StyleSheet.create({
     width: 48,
     height: 48,
     borderRadius: 14,
-    backgroundColor: ClientColors.pickupYellow,
+    backgroundColor: ClientColors.pickupBadge,
     alignItems: 'center',
     justifyContent: 'center',
-    shadowColor: '#000',
-    shadowOpacity: 0.35,
-    shadowRadius: 8,
+    shadowColor: ClientColors.pickupBadge,
+    shadowOpacity: 0.45,
+    shadowRadius: 10,
     shadowOffset: { width: 0, height: 4 },
     elevation: 8,
   },
@@ -132,7 +132,7 @@ const pickupPinStyles = StyleSheet.create({
     width: 2,
     height: 14,
     backgroundColor: ClientColors.pickupDark,
-    opacity: 0.65,
+    opacity: 0.8,
     marginTop: -1,
   },
 });
@@ -653,15 +653,15 @@ export default function HomeScreen(): React.ReactNode {
                 <TouchableOpacity
                   style={styles.intervillageButton}
                   onPress={() => setIntervillageOpen(true)}
-                  activeOpacity={0.85}
+                  activeOpacity={0.7}
                   disabled={loading}
                 >
-                  <Icon name="route" size={20} color={ClientColors.secondaryDark} strokeWidth={2.2} />
+                  <Icon name="route" size={18} color={ClientColors.primaryDark} strokeWidth={2.2} />
                   <Text style={styles.intervillageButtonText}>Межсёлами</Text>
                   <Icon
                     name="arrow-right"
-                    size={18}
-                    color={ClientColors.secondaryDark}
+                    size={16}
+                    color={ClientColors.primaryDark}
                     strokeWidth={2.2}
                   />
                 </TouchableOpacity>
@@ -806,7 +806,7 @@ const styles = StyleSheet.create({
     flex: 1,
     textAlign: 'right',
     fontSize: 18,
-    fontWeight: '800' as const,
+    fontWeight: '700' as const,
     color: ClientColors.dark,
     letterSpacing: -0.2,
   },
@@ -837,7 +837,7 @@ const styles = StyleSheet.create({
   },
   serviceUnavailableTitle: {
     fontSize: 18,
-    fontWeight: '800' as const,
+    fontWeight: '700' as const,
     color: ClientColors.dark,
     textAlign: 'center',
     marginBottom: Spacing.sm,
@@ -857,7 +857,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 18,
     paddingVertical: Spacing.md,
     borderRadius: Radius.xxl,
-    borderWidth: 1.5,
+    borderWidth: 1,
     borderColor: ClientColors.primary,
   },
   serviceUnavailableButtonText: {
@@ -867,7 +867,7 @@ const styles = StyleSheet.create({
   },
   greeting: {
     fontSize: 22,
-    fontWeight: '700' as const,
+    fontWeight: '600' as const,
     color: ClientColors.dark,
     marginTop: Spacing.xs,
     marginBottom: Spacing.md,
@@ -887,7 +887,7 @@ const styles = StyleSheet.create({
   },
   priceCardValue: {
     fontSize: 28,
-    fontWeight: '800' as const,
+    fontWeight: '700' as const,
     color: ClientColors.primaryDark,
     marginTop: 4,
     letterSpacing: -0.4,
@@ -905,7 +905,7 @@ const styles = StyleSheet.create({
     paddingVertical: 10,
     paddingHorizontal: Spacing.md,
     borderRadius: 14,
-    borderWidth: 1.5,
+    borderWidth: 1,
     borderColor: ClientColors.border,
     marginBottom: 14,
   },
@@ -967,20 +967,23 @@ const styles = StyleSheet.create({
     fontWeight: '700' as const,
     letterSpacing: 0.2,
   },
+  // Ghost secondary CTA — primary lives on the hero, this one is a
+  // text-link with a tap-target. Reads as "another option" instead of
+  // competing with the main button for attention.
   intervillageButton: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 10,
+    gap: 8,
     marginTop: Spacing.md,
-    height: 50,
-    borderRadius: Radius.xxl,
-    backgroundColor: ClientColors.secondaryTint,
+    height: 44,
+    borderRadius: Radius.xl,
+    backgroundColor: 'transparent',
   },
   intervillageButtonText: {
-    fontSize: 15,
-    fontWeight: '700' as const,
-    color: ClientColors.secondaryDark,
+    fontSize: 14,
+    fontWeight: '600' as const,
+    color: ClientColors.primaryDark,
   },
   // «Моя локация» FAB — приклеен к верхней грани шторки
   myLocationFab: {
@@ -1033,7 +1036,7 @@ const styles = StyleSheet.create({
   },
   completedTitle: {
     fontSize: 24,
-    fontWeight: '800' as const,
+    fontWeight: '700' as const,
     color: ClientColors.dark,
     textAlign: 'center',
     letterSpacing: -0.4,
@@ -1056,7 +1059,7 @@ const styles = StyleSheet.create({
   },
   completedPriceValue: {
     fontSize: 38,
-    fontWeight: '800' as const,
+    fontWeight: '700' as const,
     color: ClientColors.primaryDark,
   },
   completedPriceCurrency: {

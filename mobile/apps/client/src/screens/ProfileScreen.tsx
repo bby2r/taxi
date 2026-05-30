@@ -356,7 +356,7 @@ const styles = StyleSheet.create({
     gap: Spacing.md,
   },
   cancelButton: {
-    borderWidth: 1.5,
+    borderWidth: 1,
     borderColor: ClientColors.border,
     borderRadius: Radius.md,
     paddingVertical: 10,
@@ -413,7 +413,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     gap: 10,
     backgroundColor: 'transparent',
-    borderWidth: 1.5,
+    borderWidth: 1,
     borderColor: ClientColors.dangerBorder,
     borderRadius: 14,
     paddingVertical: 14,

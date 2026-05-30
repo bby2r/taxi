@@ -1,6 +1,7 @@
 import React from 'react';
 import { View, Text, TouchableOpacity, StyleSheet, Linking } from 'react-native';
 import { Driver, ClientColors, Radius, Spacing } from '@taxi/shared';
+import Icon, { IconName } from './Icon';
 
 interface DriverCardProps {
   driver: Driver;
@@ -11,7 +12,7 @@ function getStatusText(status: DriverCardProps['status']): {
   label: string;
   color: string;
   bg: string;
-  emoji: string;
+  icon: IconName;
 } {
   switch (status) {
     case 'accepted':
@@ -19,21 +20,21 @@ function getStatusText(status: DriverCardProps['status']): {
         label: 'В пути к вам',
         color: ClientColors.primaryDark,
         bg: ClientColors.primaryTint,
-        emoji: '🛣️',
+        icon: 'route',
       };
     case 'arrived':
       return {
         label: 'Водитель ожидает',
         color: ClientColors.secondaryDark,
         bg: ClientColors.secondaryTint,
-        emoji: '📍',
+        icon: 'pin',
       };
     case 'in_progress':
       return {
         label: 'В поездке',
         color: ClientColors.accent,
         bg: ClientColors.accentTint,
-        emoji: '🚕',
+        icon: 'car',
       };
   }
 }
@@ -49,7 +50,7 @@ export default function DriverCard({ driver, status }: DriverCardProps): React.R
   return (
     <View style={styles.container}>
       <View style={[styles.statusPill, { backgroundColor: statusInfo.bg }]}>
-        <Text style={styles.statusEmoji}>{statusInfo.emoji}</Text>
+        <Icon name={statusInfo.icon} size={14} color={statusInfo.color} strokeWidth={2.4} />
         <Text style={[styles.statusLabel, { color: statusInfo.color }]}>
           {statusInfo.label}
         </Text>
@@ -74,7 +75,7 @@ export default function DriverCard({ driver, status }: DriverCardProps): React.R
           accessibilityLabel="Позвонить водителю"
           activeOpacity={0.8}
         >
-          <Text style={styles.phoneIcon}>📞</Text>
+          <Icon name="phone" size={22} color={ClientColors.white} strokeWidth={2.2} />
         </TouchableOpacity>
       </View>
     </View>
@@ -94,9 +95,6 @@ const styles = StyleSheet.create({
     borderRadius: Radius.round,
     marginBottom: 14,
     gap: 6,
-  },
-  statusEmoji: {
-    fontSize: 14,
   },
   statusLabel: {
     fontSize: 13,
@@ -146,8 +144,5 @@ const styles = StyleSheet.create({
     shadowRadius: 8,
     shadowOffset: { width: 0, height: 4 },
     elevation: 4,
-  },
-  phoneIcon: {
-    fontSize: 22,
   },
 });

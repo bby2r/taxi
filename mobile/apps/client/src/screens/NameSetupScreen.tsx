@@ -133,7 +133,7 @@ const styles = StyleSheet.create({
   },
   title: {
     fontSize: 26,
-    fontWeight: '800' as const,
+    fontWeight: '700' as const,
     color: ClientColors.dark,
     letterSpacing: -0.5,
     marginBottom: Spacing.sm,
@@ -167,7 +167,7 @@ const styles = StyleSheet.create({
   input: {
     height: 56,
     borderRadius: Radius.lg,
-    borderWidth: 1.5,
+    borderWidth: 1,
     borderColor: ClientColors.border,
     backgroundColor: ClientColors.background,
     paddingHorizontal: Spacing.lg,

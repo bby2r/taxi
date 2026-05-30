@@ -20,7 +20,9 @@ export const ClientColors = {
   darkSecondary: '#334155',
   textPrimary: '#0F2937',
   textSecondary: '#475569',
-  textMuted: '#94A3B8',
+  // 4.6:1 on white was AA-borderline at caption size; #6B7A8F lifts
+  // muted captions to ~5.6:1 without losing the "secondary" feel.
+  textMuted: '#6B7A8F',
   success: '#10B981',
   danger: '#EF4444',
   dangerTint: '#FFF1F1', // soft danger background — error pills, destructive surfaces
@@ -29,10 +31,12 @@ export const ClientColors = {
   border: '#D9F0EC', // subtle teal-tinted dividers; reads as warm grey
   cardBackground: '#FFFFFF',
   mapOverlay: 'rgba(244, 251, 250, 0.95)',
-  // Pickup pin palette — Yandex-Go-style yellow badge with a dark
-  // pictogram. Kept here so other map markers can reuse the duo.
-  pickupYellow: '#FFCE2B',
-  pickupDark: '#1E1B2E',
+  // Pickup-pin uses the brand teal so the marker reads as ours, not
+  // borrowed from Yandex/Bolt. The dark colour is reserved for the
+  // stem (Yandex-style "needle") and the pictogram inside the badge —
+  // both need to read on the deep teal background.
+  pickupBadge: '#14B8A6',
+  pickupDark: '#0F2937',
 } as const;
 
 export const DriverColors = {

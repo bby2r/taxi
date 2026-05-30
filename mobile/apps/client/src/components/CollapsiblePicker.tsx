@@ -107,7 +107,7 @@ export default function CollapsiblePicker({
 
 const styles = StyleSheet.create({
   wrapper: {
-    borderWidth: 1.5,
+    borderWidth: 1,
     borderColor: ClientColors.border,
     borderRadius: Radius.lg,
     backgroundColor: ClientColors.cardBackground,

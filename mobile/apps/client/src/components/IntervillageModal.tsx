@@ -265,7 +265,7 @@ const styles = StyleSheet.create({
     marginBottom: Spacing.lg,
   },
   fromLocked: {
-    borderWidth: 1.5,
+    borderWidth: 1,
     borderColor: ClientColors.primaryTint,
     backgroundColor: ClientColors.primaryTint,
     borderRadius: Radius.lg,
@@ -307,7 +307,7 @@ const styles = StyleSheet.create({
   },
   priceCardValue: {
     fontSize: 32,
-    fontWeight: '800' as const,
+    fontWeight: '700' as const,
     color: ClientColors.primaryDark,
     marginTop: 4,
     letterSpacing: -0.5,
@@ -325,7 +325,7 @@ const styles = StyleSheet.create({
     paddingVertical: Spacing.md,
     paddingHorizontal: 14,
     borderRadius: 14,
-    borderWidth: 1.5,
+    borderWidth: 1,
     borderColor: ClientColors.border,
     marginTop: 14,
   },

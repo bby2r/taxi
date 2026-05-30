@@ -100,7 +100,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 24,
   },
   outline: {
-    borderWidth: 1.5,
+    borderWidth: 1,
     borderColor: ClientColors.primary,
   },
   primaryShadow: {

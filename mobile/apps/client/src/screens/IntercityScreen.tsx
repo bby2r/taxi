@@ -298,13 +298,30 @@ function ActiveBookingCard({
   const isMatched = booking.status === 'matched' || booking.status === 'en_route';
   const seatsCap = r?.max_seats ?? 0;
 
+  // Status pill keeps the same neutral tonal scale across states so the
+  // user reads it as "status", not "mood". A coloured dot up front
+  // carries the semantic — amber = waiting, teal = ready, grey = ended.
   let statusLabel = '';
-  if (booking.status === 'pending') statusLabel = 'Ждём водителя';
-  else if (booking.status === 'matched') statusLabel = 'Водитель назначен';
-  else if (booking.status === 'en_route') statusLabel = 'Водитель в пути';
-  else if (booking.status === 'completed') statusLabel = 'Завершено';
-  else if (booking.status === 'cancelled') statusLabel = 'Отменено';
-  else if (booking.status === 'no_show') statusLabel = 'Вы не пришли';
+  let dotColor: string = ClientColors.textMuted;
+  if (booking.status === 'pending') {
+    statusLabel = 'Ждём водителя';
+    dotColor = ClientColors.secondary;
+  } else if (booking.status === 'matched') {
+    statusLabel = 'Водитель назначен';
+    dotColor = ClientColors.primary;
+  } else if (booking.status === 'en_route') {
+    statusLabel = 'Водитель в пути';
+    dotColor = ClientColors.primary;
+  } else if (booking.status === 'completed') {
+    statusLabel = 'Завершено';
+    dotColor = ClientColors.success;
+  } else if (booking.status === 'cancelled') {
+    statusLabel = 'Отменено';
+    dotColor = ClientColors.danger;
+  } else if (booking.status === 'no_show') {
+    statusLabel = 'Вы не пришли';
+    dotColor = ClientColors.danger;
+  }
 
   return (
     <View style={styles.activeCard}>
@@ -312,10 +329,9 @@ function ActiveBookingCard({
         <Text style={styles.activeRouteName}>
           {r?.from_region} → {r?.to_region}
         </Text>
-        <View style={[styles.statusPill, isMatched && styles.statusPillSuccess]}>
-          <Text style={[styles.statusPillText, isMatched && styles.statusPillTextSuccess]}>
-            {statusLabel}
-          </Text>
+        <View style={styles.statusPill}>
+          <View style={[styles.statusDot, { backgroundColor: dotColor }]} />
+          <Text style={styles.statusPillText}>{statusLabel}</Text>
         </View>
       </View>
 
@@ -507,7 +523,7 @@ const styles = StyleSheet.create({
   },
   headerTitle: {
     fontSize: 24,
-    fontWeight: '800' as const,
+    fontWeight: '700' as const,
     color: ClientColors.dark,
     letterSpacing: -0.3,
   },
@@ -594,7 +610,7 @@ const styles = StyleSheet.create({
     borderRadius: 18,
     padding: 18,
     marginBottom: 18,
-    borderWidth: 1.5,
+    borderWidth: 1,
     borderColor: ClientColors.primary,
   },
   activeHeader: {
@@ -605,23 +621,29 @@ const styles = StyleSheet.create({
   },
   activeRouteName: {
     fontSize: 17,
-    fontWeight: '800' as const,
+    fontWeight: '700' as const,
     color: ClientColors.dark,
     flex: 1,
   },
   statusPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
     paddingHorizontal: 10,
     paddingVertical: 4,
-    borderRadius: 10,
-    backgroundColor: ClientColors.secondaryTint,
+    borderRadius: Radius.round,
+    backgroundColor: ClientColors.surfaceMuted,
   },
-  statusPillSuccess: { backgroundColor: ClientColors.primaryTint },
+  statusDot: {
+    width: 7,
+    height: 7,
+    borderRadius: Radius.round,
+  },
   statusPillText: {
     fontSize: 11,
     fontWeight: '700' as const,
-    color: ClientColors.secondaryDark,
+    color: ClientColors.textPrimary,
   },
-  statusPillTextSuccess: { color: ClientColors.primaryDark },
   activeRow: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -683,7 +705,7 @@ const styles = StyleSheet.create({
     paddingVertical: 10,
     alignItems: 'center',
     borderRadius: Radius.md,
-    borderWidth: 1.5,
+    borderWidth: 1,
     borderColor: ClientColors.dangerBorder,
   },
   cancelButtonText: {
@@ -741,7 +763,7 @@ const styles = StyleSheet.create({
   },
   modalSummaryValue: {
     fontSize: 20,
-    fontWeight: '800' as const,
+    fontWeight: '700' as const,
     color: ClientColors.dark,
     marginTop: 6,
   },
@@ -763,7 +785,7 @@ const styles = StyleSheet.create({
     flex: 1,
     height: 56,
     borderRadius: 14,
-    borderWidth: 1.5,
+    borderWidth: 1,
     borderColor: ClientColors.border,
     backgroundColor: ClientColors.cardBackground,
     alignItems: 'center',
@@ -776,7 +798,7 @@ const styles = StyleSheet.create({
   seatChipDisabled: { opacity: 0.4 },
   seatChipText: {
     fontSize: 22,
-    fontWeight: '800' as const,
+    fontWeight: '700' as const,
     color: ClientColors.dark,
   },
   seatChipTextActive: { color: ClientColors.primaryDark },
@@ -794,7 +816,7 @@ const styles = StyleSheet.create({
   },
   priceCardValue: {
     fontSize: 32,
-    fontWeight: '800' as const,
+    fontWeight: '700' as const,
     color: ClientColors.primaryDark,
     marginTop: 4,
     letterSpacing: -0.5,
