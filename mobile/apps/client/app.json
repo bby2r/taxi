@@ -7,6 +7,7 @@
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "light",
     "splash": {
+      "image": "./assets/alif-lockup.png",
       "resizeMode": "contain",
       "backgroundColor": "#F4FBFA"
     },

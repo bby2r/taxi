@@ -1,12 +1,11 @@
 import React, { useEffect, useMemo, useRef } from 'react';
-import { Animated, Dimensions, Easing, StyleSheet } from 'react-native';
+import { Animated, Easing, StyleSheet } from 'react-native';
 import Svg, {
   Circle,
   Defs,
   LinearGradient,
   Path,
   RadialGradient,
-  Rect,
   Stop,
 } from 'react-native-svg';
 import { ClientColors, useAuth } from '@taxi/shared';
@@ -15,36 +14,31 @@ interface Props {
   onFinish: () => void;
 }
 
-const MIN_HOLD_MS = 1500;
+const MIN_HOLD_MS = 1300;
 const LOCKUP_WIDTH = 230;
 const LOCKUP_HEIGHT = 205;
-const HALO_SIZE = 380;
-const RING_SIZE = 280;
-const SHINE_WIDTH = 70;
-
-const { width: SCREEN_W, height: SCREEN_H } = Dimensions.get('window');
+const HALO_SIZE = 320;
+const RING_SIZE = 264;
 
 /**
- * Brand intro — the real Alif lockup, presented with confidence.
+ * Brand intro — optimised for low-end Android phones.
  *
- * Lockup is the actual brand PNG (white card removed via floodfill at
- * build time, saved as alif-lockup.png), so the mark and wordmark
- * geometry match the brand exactly — no hand-rolled approximation.
+ * Seamless handoff with the native Expo splash: app.json points the
+ * native splash to alif-lockup.png on a mint background, so the lockup
+ * is already in its final position when JS takes over. The lockup is
+ * therefore rendered immediately at opacity 1 / scale 1 — no fade or
+ * scale on the lockup itself. Only the ambient decorations (halo +
+ * orbital ring) fade in around it, which keeps the entrance feeling
+ * "alive" without the heavy first-frame work of the previous cut.
  *
- * Choreography is deliberately restrained — premium brands don't
- * cartwheel:
- *   1. Halo + orbital ring fade in around centre.
- *   2. Lockup arrives as one cohesive block — fade + scale + slight
- *      rise from below.
- *   3. After the lockup settles, a single soft light glint sweeps
- *      across the screen at a diagonal — a "polish" pass.
- *   4. Continuous: gentle lockup breath, slow ring rotation, halo
- *      breath. No sonar pulse, no per-letter assembly (the PNG is
- *      one cohesive lockup, animating letters would distort it).
- *   5. Exit fires once auth is ready AND MIN_HOLD_MS has elapsed.
+ * Performance choices:
+ *   • No light-glint sweep — that was a screen-height-tall SVG layer.
+ *   • Lockup is a static Image — no per-frame transform on the hero.
+ *   • Only one continuous loop: the orbital ring rotates. The breath
+ *     is gone (it didn't add much next to the ring's motion).
+ *   • Halo is mounted once and fades in; never animated again.
  *
- * Every ongoing animation uses the native driver — no JS-thread
- * interpolations, so the screen stays smooth on low-end phones.
+ * Exit fires once auth is ready AND MIN_HOLD_MS has elapsed.
  */
 export default function BrandIntro({ onFinish }: Props): React.ReactNode {
   const { isLoading } = useAuth();
@@ -52,24 +46,15 @@ export default function BrandIntro({ onFinish }: Props): React.ReactNode {
   const containerOpacity = useRef(new Animated.Value(1)).current;
   const containerTranslate = useRef(new Animated.Value(0)).current;
 
-  const lockupOpacity = useRef(new Animated.Value(0)).current;
-  const lockupScale = useRef(new Animated.Value(0.84)).current;
-  const lockupTranslate = useRef(new Animated.Value(16)).current;
-  const lockupBreath = useRef(new Animated.Value(1)).current;
-
   const haloOpacity = useRef(new Animated.Value(0)).current;
   const ringOpacity = useRef(new Animated.Value(0)).current;
   const ringScale = useRef(new Animated.Value(0.94)).current;
   const ringRotation = useRef(new Animated.Value(0)).current;
 
-  const shineTranslate = useRef(new Animated.Value(-SCREEN_W * 0.7)).current;
-
   const mountedAtRef = useRef<number>(Date.now());
   const exitedRef = useRef<boolean>(false);
 
   useEffect(() => {
-    // Halo + ring fade in first, framing the centre before the lockup
-    // arrives — feels like a stage being set.
     Animated.parallel([
       Animated.timing(haloOpacity, {
         toValue: 1,
@@ -81,89 +66,29 @@ export default function BrandIntro({ onFinish }: Props): React.ReactNode {
       Animated.timing(ringOpacity, {
         toValue: 1,
         duration: 480,
-        delay: 220,
+        delay: 240,
         easing: Easing.out(Easing.cubic),
         useNativeDriver: true,
       }),
       Animated.timing(ringScale, {
         toValue: 1,
-        duration: 680,
-        delay: 220,
+        duration: 640,
+        delay: 240,
         easing: Easing.out(Easing.back(1.3)),
         useNativeDriver: true,
       }),
     ]).start();
 
-    // Lockup confident entrance — one block, no fake per-letter.
-    Animated.parallel([
-      Animated.timing(lockupOpacity, {
-        toValue: 1,
-        duration: 460,
-        delay: 280,
-        easing: Easing.out(Easing.cubic),
-        useNativeDriver: true,
-      }),
-      Animated.timing(lockupScale, {
-        toValue: 1,
-        duration: 640,
-        delay: 280,
-        easing: Easing.out(Easing.back(1.4)),
-        useNativeDriver: true,
-      }),
-      Animated.timing(lockupTranslate, {
-        toValue: 0,
-        duration: 640,
-        delay: 280,
-        easing: Easing.out(Easing.cubic),
-        useNativeDriver: true,
-      }),
-    ]).start();
-
-    // Single light glint sweeps across once after the lockup settles —
-    // the "polish pass". Native driver, runs once, no loop.
-    Animated.timing(shineTranslate, {
-      toValue: SCREEN_W + SHINE_WIDTH,
-      duration: 1100,
-      delay: 900,
-      easing: Easing.inOut(Easing.cubic),
-      useNativeDriver: true,
-    }).start();
-
-    // Continuous loops, all native-driver:
-    //   • Ring rotation — slow, linear.
-    //   • Lockup breath — slow sin.
     const ringLoop = Animated.loop(
       Animated.timing(ringRotation, {
         toValue: 1,
-        duration: 6800,
+        duration: 7000,
         easing: Easing.linear,
         useNativeDriver: true,
       }),
     );
     ringLoop.start();
-
-    const breathLoop = Animated.loop(
-      Animated.sequence([
-        Animated.timing(lockupBreath, {
-          toValue: 1.03,
-          duration: 1500,
-          easing: Easing.inOut(Easing.sin),
-          useNativeDriver: true,
-        }),
-        Animated.timing(lockupBreath, {
-          toValue: 1,
-          duration: 1500,
-          easing: Easing.inOut(Easing.sin),
-          useNativeDriver: true,
-        }),
-      ]),
-    );
-    breathLoop.start();
-
-    return () => {
-      ringLoop.stop();
-      breathLoop.stop();
-    };
+    return () => ringLoop.stop();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -178,25 +103,13 @@ export default function BrandIntro({ onFinish }: Props): React.ReactNode {
       Animated.parallel([
         Animated.timing(containerOpacity, {
           toValue: 0,
-          duration: 340,
+          duration: 320,
           easing: Easing.in(Easing.cubic),
           useNativeDriver: true,
         }),
         Animated.timing(containerTranslate, {
-          toValue: -28,
-          duration: 340,
-          easing: Easing.in(Easing.cubic),
-          useNativeDriver: true,
-        }),
-        Animated.timing(ringOpacity, {
-          toValue: 0,
-          duration: 220,
-          easing: Easing.in(Easing.cubic),
-          useNativeDriver: true,
-        }),
-        Animated.timing(haloOpacity, {
-          toValue: 0,
-          duration: 260,
+          toValue: -24,
+          duration: 320,
           easing: Easing.in(Easing.cubic),
           useNativeDriver: true,
         }),
@@ -207,7 +120,7 @@ export default function BrandIntro({ onFinish }: Props): React.ReactNode {
       });
     }, remaining);
     return () => clearTimeout(timer);
-  }, [isLoading, containerOpacity, containerTranslate, haloOpacity, ringOpacity, onFinish]);
+  }, [isLoading, containerOpacity, containerTranslate, onFinish]);
 
   const spin = ringRotation.interpolate({
     inputRange: [0, 1],
@@ -252,8 +165,8 @@ export default function BrandIntro({ onFinish }: Props): React.ReactNode {
         <Svg width={HALO_SIZE} height={HALO_SIZE}>
           <Defs>
             <RadialGradient id="haloGrad" cx="50%" cy="50%" rx="50%" ry="50%">
-              <Stop offset="0%" stopColor={ClientColors.primary} stopOpacity="0.3" />
-              <Stop offset="55%" stopColor={ClientColors.primary} stopOpacity="0.08" />
+              <Stop offset="0%" stopColor={ClientColors.primary} stopOpacity="0.26" />
+              <Stop offset="55%" stopColor={ClientColors.primary} stopOpacity="0.07" />
               <Stop offset="100%" stopColor={ClientColors.primary} stopOpacity="0" />
             </RadialGradient>
           </Defs>
@@ -281,8 +194,8 @@ export default function BrandIntro({ onFinish }: Props): React.ReactNode {
           <Defs>
             <LinearGradient id="ringGrad" x1="0%" y1="50%" x2="100%" y2="50%">
               <Stop offset="0%" stopColor={ClientColors.primary} stopOpacity="0" />
-              <Stop offset="55%" stopColor={ClientColors.primary} stopOpacity="0.45" />
-              <Stop offset="100%" stopColor={ClientColors.secondary} stopOpacity="0.9" />
+              <Stop offset="55%" stopColor={ClientColors.primary} stopOpacity="0.4" />
+              <Stop offset="100%" stopColor={ClientColors.secondary} stopOpacity="0.85" />
             </LinearGradient>
           </Defs>
           <Path
@@ -301,46 +214,14 @@ export default function BrandIntro({ onFinish }: Props): React.ReactNode {
         </Svg>
       </Animated.View>
 
+      {/* The lockup is rendered at its final position from frame zero —
+          identical to the native Expo splash. No fade, no scale, no
+          per-frame work on the hero. */}
       <Animated.Image
         source={require('../../assets/alif-lockup.png')}
         resizeMode="contain"
-        style={[
-          styles.lockup,
-          {
-            opacity: lockupOpacity,
-            transform: [
-              { translateY: lockupTranslate },
-              { scale: Animated.multiply(lockupScale, lockupBreath) },
-            ],
-          },
-        ]}
+        style={styles.lockup}
       />
-
-      {/* Single "polish" glint — soft white diagonal gradient bar
-          sweeps across the screen once, then disappears. */}
-      <Animated.View
-        style={[
-          styles.shine,
-          {
-            transform: [{ translateX: shineTranslate }, { rotate: '18deg' }],
-          },
-        ]}
-      >
-        <Svg width={SHINE_WIDTH} height={SCREEN_H * 1.6}>
-          <Defs>
-            <LinearGradient id="shineGrad" x1="0%" y1="0%" x2="100%" y2="0%">
-              <Stop offset="0%" stopColor="#FFFFFF" stopOpacity="0" />
-              <Stop offset="50%" stopColor="#FFFFFF" stopOpacity="0.55" />
-              <Stop offset="100%" stopColor="#FFFFFF" stopOpacity="0" />
-            </LinearGradient>
-          </Defs>
-          <Rect
-            width={SHINE_WIDTH}
-            height={SCREEN_H * 1.6}
-            fill="url(#shineGrad)"
-          />
-        </Svg>
-      </Animated.View>
     </Animated.View>
   );
 }
@@ -378,7 +259,6 @@ const styles = StyleSheet.create({
     backgroundColor: ClientColors.background,
     alignItems: 'center',
     justifyContent: 'center',
-    overflow: 'hidden',
   },
   absoluteCenter: {
     position: 'absolute',
@@ -388,11 +268,5 @@ const styles = StyleSheet.create({
   lockup: {
     width: LOCKUP_WIDTH,
     height: LOCKUP_HEIGHT,
-  },
-  shine: {
-    position: 'absolute',
-    top: -SCREEN_H * 0.3,
-    width: SHINE_WIDTH,
-    height: SCREEN_H * 1.6,
   },
 });
