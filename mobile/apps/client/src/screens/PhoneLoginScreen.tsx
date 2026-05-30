@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import {
   View,
   Text,
@@ -10,18 +10,74 @@ import {
   Alert,
   TouchableOpacity,
   ActivityIndicator,
+  Animated,
+  Easing,
+  Image,
 } from 'react-native';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
+import Svg, {
+  Circle,
+  Defs,
+  LinearGradient,
+  Path,
+  RadialGradient,
+  Stop,
+} from 'react-native-svg';
 import { ClientColors, Radius, Spacing, sendOtp, formatPhoneDigits, extractDigits } from '@taxi/shared';
 import { AuthStackParamList } from '../navigation/types';
-import Icon from '../components/Icon';
 
 type Props = NativeStackScreenProps<AuthStackParamList, 'PhoneLogin'>;
+
+const HALO_SIZE = 340;
+const RING_SIZE = 230;
+const LOCKUP_WIDTH = 150;
+const LOCKUP_HEIGHT = 134;
 
 export default function PhoneLoginScreen({ navigation }: Props): React.ReactNode {
   const [phone, setPhone] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+
+  // Mirror the brand-intro language so the auth screen reads as a
+  // continuation, not a different app — same halo, same orbital ring,
+  // same lockup, just sized down to leave the form as the action hero.
+  const backdropOpacity = useRef(new Animated.Value(0)).current;
+  const lockupTranslate = useRef(new Animated.Value(10)).current;
+  const ringRotation = useRef(new Animated.Value(0)).current;
+
+  useEffect(() => {
+    Animated.parallel([
+      Animated.timing(backdropOpacity, {
+        toValue: 1,
+        duration: 520,
+        easing: Easing.out(Easing.cubic),
+        useNativeDriver: true,
+      }),
+      Animated.timing(lockupTranslate, {
+        toValue: 0,
+        duration: 560,
+        easing: Easing.out(Easing.cubic),
+        useNativeDriver: true,
+      }),
+    ]).start();
+
+    // Slow rotation — barely noticeable, keeps the brand "alive".
+    const ringLoop = Animated.loop(
+      Animated.timing(ringRotation, {
+        toValue: 1,
+        duration: 14000,
+        easing: Easing.linear,
+        useNativeDriver: true,
+      }),
+    );
+    ringLoop.start();
+    return () => ringLoop.stop();
+  }, [backdropOpacity, lockupTranslate, ringRotation]);
+
+  const spin = ringRotation.interpolate({
+    inputRange: [0, 1],
+    outputRange: ['0deg', '360deg'],
+  });
 
   const handlePhoneChange = (text: string) => {
     setPhone(extractDigits(text, 9));
@@ -46,6 +102,11 @@ export default function PhoneLoginScreen({ navigation }: Props): React.ReactNode
     }
   };
 
+  const ringCx = RING_SIZE / 2;
+  const ringR = RING_SIZE / 2 - 6;
+  const ringPath = describeArc(ringCx, ringCx, ringR, -130, 130);
+  const ringDot = polarToCartesian(ringCx, ringCx, ringR, 130);
+
   return (
     <SafeAreaView style={styles.safe}>
       <KeyboardAvoidingView
@@ -54,14 +115,84 @@ export default function PhoneLoginScreen({ navigation }: Props): React.ReactNode
       >
         <View style={styles.content}>
           <View style={styles.heroBlock}>
-            <View style={styles.brandMark}>
-              <Icon name="car" size={36} color={ClientColors.white} strokeWidth={2} />
-            </View>
-            <Text style={styles.title}>Alif Taxi</Text>
-            <Text style={styles.subtitle}>
-              Такси в селе и до города{'\n'}за пару минут
-            </Text>
+            {/* Ambient halo — soft teal radial glow behind the lockup. */}
+            <Animated.View
+              style={[
+                styles.halo,
+                { width: HALO_SIZE, height: HALO_SIZE, opacity: backdropOpacity },
+              ]}
+            >
+              <Svg width={HALO_SIZE} height={HALO_SIZE}>
+                <Defs>
+                  <RadialGradient id="haloGrad" cx="50%" cy="50%" rx="50%" ry="50%">
+                    <Stop offset="0%" stopColor={ClientColors.primary} stopOpacity="0.22" />
+                    <Stop offset="55%" stopColor={ClientColors.primary} stopOpacity="0.06" />
+                    <Stop offset="100%" stopColor={ClientColors.primary} stopOpacity="0" />
+                  </RadialGradient>
+                </Defs>
+                <Circle
+                  cx={HALO_SIZE / 2}
+                  cy={HALO_SIZE / 2}
+                  r={HALO_SIZE / 2}
+                  fill="url(#haloGrad)"
+                />
+              </Svg>
+            </Animated.View>
+
+            {/* Orbital ring — same language as the intro, dialled down
+                to ambient (low opacity, slower rotation). */}
+            <Animated.View
+              style={[
+                styles.ring,
+                {
+                  width: RING_SIZE,
+                  height: RING_SIZE,
+                  opacity: Animated.multiply(backdropOpacity, 0.55),
+                  transform: [{ rotate: spin }],
+                },
+              ]}
+            >
+              <Svg width={RING_SIZE} height={RING_SIZE}>
+                <Defs>
+                  <LinearGradient id="ringGrad" x1="0%" y1="50%" x2="100%" y2="50%">
+                    <Stop offset="0%" stopColor={ClientColors.primary} stopOpacity="0" />
+                    <Stop offset="55%" stopColor={ClientColors.primary} stopOpacity="0.4" />
+                    <Stop offset="100%" stopColor={ClientColors.secondary} stopOpacity="0.8" />
+                  </LinearGradient>
+                </Defs>
+                <Path
+                  d={ringPath}
+                  stroke="url(#ringGrad)"
+                  strokeWidth={2}
+                  strokeLinecap="round"
+                  fill="none"
+                />
+                <Circle
+                  cx={ringDot.x}
+                  cy={ringDot.y}
+                  r={4}
+                  fill={ClientColors.secondary}
+                />
+              </Svg>
+            </Animated.View>
+
+            <Animated.View
+              style={{
+                opacity: backdropOpacity,
+                transform: [{ translateY: lockupTranslate }],
+              }}
+            >
+              <Image
+                source={require('../../assets/alif-lockup.png')}
+                style={styles.lockup}
+                resizeMode="contain"
+              />
+            </Animated.View>
           </View>
+
+          <Text style={styles.tagline}>
+            Такси в селе и до города{'\n'}за пару минут
+          </Text>
 
           <View style={styles.formCard}>
             <Text style={styles.label}>Ваш номер</Text>
@@ -109,6 +240,34 @@ export default function PhoneLoginScreen({ navigation }: Props): React.ReactNode
   );
 }
 
+interface CartesianPoint {
+  x: number;
+  y: number;
+}
+
+function polarToCartesian(
+  cx: number,
+  cy: number,
+  r: number,
+  angleDeg: number,
+): CartesianPoint {
+  const angleRad = ((angleDeg - 90) * Math.PI) / 180;
+  return { x: cx + r * Math.cos(angleRad), y: cy + r * Math.sin(angleRad) };
+}
+
+function describeArc(
+  cx: number,
+  cy: number,
+  r: number,
+  startDeg: number,
+  endDeg: number,
+): string {
+  const start = polarToCartesian(cx, cy, r, endDeg);
+  const end = polarToCartesian(cx, cy, r, startDeg);
+  const largeArc = endDeg - startDeg <= 180 ? '0' : '1';
+  return `M ${start.x} ${start.y} A ${r} ${r} 0 ${largeArc} 0 ${end.x} ${end.y}`;
+}
+
 const styles = StyleSheet.create({
   safe: {
     flex: 1,
@@ -124,35 +283,30 @@ const styles = StyleSheet.create({
   },
   heroBlock: {
     alignItems: 'center',
-    marginBottom: 36,
+    justifyContent: 'center',
+    height: HALO_SIZE * 0.78,
+    marginBottom: 4,
   },
-  brandMark: {
-    width: 72,
-    height: 72,
-    borderRadius: 22,
-    backgroundColor: ClientColors.primary,
+  halo: {
+    position: 'absolute',
     alignItems: 'center',
     justifyContent: 'center',
-    marginBottom: 18,
-    shadowColor: ClientColors.primary,
-    shadowOpacity: 0.35,
-    shadowRadius: 18,
-    shadowOffset: { width: 0, height: 10 },
-    elevation: 10,
-    transform: [{ rotate: '-6deg' }],
   },
-  title: {
-    fontSize: 30,
-    fontWeight: '700' as const,
-    color: ClientColors.dark,
-    letterSpacing: -0.5,
-    marginBottom: Spacing.sm,
+  ring: {
+    position: 'absolute',
+    alignItems: 'center',
+    justifyContent: 'center',
   },
-  subtitle: {
+  lockup: {
+    width: LOCKUP_WIDTH,
+    height: LOCKUP_HEIGHT,
+  },
+  tagline: {
     fontSize: 15,
     color: ClientColors.textSecondary,
     textAlign: 'center',
     lineHeight: 22,
+    marginBottom: 28,
   },
   formCard: {
     backgroundColor: ClientColors.white,
