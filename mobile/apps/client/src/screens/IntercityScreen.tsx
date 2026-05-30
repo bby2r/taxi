@@ -238,7 +238,15 @@ function SlotCard({
 }): React.ReactNode {
   const free = slot.max_seats - slot.booked_seats;
   const isFull = free <= 0;
+  const isLastSeat = free === 1;
   const progress = Math.min(100, (slot.booked_seats / slot.max_seats) * 100);
+  // Last seat gets coral urgency; otherwise stay neutral teal so the
+  // user isn't alarmed at half-empty cars.
+  const fillColor = isFull
+    ? ClientColors.danger
+    : isLastSeat
+      ? ClientColors.secondary
+      : ClientColors.primary;
   return (
     <TouchableOpacity
       style={[styles.slotCard, isFull && styles.slotCardDisabled]}
@@ -246,28 +254,37 @@ function SlotCard({
       onPress={onPress}
       disabled={isFull}
     >
+      {/* Top row: time leads (что важнее всего — когда выезд),
+          price as the right-aligned counterweight. */}
       <View style={styles.slotHeaderRow}>
-        <Text style={styles.slotRoute}>
-          {slot.from_region} → {slot.to_region}
-        </Text>
-        <Text style={styles.slotTime}>{formatDepartureWithWeekday(slot.departure_at)}</Text>
+        <View style={styles.slotLeft}>
+          <Text style={styles.slotTime}>{formatDepartureWithWeekday(slot.departure_at)}</Text>
+          <Text style={styles.slotRoute}>
+            {slot.from_region} → {slot.to_region}
+          </Text>
+        </View>
+        <View style={styles.slotRight}>
+          <Text style={styles.slotPriceValue}>{slot.price_per_seat}</Text>
+          <Text style={styles.slotPriceUnit}>сом/место</Text>
+        </View>
       </View>
 
       <View style={styles.progressBar}>
-        <View style={[styles.progressFill, { width: `${progress}%` }]} />
+        <View style={[styles.progressFill, { width: `${progress}%`, backgroundColor: fillColor }]} />
       </View>
 
-      <View style={styles.slotMetaRow}>
-        <Text style={styles.slotSeats}>
-          {isFull ? 'Машина заполнена' : `Свободно ${free} из ${slot.max_seats}`}
-        </Text>
-        <Text style={styles.slotPrice}>{slot.price_per_seat} сом/место</Text>
-      </View>
+      <Text style={styles.slotSeats}>
+        {isFull
+          ? 'Машина заполнена'
+          : isLastSeat
+            ? 'Последнее место'
+            : `Свободно ${free} из ${slot.max_seats}`}
+      </Text>
 
       {slot.has_driver && slot.driver_name && (
-        <View style={styles.driverRow}>
-          <Icon name="car" size={14} color={ClientColors.primary} strokeWidth={2.2} />
-          <Text style={styles.driverRowText}>
+        <View style={styles.driverChip}>
+          <Icon name="car" size={14} color={ClientColors.primaryDark} strokeWidth={2.2} />
+          <Text style={styles.driverChipText} numberOfLines={1}>
             {slot.driver_name}
             {slot.car_model && ` · ${slot.car_model}`}
             {slot.car_number && ` ${slot.car_number}`}
@@ -275,9 +292,12 @@ function SlotCard({
         </View>
       )}
       {!slot.has_driver && (
-        <Text style={styles.noDriverHint}>
-          Водитель пока не назначен — первое бронирование ускорит выезд.
-        </Text>
+        <View style={styles.noDriverChip}>
+          <Icon name="spark" size={14} color={ClientColors.secondaryDark} strokeWidth={2.2} />
+          <Text style={styles.noDriverChipText}>
+            Водитель ещё не назначен — бронь ускорит выезд
+          </Text>
+        </View>
       )}
     </TouchableOpacity>
   );
@@ -514,104 +534,133 @@ function BookingModal({
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: ClientColors.background },
   header: {
-    paddingTop: (Platform.OS === 'android' ? StatusBar.currentHeight ?? 0 : 50) + 12,
-    paddingHorizontal: Spacing.xl,
+    paddingTop: (Platform.OS === 'android' ? StatusBar.currentHeight ?? 0 : 50) + Spacing.md,
+    paddingHorizontal: Spacing.lg,
     paddingBottom: Spacing.lg,
-    backgroundColor: ClientColors.cardBackground,
-    borderBottomWidth: 1,
-    borderBottomColor: ClientColors.border,
   },
   headerTitle: {
-    fontSize: 24,
+    fontSize: 26,
     fontWeight: '700' as const,
     color: ClientColors.dark,
-    letterSpacing: -0.3,
+    letterSpacing: -0.4,
   },
   headerSubtitle: {
-    fontSize: 13,
+    fontSize: 14,
     color: ClientColors.textSecondary,
     marginTop: 2,
   },
   scrollContent: { padding: Spacing.lg, paddingBottom: 80 },
   sectionTitle: {
-    ...Typography.overline,
-    textTransform: 'uppercase',
+    fontSize: 13,
+    fontWeight: '600' as const,
     color: ClientColors.textSecondary,
-    marginBottom: 10,
+    marginBottom: Spacing.md,
     paddingLeft: Spacing.xs,
   },
 
   slotCard: {
     backgroundColor: ClientColors.cardBackground,
-    borderRadius: Radius.lg,
-    paddingHorizontal: 18,
-    paddingVertical: 14,
-    marginBottom: 10,
+    borderRadius: Radius.xl,
+    paddingHorizontal: Spacing.lg,
+    paddingVertical: Spacing.lg,
+    marginBottom: Spacing.md,
     borderWidth: 1,
     borderColor: ClientColors.border,
   },
   slotCardDisabled: { opacity: 0.55 },
   slotHeaderRow: {
     flexDirection: 'row',
-    alignItems: 'center',
+    alignItems: 'flex-start',
     justifyContent: 'space-between',
-    marginBottom: 10,
+    marginBottom: Spacing.md,
+    gap: Spacing.md,
   },
-  slotRoute: {
-    ...Typography.h4,
+  slotLeft: {
     flex: 1,
-    color: ClientColors.dark,
   },
   slotTime: {
+    fontSize: 17,
+    fontWeight: '700' as const,
+    color: ClientColors.dark,
+    letterSpacing: -0.2,
+  },
+  slotRoute: {
     fontSize: 13,
+    color: ClientColors.textSecondary,
+    marginTop: 2,
+  },
+  slotRight: {
+    alignItems: 'flex-end',
+  },
+  slotPriceValue: {
+    fontSize: 20,
     fontWeight: '700' as const,
     color: ClientColors.primaryDark,
-    backgroundColor: ClientColors.primaryTint,
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-    borderRadius: 10,
-    overflow: 'hidden',
+    letterSpacing: -0.2,
   },
-  slotMetaRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    marginTop: 10,
+  slotPriceUnit: {
+    fontSize: 11,
+    color: ClientColors.textMuted,
+    marginTop: -2,
   },
   slotSeats: {
-    fontSize: 13,
+    fontSize: 12,
     fontWeight: '600' as const,
-    color: ClientColors.dark,
+    color: ClientColors.textSecondary,
+    marginTop: Spacing.sm,
   },
-  slotPrice: {
-    fontSize: 13,
-    fontWeight: '700' as const,
-    color: ClientColors.primaryDark,
-  },
-  driverRow: {
+  driverChip: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 6,
-    marginTop: 8,
+    marginTop: Spacing.md,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: Radius.round,
+    backgroundColor: ClientColors.primaryTint,
+    alignSelf: 'flex-start',
+    maxWidth: '100%',
   },
-  driverRowText: {
+  driverChipText: {
     fontSize: 12,
-    color: ClientColors.textSecondary,
-    flex: 1,
+    fontWeight: '600' as const,
+    color: ClientColors.primaryDark,
+    flexShrink: 1,
   },
-  noDriverHint: {
+  noDriverChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    marginTop: Spacing.md,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: Radius.round,
+    backgroundColor: ClientColors.secondaryTint,
+    alignSelf: 'flex-start',
+    maxWidth: '100%',
+  },
+  noDriverChipText: {
     fontSize: 12,
-    color: ClientColors.textMuted,
-    marginTop: 8,
-    fontStyle: 'italic',
+    fontWeight: '600' as const,
+    color: ClientColors.secondaryDark,
+    flexShrink: 1,
   },
 
+  // The active booking is THE thing on this screen — gets a soft
+  // teal halo via shadow instead of a 1px primary border. Reads as
+  // "selected/elevated" without the harsh outline.
   activeCard: {
     backgroundColor: ClientColors.cardBackground,
-    borderRadius: 18,
-    padding: 18,
-    marginBottom: 18,
+    borderRadius: Radius.xl,
+    padding: Spacing.lg,
+    marginBottom: Spacing.lg,
     borderWidth: 1,
-    borderColor: ClientColors.primary,
+    borderColor: ClientColors.border,
+    shadowColor: ClientColors.primary,
+    shadowOpacity: 0.18,
+    shadowRadius: 18,
+    shadowOffset: { width: 0, height: 8 },
+    elevation: 6,
   },
   activeHeader: {
     flexDirection: 'row',
@@ -748,24 +797,21 @@ const styles = StyleSheet.create({
     padding: Spacing.xl,
   },
   modalSummary: {
-    backgroundColor: ClientColors.cardBackground,
+    backgroundColor: ClientColors.surfaceMuted,
     borderRadius: Radius.lg,
     padding: Spacing.lg,
-    borderWidth: 1,
-    borderColor: ClientColors.border,
   },
   modalSummaryLabel: {
     fontSize: 12,
-    fontWeight: '700' as const,
+    fontWeight: '600' as const,
     color: ClientColors.textSecondary,
-    textTransform: 'uppercase',
-    letterSpacing: 0.6,
   },
   modalSummaryValue: {
     fontSize: 20,
     fontWeight: '700' as const,
     color: ClientColors.dark,
-    marginTop: 6,
+    marginTop: 4,
+    letterSpacing: -0.2,
   },
   modalSummaryMeta: {
     fontSize: 13,
@@ -773,18 +819,16 @@ const styles = StyleSheet.create({
     marginTop: 6,
   },
   modalLabel: {
-    fontSize: 12,
-    fontWeight: '700' as const,
+    fontSize: 13,
+    fontWeight: '600' as const,
     color: ClientColors.textSecondary,
-    textTransform: 'uppercase',
-    letterSpacing: 0.6,
     marginBottom: 10,
   },
-  seatsRow: { flexDirection: 'row', gap: 10 },
+  seatsRow: { flexDirection: 'row', gap: Spacing.md },
   seatChip: {
     flex: 1,
-    height: 56,
-    borderRadius: 14,
+    height: 52,
+    borderRadius: Radius.md,
     borderWidth: 1,
     borderColor: ClientColors.border,
     backgroundColor: ClientColors.cardBackground,
