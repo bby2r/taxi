@@ -86,7 +86,25 @@ jobs:
 
       - name: Install npm dependencies (workspace root)
         working-directory: mobile
-        run: npm ci
+        run: |
+          # registry.npmjs.org периодически дропает соединение посреди
+          # установки (ECONNRESET) на runner'ах. Поднимаем встроенные
+          # ретраи npm и оборачиваем всё в цикл — три попытки с паузой
+          # лучше, чем падать на флаки сети.
+          npm config set fetch-retries 5
+          npm config set fetch-retry-mintimeout 20000
+          npm config set fetch-retry-maxtimeout 120000
+          for attempt in 1 2 3; do
+            if npm ci; then
+              break
+            fi
+            if [ "$attempt" = "3" ]; then
+              echo "::error::npm ci failed after 3 attempts"
+              exit 1
+            fi
+            echo "npm ci attempt $attempt failed, retrying in 20s..."
+            sleep 20
+          done
 
       - name: Write google-services.json from secret (driver only)
         if: matrix.app == 'driver'
