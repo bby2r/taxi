@@ -6,10 +6,6 @@
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "light",
-    "splash": {
-      "resizeMode": "contain",
-      "backgroundColor": "#F4FBFA"
-    },
     "ios": {
       "supportsTablet": false,
       "bundleIdentifier": "kg.aliftaxi.client",
@@ -49,6 +45,15 @@
           "android": {
             "extraMavenRepos": []
           }
+        }
+      ],
+      [
+        "expo-splash-screen",
+        {
+          "image": "./assets/alif-lockup.png",
+          "imageWidth": 130,
+          "resizeMode": "contain",
+          "backgroundColor": "#F4FBFA"
         }
       ],
       "expo-secure-store"

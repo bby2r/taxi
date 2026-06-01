@@ -45,6 +45,11 @@ jobs:
       # repo (GitHub Push Protection treats any Mapbox token as a secret
       # — easier to env-var both halves than to allow-list each pk).
       EXPO_PUBLIC_MAPBOX_TOKEN: ${{ secrets.EXPO_PUBLIC_MAPBOX_TOKEN }}
+      # 2GIS MapGL JS demo key — bundled into the driver app for the
+      # in-WebView map (replaces Mapbox in driver-side screens to give
+      # KG villages proper house-number coverage). Without this the
+      # WebView shows blank tiles; the rest of the app still works.
+      EXPO_PUBLIC_TWOGIS_KEY: ${{ secrets.EXPO_PUBLIC_TWOGIS_KEY }}
 
     steps:
       - name: Checkout repository
@@ -81,7 +86,25 @@ jobs:
 
       - name: Install npm dependencies (workspace root)
         working-directory: mobile
-        run: npm ci
+        run: |
+          # registry.npmjs.org периодически дропает соединение посреди
+          # установки (ECONNRESET) на runner'ах. Поднимаем встроенные
+          # ретраи npm и оборачиваем всё в цикл — три попытки с паузой
+          # лучше, чем падать на флаки сети.
+          npm config set fetch-retries 5
+          npm config set fetch-retry-mintimeout 20000
+          npm config set fetch-retry-maxtimeout 120000
+          for attempt in 1 2 3; do
+            if npm ci; then
+              break
+            fi
+            if [ "$attempt" = "3" ]; then
+              echo "::error::npm ci failed after 3 attempts"
+              exit 1
+            fi
+            echo "npm ci attempt $attempt failed, retrying in 20s..."
+            sleep 20
+          done
 
       - name: Write google-services.json from secret (driver only)
         if: matrix.app == 'driver'
@@ -116,6 +139,18 @@ jobs:
           mkdir -p ~/.gradle
           echo "MAPBOX_DOWNLOADS_TOKEN=$MAPBOX_DOWNLOADS_TOKEN" >> ~/.gradle/gradle.properties
           echo "Mapbox downloads token written to ~/.gradle/gradle.properties"
+
+      - name: Verify required EXPO_PUBLIC_* secrets present (driver only)
+        if: matrix.app == 'driver'
+        run: |
+          # Без 2GIS-ключа карта в водительском APK будет чёрной — это
+          # происходило молча, пока в TwoGisMapView не появился видимый
+          # error-оверлей. Лучше упасть тут с понятным сообщением, чем
+          # выкатить мёртвый APK драйверам.
+          if [ -z "${EXPO_PUBLIC_TWOGIS_KEY:-}" ]; then
+            echo "::error::EXPO_PUBLIC_TWOGIS_KEY secret не задан в репо. Settings → Secrets → Actions → New repository secret."
+            exit 1
+          fi
 
       - name: Expo prebuild (generate native android project)
         working-directory: mobile/apps/${{ matrix.app }}
