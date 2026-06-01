@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
   Alert,
   View,
@@ -10,7 +10,7 @@ import {
   StatusBar,
   Modal,
 } from 'react-native';
-import Mapbox from '@rnmapbox/maps';
+import BottomSheet, { BottomSheetView } from '@gorhom/bottom-sheet';
 import { useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import {
@@ -24,7 +24,7 @@ import {
 } from '@taxi/shared';
 import type { Order, DriverCancellationReason, Route } from '@taxi/shared';
 import { useDriverOrder } from '../hooks/useDriverOrder';
-import DriverArrow from '../components/DriverArrow';
+import TwoGisMapView, { type TwoGisMapHandle } from '../components/TwoGisMapView';
 import type { DriverStackParamList } from '../navigation/types';
 
 // Driver must be within this distance of the pickup point before they can
@@ -430,7 +430,12 @@ export default function OrderActiveScreen(): React.ReactNode {
     dismissCompleted,
     loading,
   } = useDriverOrder();
-  const cameraRef = useRef<Mapbox.Camera>(null);
+  const mapRef = useRef<TwoGisMapHandle>(null);
+  const bottomSheetRef = useRef<BottomSheet>(null);
+  // Three positions like Yandex Taxi driver: barely visible (just handle
+  // + ETA peek), default (all key info + main action), expanded (full
+  // details, room for future content). Driver swipes between them.
+  const snapPoints = useMemo(() => ['18%', '48%', '88%'], []);
   const driverLocation = useLocation();
   const [cancelSheetOpen, setCancelSheetOpen] = useState(false);
   const [pendingAction, setPendingAction] = useState<null | {
@@ -497,6 +502,15 @@ export default function OrderActiveScreen(): React.ReactNode {
       navigation.goBack();
     }
   }, [state.phase, navigation]);
+
+  // CompletedCard is centered and needs the full sheet to render
+  // correctly — auto-expand on completion so the driver sees the
+  // payout summary without having to swipe.
+  useEffect(() => {
+    if (state.phase === 'completed') {
+      bottomSheetRef.current?.snapToIndex(2);
+    }
+  }, [state.phase]);
 
   // Block the Android hardware back button + swipe-back gesture while
   // there's an active order. Previously the driver could press back,
@@ -606,57 +620,33 @@ export default function OrderActiveScreen(): React.ReactNode {
   }, [state.phase]);
 
   useEffect(() => {
-    if (!cameraRef.current || !order) return;
+    if (!order) return;
     if (!following) return; // user panned away — respect their view
     if (isNavigating && driverPoint) {
-      // Tilt + bearing + zoom. Heading comes from expo-location's
-      // `useLocation` hook (degrees, 0 = north) — Mapbox uses the same
-      // convention. animationDuration = 1000ms keeps the camera glide
-      // smooth rather than snapping per fix.
-      //
-      // padding shifts where in the viewport the centerCoordinate lands.
-      // Big paddingBottom pushes the visual center upward, so the driver
-      // arrow sits in the lower-third of the screen — leaves room to
-      // see the road ahead, matching navigation-app convention.
-      cameraRef.current.setCamera({
-        centerCoordinate: [driverPoint.longitude, driverPoint.latitude],
-        zoomLevel: 17,
-        pitch: 55,
-        heading:
+      // Navigation cam: center on driver, zoom in close, rotate to
+      // heading. (MapGL JS does support pitch via setPitch, but we
+      // keep the v1 simple — no tilt for now.)
+      mapRef.current?.setCenter(driverPoint, {
+        zoom: 17,
+        bearing:
           typeof driverLocation.heading === 'number' && driverLocation.heading >= 0
             ? driverLocation.heading
             : 0,
-        padding: { paddingTop: 60, paddingBottom: 380, paddingLeft: 0, paddingRight: 0 },
-        animationDuration: 1000,
       });
       return;
     }
-    // Overview: compute lat/lng bounds from route or available points.
-    const coords =
+    // Overview: fit bounds across route + key points so the operator
+    // sees the whole trip.
+    const coords: Array<[number, number]> =
       route && route.coordinates.length > 0
-        ? route.coordinates
+        ? route.coordinates.map((c) => [c.longitude, c.latitude])
         : [
-            ...(pickupPoint ? [pickupPoint] : []),
-            ...(dropoffPoint ? [dropoffPoint] : []),
-            ...(driverPoint ? [driverPoint] : []),
-          ];
+            ...(pickupPoint ? [[pickupPoint.longitude, pickupPoint.latitude]] : []),
+            ...(dropoffPoint ? [[dropoffPoint.longitude, dropoffPoint.latitude]] : []),
+            ...(driverPoint ? [[driverPoint.longitude, driverPoint.latitude]] : []),
+          ] as Array<[number, number]>;
     if (coords.length === 0) return;
-    let minLat = coords[0].latitude;
-    let maxLat = coords[0].latitude;
-    let minLng = coords[0].longitude;
-    let maxLng = coords[0].longitude;
-    for (const c of coords) {
-      if (c.latitude < minLat) minLat = c.latitude;
-      if (c.latitude > maxLat) maxLat = c.latitude;
-      if (c.longitude < minLng) minLng = c.longitude;
-      if (c.longitude > maxLng) maxLng = c.longitude;
-    }
-    cameraRef.current.fitBounds(
-      [maxLng, maxLat], // NE
-      [minLng, minLat], // SW
-      [80, 60, 60, 60], // padding: top, right, bottom, left
-      800,
-    );
+    mapRef.current?.fitBounds(coords, 80);
   }, [
     isNavigating,
     order,
@@ -666,6 +656,47 @@ export default function OrderActiveScreen(): React.ReactNode {
     driverLocation.heading,
     following,
   ]);
+
+  // Push current driver position into the WebView pin (independent of
+  // the camera-follow loop above — we always want the pin to track GPS
+  // even when the user has panned away).
+  useEffect(() => {
+    if (!driverPoint) return;
+    if (!(state.phase === 'active' || state.phase === 'in_progress')) return;
+    mapRef.current?.setDriver({
+      latitude: driverPoint.latitude,
+      longitude: driverPoint.longitude,
+      heading: driverLocation.heading,
+    });
+  }, [
+    driverPoint?.latitude,
+    driverPoint?.longitude,
+    driverLocation.heading,
+    state.phase,
+  ]);
+
+  // Push pickup + dropoff markers. The set is recomputed whenever any
+  // of the coords change; passing null clears.
+  useEffect(() => {
+    mapRef.current?.setMarkers({
+      pickup: pickupPoint,
+      dropoff: dropoffPoint,
+    });
+  }, [
+    pickupPoint?.latitude,
+    pickupPoint?.longitude,
+    dropoffPoint?.latitude,
+    dropoffPoint?.longitude,
+  ]);
+
+  // Push route polyline coords. Empty array clears the line.
+  useEffect(() => {
+    const coords: Array<[number, number]> = trimmedCoordinates.map((c) => [
+      c.longitude,
+      c.latitude,
+    ]);
+    mapRef.current?.setRoute(coords);
+  }, [trimmedCoordinates]);
 
   if (!order) {
     return null;
@@ -683,87 +714,26 @@ export default function OrderActiveScreen(): React.ReactNode {
 
   return (
     <View style={styles.container}>
-      <Mapbox.MapView
+      <TwoGisMapView
+        ref={mapRef}
         style={styles.map}
-        styleURL={Mapbox.StyleURL.TrafficDay}
-        compassEnabled={false}
-        scaleBarEnabled={false}
-        logoEnabled={false}
-        attributionEnabled={false}
-        onCameraChanged={(state) => {
-          // reason === 'gesture' fires only when the driver pans/pinches
-          // — we never trigger gestures from code. Break follow so our
-          // useEffect stops fighting the driver's view. They'll get a
-          // "Вернуться к маршруту" button to opt back in.
-          if (
-            following &&
-            isNavigating &&
-            (state as { gestures?: { isGestureActive?: boolean } }).gestures
-              ?.isGestureActive
-          ) {
+        initialCenter={
+          driverPoint
+            ? [driverPoint.longitude, driverPoint.latitude]
+            : pickupPoint
+              ? [pickupPoint.longitude, pickupPoint.latitude]
+              : undefined
+        }
+        initialZoom={14}
+        onUserGesture={() => {
+          // Driver panned/pinched — drop follow so our camera effect
+          // stops fighting their view. "Вернуться к маршруту" button
+          // below re-engages it.
+          if (following && isNavigating) {
             setFollowing(false);
           }
         }}
-      >
-        <Mapbox.Camera ref={cameraRef} />
-
-        {/* Thick highlighted route polyline — drawn first so markers
-            sit on top. Style stays the same in both navigation and
-            overview camera modes. */}
-        {trimmedCoordinates.length > 1 && (
-          <Mapbox.ShapeSource
-            id="route-source"
-            shape={{
-              type: 'Feature',
-              properties: {},
-              geometry: {
-                type: 'LineString',
-                coordinates: trimmedCoordinates.map((c) => [c.longitude, c.latitude]),
-              },
-            }}
-          >
-            <Mapbox.LineLayer
-              id="route-line"
-              style={{
-                lineColor: DriverColors.primary,
-                lineWidth: 9,
-                lineCap: 'round',
-                lineJoin: 'round',
-                lineOpacity: 0.95,
-              }}
-            />
-          </Mapbox.ShapeSource>
-        )}
-
-        {pickupPoint && (
-          <Mapbox.PointAnnotation
-            id="pickup"
-            coordinate={[pickupPoint.longitude, pickupPoint.latitude]}
-            title={order.pickup_address || 'Клиент'}
-          >
-            <View style={styles.pickupPin} />
-          </Mapbox.PointAnnotation>
-        )}
-
-        {dropoffPoint && (
-          <Mapbox.PointAnnotation
-            id="dropoff"
-            coordinate={[dropoffPoint.longitude, dropoffPoint.latitude]}
-            title={order.dropoff_address || order.region?.name || 'Пункт Б'}
-          >
-            <View style={styles.dropoffPin} />
-          </Mapbox.PointAnnotation>
-        )}
-
-        {driverPoint && (state.phase === 'active' || state.phase === 'in_progress') && (
-          <Mapbox.PointAnnotation
-            id="driver"
-            coordinate={[driverPoint.longitude, driverPoint.latitude]}
-          >
-            <DriverArrow heading={driverLocation.heading} online />
-          </Mapbox.PointAnnotation>
-        )}
-      </Mapbox.MapView>
+      />
 
       {/* Re-engage follow camera. Shows only when driver opted out of
           follow by panning the map mid-navigation. Tap snaps back to
@@ -779,45 +749,54 @@ export default function OrderActiveScreen(): React.ReactNode {
         </TouchableOpacity>
       )}
 
-      <View style={styles.bottomCard}>
-        {state.phase === 'active' && (
-          <EnRouteCard
-            order={order}
-            onMarkArrived={requestArrived}
-            loading={loading}
-            route={route}
-            routeLoading={routeLoading}
-            routeError={routeError}
-            locationError={driverLocation.error}
-            distanceToPickup={
-              driverPoint && pickupPoint
-                ? haversineMeters(driverPoint, pickupPoint)
-                : null
-            }
-          />
-        )}
-        {state.phase === 'arrived' && (
-          <ArrivedCard
-            order={order}
-            onMarkStarted={requestStart}
-            onCancelRequest={() => setCancelSheetOpen(true)}
-            loading={loading}
-          />
-        )}
-        {state.phase === 'in_progress' && (
-          <InProgressCard
-            order={order}
-            onMarkCompleted={requestComplete}
-            loading={loading}
-            route={route}
-            routeLoading={routeLoading}
-            routeError={routeError}
-          />
-        )}
-        {state.phase === 'completed' && (
-          <CompletedCard order={order} onDismiss={handleDismiss} />
-        )}
-      </View>
+      <BottomSheet
+        ref={bottomSheetRef}
+        index={1}
+        snapPoints={snapPoints}
+        enablePanDownToClose={false}
+        backgroundStyle={styles.sheetBackground}
+        handleIndicatorStyle={styles.sheetHandle}
+      >
+        <BottomSheetView style={styles.sheetInner}>
+          {state.phase === 'active' && (
+            <EnRouteCard
+              order={order}
+              onMarkArrived={requestArrived}
+              loading={loading}
+              route={route}
+              routeLoading={routeLoading}
+              routeError={routeError}
+              locationError={driverLocation.error}
+              distanceToPickup={
+                driverPoint && pickupPoint
+                  ? haversineMeters(driverPoint, pickupPoint)
+                  : null
+              }
+            />
+          )}
+          {state.phase === 'arrived' && (
+            <ArrivedCard
+              order={order}
+              onMarkStarted={requestStart}
+              onCancelRequest={() => setCancelSheetOpen(true)}
+              loading={loading}
+            />
+          )}
+          {state.phase === 'in_progress' && (
+            <InProgressCard
+              order={order}
+              onMarkCompleted={requestComplete}
+              loading={loading}
+              route={route}
+              routeLoading={routeLoading}
+              routeError={routeError}
+            />
+          )}
+          {state.phase === 'completed' && (
+            <CompletedCard order={order} onDismiss={handleDismiss} />
+          )}
+        </BottomSheetView>
+      </BottomSheet>
 
       <CancelSheet
         visible={cancelSheetOpen}
@@ -849,17 +828,24 @@ const styles = StyleSheet.create({
     backgroundColor: DriverColors.background,
   },
   map: {
-    flex: 0.6,
+    ...StyleSheet.absoluteFillObject,
   },
-  bottomCard: {
-    flex: 0.4,
+  sheetBackground: {
     backgroundColor: DriverColors.background,
     borderTopLeftRadius: 24,
     borderTopRightRadius: 24,
+  },
+  sheetHandle: {
+    backgroundColor: DriverColors.border,
+    width: 44,
+    height: 5,
+    borderRadius: 3,
+  },
+  sheetInner: {
+    flex: 1,
     paddingHorizontal: 20,
-    paddingTop: 20,
+    paddingTop: 8,
     paddingBottom: 34,
-    marginTop: -24,
   },
   cardContent: {
     flex: 1,
@@ -878,8 +864,12 @@ const styles = StyleSheet.create({
     borderColor: '#fff',
   },
   recenterButton: {
+    // Sits just above the default snap (~48% of screen height). When
+    // the driver collapses the sheet they still see this button; when
+    // they expand it the button gets covered (acceptable — driver is
+    // reading the card, not steering the map at that moment).
     position: 'absolute',
-    bottom: 320,
+    bottom: '50%',
     alignSelf: 'center',
     flexDirection: 'row',
     alignItems: 'center',
@@ -903,32 +893,6 @@ const styles = StyleSheet.create({
     color: DriverColors.textPrimary,
     fontSize: 14,
     fontWeight: '700' as const,
-  },
-  pickupPin: {
-    width: 18,
-    height: 18,
-    borderRadius: 9,
-    backgroundColor: DriverColors.primary,
-    borderWidth: 4,
-    borderColor: '#fff',
-    shadowColor: '#000',
-    shadowOpacity: 0.25,
-    shadowRadius: 4,
-    shadowOffset: { width: 0, height: 2 },
-    elevation: 4,
-  },
-  dropoffPin: {
-    width: 18,
-    height: 18,
-    borderRadius: 9,
-    backgroundColor: DriverColors.success,
-    borderWidth: 4,
-    borderColor: '#fff',
-    shadowColor: '#000',
-    shadowOpacity: 0.25,
-    shadowRadius: 4,
-    shadowOffset: { width: 0, height: 2 },
-    elevation: 4,
   },
   distanceHint: {
     color: DriverColors.textMuted,

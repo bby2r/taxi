@@ -11,7 +11,6 @@ import {
   ActivityIndicator,
   Linking,
 } from 'react-native';
-import Mapbox from '@rnmapbox/maps';
 import * as Location from 'expo-location';
 import { useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
@@ -40,7 +39,7 @@ import {
 import OrderOfferCard from '../components/OrderOfferCard';
 import PermissionGate from '../components/PermissionGate';
 import OemSetupWizard, { PROBLEMATIC_OEMS } from '../components/OemSetupWizard';
-import DriverArrow from '../components/DriverArrow';
+import TwoGisMapView, { type TwoGisMapHandle } from '../components/TwoGisMapView';
 
 // Lazy — SecureStore lives in the client too but the driver app may
 // have an older bundle without it; degrade to in-memory so we don't
@@ -79,7 +78,7 @@ export default function HomeScreen(): React.ReactNode {
   const driverLocation = useLocation();
   useDriverLocation({ enabled: isOnline });
   const [hasActiveIntercity, setHasActiveIntercity] = useState(false);
-  const cameraRef = useRef<Mapbox.Camera>(null);
+  const mapRef = useRef<TwoGisMapHandle>(null);
   const pushStatus = usePushStatus();
   const [fsiStatus, setFsiStatus] = useState<FullScreenIntentStatus>('unknown');
   const [overlayGranted, setOverlayGranted] = useState<boolean>(true);
@@ -205,26 +204,29 @@ export default function HomeScreen(): React.ReactNode {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [state.phase]);
 
-  // Re-center map when the driver actually moves, not only on
-  // loading / error transitions. The previous effect read `latitude` and
-  // `longitude` but didn't list them as deps, so once we got our first
-  // fix the camera never followed the driver. Camera updates are cheap;
-  // the upstream useLocation hook already throttles location pushes to
-  // ~5 s / 10 m, so this only fires on meaningful movement.
+  // Re-center map + update the driver pin whenever location actually
+  // moves. The hook throttles pushes to ~5s / 10m so this only fires
+  // on meaningful movement. Pin heading reflects driverLocation.heading
+  // in degrees, 0 = north — same convention 2GIS expects.
   useEffect(() => {
-    if (driverLocation.loading || driverLocation.error || !cameraRef.current) {
+    if (driverLocation.loading || driverLocation.error) {
       return;
     }
-    cameraRef.current.setCamera({
-      centerCoordinate: [driverLocation.longitude, driverLocation.latitude],
-      zoomLevel: 15,
-      animationDuration: 600,
+    mapRef.current?.setDriver({
+      latitude: driverLocation.latitude,
+      longitude: driverLocation.longitude,
+      heading: driverLocation.heading,
     });
+    mapRef.current?.setCenter(
+      { latitude: driverLocation.latitude, longitude: driverLocation.longitude },
+      { zoom: 15 },
+    );
   }, [
     driverLocation.loading,
     driverLocation.error,
     driverLocation.latitude,
     driverLocation.longitude,
+    driverLocation.heading,
   ]);
 
   const performToggle = async (): Promise<void> => {
@@ -308,14 +310,13 @@ export default function HomeScreen(): React.ReactNode {
   };
 
   const handleRecenter = (): void => {
-    if (driverLocation.loading || driverLocation.error || !cameraRef.current) {
+    if (driverLocation.loading || driverLocation.error) {
       return;
     }
-    cameraRef.current.setCamera({
-      centerCoordinate: [driverLocation.longitude, driverLocation.latitude],
-      zoomLevel: 16,
-      animationDuration: 400,
-    });
+    mapRef.current?.setCenter(
+      { latitude: driverLocation.latitude, longitude: driverLocation.longitude },
+      { zoom: 16 },
+    );
   };
 
   const driverPoint =
@@ -335,31 +336,12 @@ export default function HomeScreen(): React.ReactNode {
         translucent
       />
 
-      <Mapbox.MapView
+      <TwoGisMapView
+        ref={mapRef}
+        initialCenter={initialCenter}
+        initialZoom={14}
         style={StyleSheet.absoluteFill}
-        styleURL={Mapbox.StyleURL.TrafficDay}
-        compassEnabled={false}
-        scaleBarEnabled={false}
-        logoEnabled={false}
-        attributionEnabled={false}
-      >
-        <Mapbox.Camera
-          ref={cameraRef}
-          defaultSettings={{
-            centerCoordinate: initialCenter,
-            zoomLevel: 14,
-          }}
-        />
-
-        {driverPoint && (
-          <Mapbox.PointAnnotation
-            id="driver-self"
-            coordinate={[driverPoint.longitude, driverPoint.latitude]}
-          >
-            <DriverArrow heading={driverLocation.heading} online={isOnline} />
-          </Mapbox.PointAnnotation>
-        )}
-      </Mapbox.MapView>
+      />
 
       <View style={styles.topBar} pointerEvents="box-none">
         <View style={styles.topPill}>
