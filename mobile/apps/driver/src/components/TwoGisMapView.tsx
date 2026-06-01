@@ -5,10 +5,11 @@ import React, {
   useImperativeHandle,
   useMemo,
   useRef,
+  useState,
 } from 'react';
-import { StyleSheet, View, ActivityIndicator } from 'react-native';
+import { StyleSheet, View, ActivityIndicator, Text } from 'react-native';
 import { WebView, type WebViewMessageEvent } from 'react-native-webview';
-import { DriverColors } from '@taxi/shared';
+import { DriverColors, Typography } from '@taxi/shared';
 import {
   TWOGIS_API_KEY,
   TWOGIS_DEFAULT_CENTER,
@@ -269,6 +270,11 @@ const TwoGisMapView = forwardRef<TwoGisMapHandle, Props>(function TwoGisMapView(
   // replayed on 'ready'. Otherwise a fast-mounted parent that calls
   // setDriver immediately would see the call silently dropped.
   const queueRef = useRef<object[]>([]);
+  // Видимая диагностика — иначе при пустом TWOGIS_API_KEY или
+  // ошибках init у пользователя просто чёрный квадрат без понимания
+  // что не так.
+  const keyMissing = TWOGIS_API_KEY.length === 0;
+  const [initError, setInitError] = useState<string | null>(null);
 
   const html = useMemo(
     () => buildHtml(TWOGIS_API_KEY, initialCenter, initialZoom),
@@ -319,9 +325,9 @@ const TwoGisMapView = forwardRef<TwoGisMapHandle, Props>(function TwoGisMapView(
         } else if (data.type === 'gesture') {
           onUserGesture?.();
         } else if (data.type === 'error') {
-          // Surface map errors to console — easier to debug than silent failure.
           // eslint-disable-next-line no-console
           console.warn('[TwoGisMapView] map error:', data.message);
+          setInitError(data.message ?? 'Не удалось загрузить карту');
         }
       } catch {
         // Malformed message — ignore.
@@ -361,6 +367,18 @@ const TwoGisMapView = forwardRef<TwoGisMapHandle, Props>(function TwoGisMapView(
         overScrollMode="never"
         setSupportMultipleWindows={false}
       />
+      {(keyMissing || initError) && (
+        <View style={styles.errorOverlay} pointerEvents="none">
+          <Text style={[Typography.bodyBold, styles.errorTitle]}>
+            {keyMissing ? 'Карта не настроена' : 'Карта недоступна'}
+          </Text>
+          <Text style={[Typography.caption, styles.errorBody]}>
+            {keyMissing
+              ? 'EXPO_PUBLIC_TWOGIS_KEY не попал в сборку. Пересоберите APK с ключом в .env (см. apps/driver/src/lib/twoGisConfig.ts).'
+              : initError}
+          </Text>
+        </View>
+      )}
     </View>
   );
 });
@@ -381,5 +399,22 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
     backgroundColor: DriverColors.background,
+  },
+  errorOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingHorizontal: 24,
+    backgroundColor: DriverColors.background,
+  },
+  errorTitle: {
+    color: DriverColors.danger,
+    marginBottom: 8,
+    textAlign: 'center',
+  },
+  errorBody: {
+    color: DriverColors.textSecondary,
+    textAlign: 'center',
+    lineHeight: 18,
   },
 });

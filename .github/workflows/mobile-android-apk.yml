@@ -140,6 +140,18 @@ jobs:
           echo "MAPBOX_DOWNLOADS_TOKEN=$MAPBOX_DOWNLOADS_TOKEN" >> ~/.gradle/gradle.properties
           echo "Mapbox downloads token written to ~/.gradle/gradle.properties"
 
+      - name: Verify required EXPO_PUBLIC_* secrets present (driver only)
+        if: matrix.app == 'driver'
+        run: |
+          # Без 2GIS-ключа карта в водительском APK будет чёрной — это
+          # происходило молча, пока в TwoGisMapView не появился видимый
+          # error-оверлей. Лучше упасть тут с понятным сообщением, чем
+          # выкатить мёртвый APK драйверам.
+          if [ -z "${EXPO_PUBLIC_TWOGIS_KEY:-}" ]; then
+            echo "::error::EXPO_PUBLIC_TWOGIS_KEY secret не задан в репо. Settings → Secrets → Actions → New repository secret."
+            exit 1
+          fi
+
       - name: Expo prebuild (generate native android project)
         working-directory: mobile/apps/${{ matrix.app }}
         run: npx expo prebuild --platform android --no-install --clean
