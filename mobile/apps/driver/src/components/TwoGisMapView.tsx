@@ -74,6 +74,69 @@ function buildHtml(apiKey: string, center: [number, number], zoom: number): stri
         background: ${DriverColors.success};
       }
     </style>
+    <script>
+      // Перехват fetch / XHR ДО загрузки mapgl, чтобы поймать реальный
+      // failing URL и HTTP-код. Без этого MapGL глотает причину и
+      // эмитит styleloaderror без полезных полей. Логируем только
+      // запросы к 2GIS — чтобы не светить чужой трафик в overlay.
+      (function () {
+        function post(payload) {
+          if (window.ReactNativeWebView && window.ReactNativeWebView.postMessage) {
+            window.ReactNativeWebView.postMessage(JSON.stringify(payload));
+          }
+        }
+        window.__twoGisNetLog = [];
+        function logNet(entry) {
+          window.__twoGisNetLog.push(entry);
+          if (window.__twoGisNetLog.length > 40) window.__twoGisNetLog.shift();
+          if (entry.failed) {
+            post({ type: 'error', message: 'net ' + (entry.status || 'fail') + ' ' + entry.url + (entry.body ? ' :: ' + entry.body.slice(0, 200) : '') });
+          }
+        }
+        var origFetch = window.fetch;
+        window.fetch = function (input, init) {
+          var url = typeof input === 'string' ? input : (input && input.url) || '';
+          var is2gis = /2gis\\.|2gis\\.com/.test(url);
+          return origFetch.apply(this, arguments).then(function (resp) {
+            if (is2gis && !resp.ok) {
+              resp.clone().text().then(function (body) {
+                logNet({ url: url, status: resp.status, failed: true, body: body });
+              }).catch(function () {
+                logNet({ url: url, status: resp.status, failed: true });
+              });
+            }
+            return resp;
+          }).catch(function (err) {
+            if (is2gis) {
+              logNet({ url: url, failed: true, body: 'throw: ' + (err && err.message) });
+            }
+            throw err;
+          });
+        };
+        var origOpen = XMLHttpRequest.prototype.open;
+        var origSend = XMLHttpRequest.prototype.send;
+        XMLHttpRequest.prototype.open = function (method, url) {
+          this.__url = url;
+          return origOpen.apply(this, arguments);
+        };
+        XMLHttpRequest.prototype.send = function () {
+          var xhr = this;
+          var url = xhr.__url || '';
+          var is2gis = /2gis\\.|2gis\\.com/.test(url);
+          xhr.addEventListener('loadend', function () {
+            if (is2gis && (xhr.status === 0 || xhr.status >= 400)) {
+              logNet({
+                url: url,
+                status: xhr.status,
+                failed: true,
+                body: (xhr.responseText || '').slice(0, 200),
+              });
+            }
+          });
+          return origSend.apply(this, arguments);
+        };
+      })();
+    </script>
     <script src="https://mapgl.2gis.com/api/js/v1"></script>
   </head>
   <body>
@@ -263,19 +326,30 @@ function buildHtml(apiKey: string, center: [number, number], zoom: number): stri
           // блокирует ready-сигнал.
           if (typeof __map.on === 'function') {
             __map.on('error', function (e) {
-              // styleloaderror — самый частый тип, означает что MapGL
-              // не смог загрузить style с серверов 2GIS. Чаще всего
-              // это просроченный demo-ключ или domain-restriction.
-              // Выгружаем максимум что есть в event'е чтобы user мог
-              // показать 2GIS саппорту точную причину.
+              // styleloaderror — самый частый тип. MapGL глотает
+              // детали внутри Error/Promise, поэтому глубоко
+              // сериализуем event + берём последние failed-запросы
+              // из network-перехватчика наверху.
               var parts = [];
+              try {
+                var seen = [];
+                var flat = JSON.stringify(e, function (k, v) {
+                  if (typeof v === 'object' && v !== null) {
+                    if (seen.indexOf(v) >= 0) return '[circular]';
+                    seen.push(v);
+                  }
+                  if (v instanceof Error) return { name: v.name, message: v.message, stack: (v.stack || '').slice(0, 200) };
+                  return v;
+                });
+                if (flat && flat !== '{}') parts.push('evt=' + flat.slice(0, 300));
+              } catch (_) {}
               if (e && e.type) parts.push('type=' + e.type);
               if (e && e.message) parts.push('msg=' + e.message);
-              if (e && e.error && e.error.message) parts.push('err=' + e.error.message);
-              if (e && e.url) parts.push('url=' + e.url);
-              if (e && e.status) parts.push('status=' + e.status);
-              if (parts.length === 0) {
-                try { parts.push(JSON.stringify(e)); } catch (_) {}
+              var net = window.__twoGisNetLog || [];
+              for (var i = net.length - 1; i >= 0 && i >= net.length - 3; i--) {
+                if (net[i].failed) {
+                  parts.push('net=' + (net[i].status || 'fail') + ' ' + net[i].url.slice(0, 80));
+                }
               }
               post({ type: 'error', message: 'MapGL: ' + parts.join(' | ') });
             });
@@ -350,9 +424,16 @@ const TwoGisMapView = forwardRef<TwoGisMapHandle, Props>(function TwoGisMapView(
   const [remountKey, setRemountKey] = useState(0);
   const recoveryAttemptsRef = useRef(0);
 
+  // initialCenter обычно передаётся inline-массивом из родителя — на
+  // каждый GPS-апдейт это новый референс, useMemo пересоздавал html,
+  // WebView получал новый source и перезагружал страницу целиком (с
+  // повторным скачиванием MapGL JS из CDN). Замораживаем значения,
+  // увиденные на маунте — это и есть смысл слова "initial".
+  const frozenCenterRef = useRef<[number, number]>(initialCenter);
+  const frozenZoomRef = useRef<number>(initialZoom);
   const html = useMemo(
-    () => buildHtml(TWOGIS_API_KEY, initialCenter, initialZoom),
-    [initialCenter, initialZoom],
+    () => buildHtml(TWOGIS_API_KEY, frozenCenterRef.current, frozenZoomRef.current),
+    [],
   );
 
   const dispatch = useCallback((cmd: object): void => {
@@ -481,6 +562,11 @@ const TwoGisMapView = forwardRef<TwoGisMapHandle, Props>(function TwoGisMapView(
         mixedContentMode="always"
         thirdPartyCookiesEnabled
         cacheEnabled
+        // LOAD_CACHE_ELSE_NETWORK заставляет Android WebView сначала
+        // взять MapGL JS из дискового кеша, и обращаться к CDN только
+        // если в кеше пусто. Без этого каждый remount тянул ~500КБ
+        // скрипта по сети — на 3G это секунды чёрного экрана.
+        cacheMode="LOAD_CACHE_ELSE_NETWORK"
         onMessage={handleMessage}
         onError={(e) => {
           const { code, description, domain } = e.nativeEvent;
@@ -527,6 +613,11 @@ const TwoGisMapView = forwardRef<TwoGisMapHandle, Props>(function TwoGisMapView(
               ? 'EXPO_PUBLIC_TWOGIS_KEY не попал в сборку. Пересоберите APK с ключом в .env (см. apps/driver/src/lib/twoGisConfig.ts).'
               : initError}
           </Text>
+          {!keyMissing && (
+            <Text style={[Typography.caption, styles.errorBody, { marginTop: 8, opacity: 0.6 }]}>
+              key …{TWOGIS_API_KEY.slice(-4)} (len {TWOGIS_API_KEY.length})
+            </Text>
+          )}
         </View>
       )}
     </View>
