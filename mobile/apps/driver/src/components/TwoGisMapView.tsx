@@ -414,7 +414,12 @@ const TwoGisMapView = forwardRef<TwoGisMapHandle, Props>(function TwoGisMapView(
       <WebView
         ref={webRef}
         originWhitelist={['*']}
-        source={{ html, baseUrl: 'https://mapgl.2gis.com' }}
+        // baseUrl был 'https://mapgl.2gis.com' — это заставляло WebView
+        // выглядеть для MapGL-сервера как запрос с самого себя, и его
+        // анти-abuse защита резала загрузку стиля (styleloaderror).
+        // В обычном браузере с тем же ключом всё работает с localhost-
+        // origin'ом, поэтому копируем это поведение здесь.
+        source={{ html, baseUrl: 'https://localhost/' }}
         javaScriptEnabled
         domStorageEnabled
         mixedContentMode="always"
