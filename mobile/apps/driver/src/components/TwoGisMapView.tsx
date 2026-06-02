@@ -378,7 +378,24 @@ const TwoGisMapView = forwardRef<TwoGisMapHandle, Props>(function TwoGisMapView(
         source={{ html, baseUrl: 'https://mapgl.2gis.com' }}
         javaScriptEnabled
         domStorageEnabled
+        mixedContentMode="always"
+        thirdPartyCookiesEnabled
+        cacheEnabled
         onMessage={handleMessage}
+        onError={(e) => {
+          const { code, description, domain } = e.nativeEvent;
+          setInitError(`WebView error ${code}: ${description}${domain ? ' (' + domain + ')' : ''}`);
+        }}
+        onHttpError={(e) => {
+          const { statusCode, url } = e.nativeEvent;
+          setInitError(`WebView HTTP ${statusCode}: ${url}`);
+        }}
+        onContentProcessDidTerminate={() => {
+          setInitError('WebView рендер-процесс упал (MIUI / OOM). Перезапустите приложение.');
+        }}
+        onRenderProcessGone={() => {
+          setInitError('WebView рендер убит системой (MIUI/Doze). Перезапустите приложение.');
+        }}
         startInLoadingState
         renderLoading={() => (
           <View style={styles.loading}>
@@ -386,9 +403,11 @@ const TwoGisMapView = forwardRef<TwoGisMapHandle, Props>(function TwoGisMapView(
           </View>
         )}
         style={styles.webview}
-        // Avoid white flash on Android while map paints over the dark
-        // app background.
-        androidLayerType="hardware"
+        // androidLayerType="hardware" даёт чёрный квадрат на Xiaomi/MIUI
+        // вместо HTML контента — GPU-сёрфейс WebView не композитится.
+        // Software-режим стабильнее, потеря fps пренебрежимо мала для
+        // статической карты с редкими ререндерами.
+        androidLayerType="software"
         bounces={false}
         scrollEnabled={false}
         overScrollMode="never"
