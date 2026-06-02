@@ -623,11 +623,15 @@ export default function OrderActiveScreen(): React.ReactNode {
     if (!order) return;
     if (!following) return; // user panned away — respect their view
     if (isNavigating && driverPoint) {
-      // Navigation cam: center on driver, zoom in close, rotate to
-      // heading. (MapGL JS does support pitch via setPitch, but we
-      // keep the v1 simple — no tilt for now.)
+      // Navigation cam (3D): центр на водителе, близкий зум, поворот по
+      // направлению движения + наклон 55° = вид «из-под лобового стекла».
+      // На zoom 17+ 2GIS автоматически рендерит экструдированные здания —
+      // получается полноценный 3D-стиль навигатора без отдельного SDK.
+      // pitch 55° — компромисс: 60° даёт более кинематографичный вид,
+      // но дома закрывают улицу впереди. 55° = улица видна, объём есть.
       mapRef.current?.setCenter(driverPoint, {
         zoom: 17,
+        pitch: 55,
         bearing:
           typeof driverLocation.heading === 'number' && driverLocation.heading >= 0
             ? driverLocation.heading
@@ -636,7 +640,10 @@ export default function OrderActiveScreen(): React.ReactNode {
       return;
     }
     // Overview: fit bounds across route + key points so the operator
-    // sees the whole trip.
+    // sees the whole trip. Сбрасываем наклон в 0 — обзорная карта
+    // должна быть top-down, иначе наклон от навигаторского режима
+    // оставит её перекошенной.
+    mapRef.current?.setPitch(0);
     const coords: Array<[number, number]> =
       route && route.coordinates.length > 0
         ? route.coordinates.map((c) => [c.longitude, c.latitude])

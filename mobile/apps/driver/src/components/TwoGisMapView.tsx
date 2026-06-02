@@ -23,6 +23,7 @@ export type TwoGisMapHandle = {
   setMarkers: (markers: { pickup?: LatLng | null; dropoff?: LatLng | null }) => void;
   setRoute: (coordinates: Array<[number, number]>) => void;
   setCenter: (loc: LatLng, opts?: { zoom?: number; bearing?: number; pitch?: number }) => void;
+  setPitch: (pitch: number) => void;
   fitBounds: (coordinates: Array<[number, number]>, paddingPx?: number) => void;
 };
 
@@ -196,6 +197,9 @@ function buildHtml(apiKey: string, center: [number, number], zoom: number): stri
             case 'setMarkers': setMarkers(cmd); break;
             case 'setRoute': setRoute(cmd.coordinates); break;
             case 'setCenter': setCenter(cmd, cmd.opts); break;
+            case 'setPitch':
+              if (__map && typeof cmd.pitch === 'number') __map.setPitch(cmd.pitch);
+              break;
             case 'fitBounds': fitBounds(cmd.coordinates, cmd.padding); break;
           }
         } catch (e) {
@@ -317,6 +321,7 @@ const TwoGisMapView = forwardRef<TwoGisMapHandle, Props>(function TwoGisMapView(
       setMarkers: (m) => dispatch({ type: 'setMarkers', ...m }),
       setRoute: (coordinates) => dispatch({ type: 'setRoute', coordinates }),
       setCenter: (loc, opts) => dispatch({ type: 'setCenter', ...loc, opts }),
+      setPitch: (pitch) => dispatch({ type: 'setPitch', pitch }),
       fitBounds: (coordinates, padding) => dispatch({ type: 'fitBounds', coordinates, padding }),
     }),
     [dispatch],
