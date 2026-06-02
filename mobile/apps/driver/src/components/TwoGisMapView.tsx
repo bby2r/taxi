@@ -94,17 +94,18 @@ function buildHtml(apiKey: string, center: [number, number], zoom: number): stri
 
       function makeDriverHtml(heading) {
         var rot = (heading == null || isNaN(heading)) ? 0 : heading;
-        // Жёлтое такси сверху, как в Яндекс/Болт: корпус, лобовое и
-        // заднее стекло, фары. Поворачивается вместе с heading'ом,
-        // лобовое стекло смотрит вперёд по движению.
+        // Чистый 3D-индикатор направления как в 2GIS Navigator —
+        // объёмная синяя стрелка с двумя гранями (тёмная справа,
+        // светлая слева), белым контуром и эллиптической «тенью под
+        // машиной». Без мультяшных деталей — водителю важно понять
+        // направление с одного взгляда, а не разглядывать колёса.
         return '<div class="driver-pin" style="transform: rotate(' + rot + 'deg)">' +
-          '<svg viewBox="0 0 32 32" xmlns="http://www.w3.org/2000/svg">' +
-            '<path d="M9 6 Q9 4 11 4 L21 4 Q23 4 23 6 L23 26 Q23 28 21 28 L11 28 Q9 28 9 26 Z" ' +
-              'fill="#FBBF24" stroke="#1F2937" stroke-width="1.2"/>' +
-            '<path d="M10 7 L22 7 L20.5 11.5 L11.5 11.5 Z" fill="#1F2937" opacity="0.75"/>' +
-            '<path d="M11.5 21 L20.5 21 L22 25 L10 25 Z" fill="#1F2937" opacity="0.55"/>' +
-            '<rect x="10" y="3.5" width="2.5" height="1" rx="0.5" fill="#FEF3C7"/>' +
-            '<rect x="19.5" y="3.5" width="2.5" height="1" rx="0.5" fill="#FEF3C7"/>' +
+          '<svg viewBox="0 0 48 48" xmlns="http://www.w3.org/2000/svg">' +
+            '<ellipse cx="24" cy="34" rx="16" ry="4" fill="#3B82F6" opacity="0.18"/>' +
+            '<path d="M24 6 L36 34 L24 28 Z" fill="#1D4ED8"/>' +
+            '<path d="M24 6 L12 34 L24 28 Z" fill="#3B82F6"/>' +
+            '<path d="M24 6 L24 28" stroke="#fff" stroke-width="1.2" opacity="0.85"/>' +
+            '<circle cx="24" cy="6" r="2.2" fill="#fff"/>' +
           '</svg>' +
         '</div>';
       }
