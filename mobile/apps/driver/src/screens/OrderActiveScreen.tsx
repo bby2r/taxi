@@ -28,6 +28,7 @@ import type { Order, DriverCancellationReason, Route } from '@taxi/shared';
 import { useDriverOrder } from '../hooks/useDriverOrder';
 import TwoGisMapView, { type TwoGisMapHandle } from '../components/TwoGisMapView';
 import NavigationBanner from '../components/NavigationBanner';
+import NavStatusBar from '../components/NavStatusBar';
 import type { DriverStackParamList } from '../navigation/types';
 
 // Driver must be within this distance of the pickup point before they can
@@ -787,6 +788,18 @@ export default function OrderActiveScreen(): React.ReactNode {
         </View>
       )}
 
+      {/* Нижняя статусная пилюля «X мин / HH:MM прибытие / Y км» —
+          стиль 2GIS Navigator. Видна поверх BottomSheet, держит ETA
+          перед глазами водителя даже когда лист свёрнут до 18%. */}
+      {isNavigatingForCues && route && (
+        <View style={styles.navStatusWrap} pointerEvents="none">
+          <NavStatusBar
+            durationSeconds={route.durationSeconds}
+            distanceMeters={route.distanceMeters}
+          />
+        </View>
+      )}
+
       {/* Re-engage follow camera. Shows only when driver opted out of
           follow by panning the map mid-navigation. Tap snaps back to
           the tilted heading-locked view. */}
@@ -920,6 +933,16 @@ const styles = StyleSheet.create({
     top: Platform.OS === 'android' ? (StatusBar.currentHeight ?? 24) + 8 : 56,
     left: 0,
     right: 0,
+  },
+  navStatusWrap: {
+    // Над дефолтным snap'ом BottomSheet (~48% высоты экрана) — пилюля
+    // всегда видна, даже когда лист на минимуме. На фазе completed
+    // лист расширяется и накрывает пилюлю, это ок.
+    position: 'absolute',
+    bottom: '50%',
+    left: 0,
+    right: 0,
+    marginBottom: 16,
   },
   recenterButton: {
     // Sits just above the default snap (~48% of screen height). When

@@ -1,5 +1,6 @@
 import React from 'react';
 import { StyleSheet, Text, View } from 'react-native';
+import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { DriverColors, ManeuverType, Typography } from '@taxi/shared';
 
 interface NavigationBannerProps {
@@ -8,30 +9,31 @@ interface NavigationBannerProps {
   instruction: string;
 }
 
-// Юникод-стрелка для каждого типа манёвра. Альтернатива — отрисовать
-// нормальный SVG, но для MVP юникод читается мгновенно и не требует
-// иконок в ассетах. На зум-старте водитель в любом случае видит
-// сначала текст, потом стрелку.
-const ARROW: Record<ManeuverType, string> = {
-  left: '↰',
-  right: '↱',
-  'slight-left': '↖',
-  'slight-right': '↗',
-  'sharp-left': '⤴',
-  'sharp-right': '⤵',
-  straight: '↑',
-  uturn: '↺',
-  arrive: '🏁',
-  depart: '↑',
+// Cleaner SVG-glyph icons вместо юникод-arrow'ов. Стиль ближе к 2GIS
+// Navigator: яркая цветная стрелка манёвра поверх белой подложки,
+// крупная дистанция, имя улицы под ней.
+type IconName = React.ComponentProps<typeof MaterialCommunityIcons>['name'];
+
+const ICON: Record<ManeuverType, IconName> = {
+  left: 'arrow-top-left',
+  right: 'arrow-top-right',
+  'slight-left': 'arrow-up-left',
+  'slight-right': 'arrow-up-right',
+  'sharp-left': 'arrow-u-down-left',
+  'sharp-right': 'arrow-u-down-right',
+  straight: 'arrow-up-bold',
+  uturn: 'restore',
+  arrive: 'flag-checkered',
+  depart: 'arrow-up-bold',
 };
 
 function formatDistance(meters: number): string {
   if (meters < 50) return 'Сейчас';
   if (meters < 1000) {
     const rounded = Math.round(meters / 10) * 10;
-    return `Через ${rounded} м`;
+    return `${rounded} м`;
   }
-  return `Через ${(meters / 1000).toFixed(1)} км`;
+  return `${(meters / 1000).toFixed(1)} км`;
 }
 
 export default function NavigationBanner({
@@ -42,7 +44,11 @@ export default function NavigationBanner({
   return (
     <View style={styles.container} pointerEvents="none">
       <View style={styles.arrowBox}>
-        <Text style={styles.arrow}>{ARROW[maneuver]}</Text>
+        <MaterialCommunityIcons
+          name={ICON[maneuver]}
+          size={42}
+          color={DriverColors.background}
+        />
       </View>
       <View style={styles.textBlock}>
         <Text style={styles.distance}>{formatDistance(distanceMeters)}</Text>
@@ -59,41 +65,36 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     backgroundColor: DriverColors.cardBackground,
-    borderRadius: 16,
+    borderRadius: 18,
     paddingVertical: 12,
-    paddingHorizontal: 16,
-    marginHorizontal: 16,
+    paddingHorizontal: 14,
+    marginHorizontal: 12,
     shadowColor: '#000',
-    shadowOpacity: 0.35,
-    shadowRadius: 10,
+    shadowOpacity: 0.4,
+    shadowRadius: 12,
     shadowOffset: { width: 0, height: 4 },
-    elevation: 8,
-    gap: 14,
+    elevation: 10,
+    gap: 12,
   },
   arrowBox: {
-    width: 56,
-    height: 56,
-    borderRadius: 16,
+    width: 60,
+    height: 60,
+    borderRadius: 14,
     backgroundColor: DriverColors.primary,
     alignItems: 'center',
     justifyContent: 'center',
-  },
-  arrow: {
-    fontSize: 36,
-    color: DriverColors.background,
-    fontWeight: '900' as const,
-    lineHeight: 40,
   },
   textBlock: {
     flex: 1,
   },
   distance: {
-    ...Typography.h3,
+    ...Typography.h2,
     color: DriverColors.textPrimary,
     fontWeight: '800' as const,
+    lineHeight: 28,
   },
   instruction: {
-    ...Typography.caption,
+    ...Typography.body,
     color: DriverColors.textSecondary,
     marginTop: 2,
   },
