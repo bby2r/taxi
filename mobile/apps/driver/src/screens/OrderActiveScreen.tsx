@@ -640,10 +640,12 @@ export default function OrderActiveScreen(): React.ReactNode {
       return;
     }
     // Overview: fit bounds across route + key points so the operator
-    // sees the whole trip. Сбрасываем наклон в 0 — обзорная карта
-    // должна быть top-down, иначе наклон от навигаторского режима
-    // оставит её перекошенной.
-    mapRef.current?.setPitch(0);
+    // sees the whole trip. Сохраняем небольшой наклон даже в обзорном
+    // режиме — пользователь хочет 3D-стиль на постоянной основе. 30°
+    // компромисс: меньше навигаторских 55°, но не плоская бумажная
+    // карта. На зуме обзора (12-14) сильный наклон даёт уродливую
+    // перспективную дисторсию, поэтому именно 30°.
+    mapRef.current?.setPitch(30);
     const coords: Array<[number, number]> =
       route && route.coordinates.length > 0
         ? route.coordinates.map((c) => [c.longitude, c.latitude])

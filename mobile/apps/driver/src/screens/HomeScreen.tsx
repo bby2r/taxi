@@ -219,7 +219,7 @@ export default function HomeScreen(): React.ReactNode {
     });
     mapRef.current?.setCenter(
       { latitude: driverLocation.latitude, longitude: driverLocation.longitude },
-      { zoom: 15 },
+      { zoom: 15, pitch: 45 },
     );
   }, [
     driverLocation.loading,
@@ -315,7 +315,7 @@ export default function HomeScreen(): React.ReactNode {
     }
     mapRef.current?.setCenter(
       { latitude: driverLocation.latitude, longitude: driverLocation.longitude },
-      { zoom: 16 },
+      { zoom: 16, pitch: 45 },
     );
   };
 

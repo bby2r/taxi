@@ -217,6 +217,11 @@ function buildHtml(apiKey: string, center: [number, number], zoom: number): stri
             center: ${JSON.stringify(center)},
             zoom: ${zoom},
             key: '${apiKey}',
+            // 3D-вид как стартовое состояние карты во всём приложении.
+            // На zoom 16+ 2GIS экструдирует здания, на меньшем зуме
+            // получается просто наклонная плоскость — оба варианта
+            // ощущаются «трёхмерными» вместо плоской бумажной карты.
+            pitch: 45,
             // Hide 2GIS native UI controls — RN side draws its own.
             zoomControl: false,
             keyControl: false,
