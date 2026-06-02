@@ -205,6 +205,10 @@ function buildHtml(apiKey: string, center: [number, number], zoom: number): stri
 
       function init() {
         try {
+          if (!'${apiKey}' || '${apiKey}'.length === 0) {
+            post({ type: 'error', message: 'API-ключ 2GIS не передан в WebView (EXPO_PUBLIC_TWOGIS_KEY пустой)' });
+            return;
+          }
           __map = new mapgl.Map('map', {
             center: ${JSON.stringify(center)},
             zoom: ${zoom},
@@ -213,6 +217,30 @@ function buildHtml(apiKey: string, center: [number, number], zoom: number): stri
             zoomControl: false,
             keyControl: false,
           });
+          // MapGL грузит тайлы асинхронно — сам new Map() не кидает
+          // exception если ключ невалидный, тайлы просто молча отдают
+          // 401. Ловим это таймаутом: если за 6 сек 'idle' не сработал
+          // и не было первой отрисовки — сообщаем наверх.
+          var __ready = false;
+          if (typeof __map.on === 'function') {
+            __map.on('idle', function () {
+              __ready = true;
+              post({ type: 'ready' });
+            });
+            // MapGL v1 эмитит 'error' при невалидном ключе / отказе тайлов.
+            __map.on('error', function (e) {
+              var msg = e && (e.message || e.type) ? (e.message || e.type) : 'mapgl error';
+              post({ type: 'error', message: 'MapGL: ' + msg });
+            });
+          }
+          setTimeout(function () {
+            if (!__ready) {
+              post({
+                type: 'error',
+                message: 'Карта не загрузилась за 6 сек — проверьте ключ 2GIS или сеть',
+              });
+            }
+          }, 6000);
           // Any user gesture breaks follow-camera on the RN side. We
           // detect via 'movestart' triggered with 'isUserInteraction'.
           // MapGL doesn't expose that reason directly, so we listen for
@@ -228,7 +256,6 @@ function buildHtml(apiKey: string, center: [number, number], zoom: number): stri
               }
             }, { passive: true });
           }
-          post({ type: 'ready' });
         } catch (e) {
           post({ type: 'error', message: String(e && e.message ? e.message : e) });
         }
