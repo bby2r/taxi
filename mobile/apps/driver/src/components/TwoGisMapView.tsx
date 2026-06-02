@@ -262,8 +262,21 @@ function buildHtml(apiKey: string, center: [number, number], zoom: number): stri
           // блокирует ready-сигнал.
           if (typeof __map.on === 'function') {
             __map.on('error', function (e) {
-              var msg = e && (e.message || e.type) ? (e.message || e.type) : 'mapgl error';
-              post({ type: 'error', message: 'MapGL: ' + msg });
+              // styleloaderror — самый частый тип, означает что MapGL
+              // не смог загрузить style с серверов 2GIS. Чаще всего
+              // это просроченный demo-ключ или domain-restriction.
+              // Выгружаем максимум что есть в event'е чтобы user мог
+              // показать 2GIS саппорту точную причину.
+              var parts = [];
+              if (e && e.type) parts.push('type=' + e.type);
+              if (e && e.message) parts.push('msg=' + e.message);
+              if (e && e.error && e.error.message) parts.push('err=' + e.error.message);
+              if (e && e.url) parts.push('url=' + e.url);
+              if (e && e.status) parts.push('status=' + e.status);
+              if (parts.length === 0) {
+                try { parts.push(JSON.stringify(e)); } catch (_) {}
+              }
+              post({ type: 'error', message: 'MapGL: ' + parts.join(' | ') });
             });
           }
           // Any user gesture breaks follow-camera on the RN side. We
