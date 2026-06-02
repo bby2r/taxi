@@ -7,7 +7,7 @@ import React, {
   useRef,
   useState,
 } from 'react';
-import { StyleSheet, View, ActivityIndicator, Text } from 'react-native';
+import { StyleSheet, View, ActivityIndicator, Text, AppState } from 'react-native';
 import { WebView, type WebViewMessageEvent } from 'react-native-webview';
 import { DriverColors, Typography } from '@taxi/shared';
 import {
@@ -341,6 +341,14 @@ const TwoGisMapView = forwardRef<TwoGisMapHandle, Props>(function TwoGisMapView(
   // что не так.
   const keyMissing = TWOGIS_API_KEY.length === 0;
   const [initError, setInitError] = useState<string | null>(null);
+  // MIUI / Doze регулярно убивают WebView render-процесс когда app в
+  // фоне. Без авто-рекавери водитель видел overlay «WebView убит,
+  // перезапустите приложение». Теперь меняем remountKey → WebView
+  // целиком пересоздаётся, новый рендер-процесс стартует, init() в
+  // HTML отрабатывает заново. UI-overlay показываем только если
+  // ремаунт случился больше 2-х раз подряд за короткое время.
+  const [remountKey, setRemountKey] = useState(0);
+  const recoveryAttemptsRef = useRef(0);
 
   const html = useMemo(
     () => buildHtml(TWOGIS_API_KEY, initialCenter, initialZoom),
@@ -358,6 +366,29 @@ const TwoGisMapView = forwardRef<TwoGisMapHandle, Props>(function TwoGisMapView(
     );
   }, []);
 
+  // Авто-рекавери WebView при render-process-gone (MIUI/Doze убивают
+  // в фоне). До 3-х попыток подряд — тихий ремаунт; четвёртая показывает
+  // overlay чтобы водитель знал что нужно вручную перезайти.
+  const attemptRemount = useCallback((reason: string): void => {
+    recoveryAttemptsRef.current += 1;
+    if (recoveryAttemptsRef.current > 3) {
+      setInitError(
+        `WebView постоянно падает (${reason}). Перезапустите приложение.`,
+      );
+      return;
+    }
+    readyRef.current = false;
+    queueRef.current = [];
+    setInitError(null);
+    setRemountKey((k) => k + 1);
+    // Если ремаунт прошёл успешно и карта не падает 20 сек — считаем
+    // что рекавери сработала, сбрасываем счётчик. Иначе следующее
+    // падение опять накапливает, и на 4-м идёт overlay.
+    setTimeout(() => {
+      recoveryAttemptsRef.current = 0;
+    }, 20000);
+  }, []);
+
   useImperativeHandle(
     ref,
     () => ({
@@ -373,6 +404,7 @@ const TwoGisMapView = forwardRef<TwoGisMapHandle, Props>(function TwoGisMapView(
 
   const handleMessage = useCallback(
     (event: WebViewMessageEvent): void => {
+      lastMessageRef.current = Date.now();
       try {
         const data = JSON.parse(event.nativeEvent.data) as { type: string; message?: string };
         if (data.type === 'ready') {
@@ -410,9 +442,32 @@ const TwoGisMapView = forwardRef<TwoGisMapHandle, Props>(function TwoGisMapView(
     };
   }, []);
 
+  // На MIUI возврат из background после Doze иногда оставляет WebView
+  // живым по виду, но без активного рендера — render-process-gone
+  // callback при этом не всегда срабатывает. Отслеживаем последнюю
+  // активность из WebView; если после foreground'а >2 сек тишина и
+  // не пришёл pong на инжекту — ремаунтим.
+  const lastMessageRef = useRef<number>(Date.now());
+  useEffect(() => {
+    const sub = AppState.addEventListener('change', (next) => {
+      if (next !== 'active' || !readyRef.current) return;
+      const sentAt = Date.now();
+      webRef.current?.injectJavaScript(
+        `if (window.ReactNativeWebView) window.ReactNativeWebView.postMessage(JSON.stringify({type:'pong'})); true;`,
+      );
+      setTimeout(() => {
+        if (lastMessageRef.current < sentAt) {
+          attemptRemount('foreground ping no response');
+        }
+      }, 2000);
+    });
+    return () => sub.remove();
+  }, [attemptRemount]);
+
   return (
     <View style={[styles.container, style]}>
       <WebView
+        key={remountKey}
         ref={webRef}
         originWhitelist={['*']}
         // baseUrl был 'https://mapgl.2gis.com' — это заставляло WebView
@@ -436,10 +491,14 @@ const TwoGisMapView = forwardRef<TwoGisMapHandle, Props>(function TwoGisMapView(
           setInitError(`WebView HTTP ${statusCode}: ${url}`);
         }}
         onContentProcessDidTerminate={() => {
-          setInitError('WebView рендер-процесс упал (MIUI / OOM). Перезапустите приложение.');
+          // iOS-only — на Android этот колбэк не вызывается. На всякий
+          // случай тоже делаем remount.
+          attemptRemount('content process terminated');
         }}
         onRenderProcessGone={() => {
-          setInitError('WebView рендер убит системой (MIUI/Doze). Перезапустите приложение.');
+          // Android: рендер-процесс убит OS (MIUI / Doze / OOM-killer).
+          // Автоматически пересоздаём WebView вместо ругани в overlay.
+          attemptRemount('renderer gone');
         }}
         startInLoadingState
         renderLoading={() => (
