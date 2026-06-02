@@ -9,8 +9,8 @@ interface NavigationBannerProps {
   instruction: string;
 }
 
-// Cleaner SVG-glyph icons вместо юникод-arrow'ов. Стиль ближе к 2GIS
-// Navigator: яркая цветная стрелка манёвра поверх белой подложки,
+// Cleaner SVG-glyph icons вместо юникод-arrow'ов. Стиль навигатора:
+// яркая цветная стрелка манёвра поверх белой подложки,
 // крупная дистанция, имя улицы под ней.
 type IconName = React.ComponentProps<typeof MaterialCommunityIcons>['name'];
 

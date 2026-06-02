@@ -39,7 +39,7 @@ import {
 import OrderOfferCard from '../components/OrderOfferCard';
 import PermissionGate from '../components/PermissionGate';
 import OemSetupWizard, { PROBLEMATIC_OEMS } from '../components/OemSetupWizard';
-import TwoGisMapView, { type TwoGisMapHandle } from '../components/TwoGisMapView';
+import MapLibreMapView, { type MapLibreMapHandle } from '../components/MapLibreMapView';
 
 // Lazy — SecureStore lives in the client too but the driver app may
 // have an older bundle without it; degrade to in-memory so we don't
@@ -78,7 +78,7 @@ export default function HomeScreen(): React.ReactNode {
   const driverLocation = useLocation();
   useDriverLocation({ enabled: isOnline });
   const [hasActiveIntercity, setHasActiveIntercity] = useState(false);
-  const mapRef = useRef<TwoGisMapHandle>(null);
+  const mapRef = useRef<MapLibreMapHandle>(null);
   const pushStatus = usePushStatus();
   const [fsiStatus, setFsiStatus] = useState<FullScreenIntentStatus>('unknown');
   const [overlayGranted, setOverlayGranted] = useState<boolean>(true);
@@ -336,7 +336,7 @@ export default function HomeScreen(): React.ReactNode {
         translucent
       />
 
-      <TwoGisMapView
+      <MapLibreMapView
         ref={mapRef}
         initialCenter={initialCenter}
         initialZoom={14}

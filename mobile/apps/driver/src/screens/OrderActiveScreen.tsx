@@ -26,7 +26,7 @@ import {
 } from '@taxi/shared';
 import type { Order, DriverCancellationReason, Route } from '@taxi/shared';
 import { useDriverOrder } from '../hooks/useDriverOrder';
-import TwoGisMapView, { type TwoGisMapHandle } from '../components/TwoGisMapView';
+import MapLibreMapView, { type MapLibreMapHandle } from '../components/MapLibreMapView';
 import NavigationBanner from '../components/NavigationBanner';
 import NavStatusBar from '../components/NavStatusBar';
 import type { DriverStackParamList } from '../navigation/types';
@@ -434,7 +434,7 @@ export default function OrderActiveScreen(): React.ReactNode {
     dismissCompleted,
     loading,
   } = useDriverOrder();
-  const mapRef = useRef<TwoGisMapHandle>(null);
+  const mapRef = useRef<MapLibreMapHandle>(null);
   const bottomSheetRef = useRef<BottomSheet>(null);
   // Three positions like Yandex Taxi driver: barely visible (just handle
   // + ETA peek), default (all key info + main action), expanded (full
@@ -754,7 +754,7 @@ export default function OrderActiveScreen(): React.ReactNode {
 
   return (
     <View style={styles.container}>
-      <TwoGisMapView
+      <MapLibreMapView
         ref={mapRef}
         style={styles.map}
         initialCenter={

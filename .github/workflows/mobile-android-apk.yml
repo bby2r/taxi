@@ -45,11 +45,12 @@ jobs:
       # repo (GitHub Push Protection treats any Mapbox token as a secret
       # — easier to env-var both halves than to allow-list each pk).
       EXPO_PUBLIC_MAPBOX_TOKEN: ${{ secrets.EXPO_PUBLIC_MAPBOX_TOKEN }}
-      # 2GIS MapGL JS demo key — bundled into the driver app for the
-      # in-WebView map (replaces Mapbox in driver-side screens to give
-      # KG villages proper house-number coverage). Without this the
-      # WebView shows blank tiles; the rest of the app still works.
-      EXPO_PUBLIC_TWOGIS_KEY: ${{ secrets.EXPO_PUBLIC_TWOGIS_KEY }}
+      # MapTiler API key — bundled into the driver app for the
+      # in-WebView map (MapLibre GL JS + MapTiler tiles). Бесплатный
+      # tier 100k загрузок/мес, ключ создаётся на
+      # https://cloud.maptiler.com/account/keys/. Без ключа WebView
+      # показывает «карта не настроена», остальное приложение работает.
+      EXPO_PUBLIC_MAPTILER_KEY: ${{ secrets.EXPO_PUBLIC_MAPTILER_KEY }}
 
     steps:
       - name: Checkout repository
@@ -143,12 +144,11 @@ jobs:
       - name: Verify required EXPO_PUBLIC_* secrets present (driver only)
         if: matrix.app == 'driver'
         run: |
-          # Без 2GIS-ключа карта в водительском APK будет чёрной — это
-          # происходило молча, пока в TwoGisMapView не появился видимый
-          # error-оверлей. Лучше упасть тут с понятным сообщением, чем
-          # выкатить мёртвый APK драйверам.
-          if [ -z "${EXPO_PUBLIC_TWOGIS_KEY:-}" ]; then
-            echo "::error::EXPO_PUBLIC_TWOGIS_KEY secret не задан в репо. Settings → Secrets → Actions → New repository secret."
+          # Без MapTiler-ключа карта в водительском APK покажет
+          # overlay «карта не настроена». Лучше упасть тут с понятным
+          # сообщением, чем выкатить мёртвый APK драйверам.
+          if [ -z "${EXPO_PUBLIC_MAPTILER_KEY:-}" ]; then
+            echo "::error::EXPO_PUBLIC_MAPTILER_KEY secret не задан в репо. Settings → Secrets → Actions → New repository secret. Бесплатный ключ на https://cloud.maptiler.com/account/keys/"
             exit 1
           fi
 

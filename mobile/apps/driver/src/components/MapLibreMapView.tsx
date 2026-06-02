@@ -11,14 +11,15 @@ import { StyleSheet, View, ActivityIndicator, Text, AppState } from 'react-nativ
 import { WebView, type WebViewMessageEvent } from 'react-native-webview';
 import { DriverColors, Typography } from '@taxi/shared';
 import {
-  TWOGIS_API_KEY,
-  TWOGIS_DEFAULT_CENTER,
-  TWOGIS_DEFAULT_ZOOM,
-} from '../lib/twoGisConfig';
+  MAPTILER_KEY,
+  MAPTILER_STYLE,
+  MAP_DEFAULT_CENTER,
+  MAP_DEFAULT_ZOOM,
+} from '../lib/mapLibreConfig';
 
 export type LatLng = { latitude: number; longitude: number };
 
-export type TwoGisMapHandle = {
+export type MapLibreMapHandle = {
   setDriver: (loc: LatLng & { heading?: number | null }) => void;
   setMarkers: (markers: { pickup?: LatLng | null; dropoff?: LatLng | null }) => void;
   setRoute: (coordinates: Array<[number, number]>) => void;
@@ -35,24 +36,22 @@ type Props = {
   style?: object;
 };
 
-// HTML+JS payload rendered inside the WebView. The MapGL JS lib is
-// loaded from the 2GIS CDN at runtime — keeps the bundle small but
-// requires network on cold start. The page exposes a tiny message
-// bridge: `window.applyCommand({type, ...})` dispatched from RN via
-// injectJavaScript, and posts events back via
-// `window.ReactNativeWebView.postMessage(...)`.
-//
-// The API key is templated in at render time so we don't have to ship
-// it as a JS string anywhere else. It's a public client key — same as
-// Mapbox pk-tokens — so being in the HTML is fine.
-function buildHtml(apiKey: string, center: [number, number], zoom: number): string {
+// HTML+JS payload, рендерится внутри WebView. MapLibre GL JS грузится
+// из unpkg CDN (open-source форк Mapbox GL — практически 1-в-1 API).
+// Тайлы и стиль приходят с MapTiler по ключу. Page exposes the same
+// тонкий мост: `window.applyCommand({type, ...})` от RN через
+// injectJavaScript, обратно — `window.ReactNativeWebView.postMessage`.
+function buildHtml(apiKey: string, styleName: string, center: [number, number], zoom: number): string {
   return `<!doctype html>
 <html>
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no" />
+    <link href="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.css" rel="stylesheet" />
     <style>
       html, body, #map { margin: 0; padding: 0; width: 100%; height: 100%; background: #1F2937; }
+      .maplibregl-ctrl-bottom-left, .maplibregl-ctrl-bottom-right,
+      .maplibregl-ctrl-top-left, .maplibregl-ctrl-top-right { display: none !important; }
       .driver-pin {
         width: 40px; height: 40px;
         display: flex; align-items: center; justify-content: center;
@@ -75,30 +74,31 @@ function buildHtml(apiKey: string, center: [number, number], zoom: number): stri
       }
     </style>
     <script>
-      // Перехват fetch / XHR ДО загрузки mapgl, чтобы поймать реальный
-      // failing URL и HTTP-код. Без этого MapGL глотает причину и
-      // эмитит styleloaderror без полезных полей. Логируем только
-      // запросы к 2GIS — чтобы не светить чужой трафик в overlay.
+      // Перехват fetch / XHR ДО загрузки maplibre, чтобы поймать
+      // реальный failing URL и HTTP-код. Без этого MapLibre глотает
+      // причину провала загрузки стиля/тайла и эмитит просто 'error'.
+      // Логируем только запросы к MapTiler/OSM — чтобы не светить
+      // чужой трафик в overlay.
       (function () {
         function post(payload) {
           if (window.ReactNativeWebView && window.ReactNativeWebView.postMessage) {
             window.ReactNativeWebView.postMessage(JSON.stringify(payload));
           }
         }
-        window.__twoGisNetLog = [];
+        window.__mapNetLog = [];
         function logNet(entry) {
-          window.__twoGisNetLog.push(entry);
-          if (window.__twoGisNetLog.length > 40) window.__twoGisNetLog.shift();
+          window.__mapNetLog.push(entry);
+          if (window.__mapNetLog.length > 40) window.__mapNetLog.shift();
           if (entry.failed) {
             post({ type: 'error', message: 'net ' + (entry.status || 'fail') + ' ' + entry.url + (entry.body ? ' :: ' + entry.body.slice(0, 200) : '') });
           }
         }
         var origFetch = window.fetch;
-        window.fetch = function (input, init) {
+        window.fetch = function (input) {
           var url = typeof input === 'string' ? input : (input && input.url) || '';
-          var is2gis = /2gis\\.|2gis\\.com/.test(url);
+          var isMap = /maptiler\\.com|openstreetmap\\.org|unpkg\\.com\\/maplibre/.test(url);
           return origFetch.apply(this, arguments).then(function (resp) {
-            if (is2gis && !resp.ok) {
+            if (isMap && !resp.ok) {
               resp.clone().text().then(function (body) {
                 logNet({ url: url, status: resp.status, failed: true, body: body });
               }).catch(function () {
@@ -107,7 +107,7 @@ function buildHtml(apiKey: string, center: [number, number], zoom: number): stri
             }
             return resp;
           }).catch(function (err) {
-            if (is2gis) {
+            if (isMap) {
               logNet({ url: url, failed: true, body: 'throw: ' + (err && err.message) });
             }
             throw err;
@@ -122,9 +122,9 @@ function buildHtml(apiKey: string, center: [number, number], zoom: number): stri
         XMLHttpRequest.prototype.send = function () {
           var xhr = this;
           var url = xhr.__url || '';
-          var is2gis = /2gis\\.|2gis\\.com/.test(url);
+          var isMap = /maptiler\\.com|openstreetmap\\.org/.test(url);
           xhr.addEventListener('loadend', function () {
-            if (is2gis && (xhr.status === 0 || xhr.status >= 400)) {
+            if (isMap && (xhr.status === 0 || xhr.status >= 400)) {
               logNet({
                 url: url,
                 status: xhr.status,
@@ -137,7 +137,7 @@ function buildHtml(apiKey: string, center: [number, number], zoom: number): stri
         };
       })();
     </script>
-    <script src="https://mapgl.2gis.com/api/js/v1"></script>
+    <script src="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.js"></script>
   </head>
   <body>
     <div id="map"></div>
@@ -146,8 +146,8 @@ function buildHtml(apiKey: string, center: [number, number], zoom: number): stri
       var __driverMarker = null;
       var __pickupMarker = null;
       var __dropoffMarker = null;
-      var __routePolyline = null;
       var __gestureSent = false;
+      var __styleLoaded = false;
 
       function post(payload) {
         if (window.ReactNativeWebView && window.ReactNativeWebView.postMessage) {
@@ -155,108 +155,140 @@ function buildHtml(apiKey: string, center: [number, number], zoom: number): stri
         }
       }
 
-      function makeDriverHtml(heading) {
+      function makeDriverEl(heading) {
         var rot = (heading == null || isNaN(heading)) ? 0 : heading;
-        // Чистый 3D-индикатор направления как в 2GIS Navigator —
-        // объёмная синяя стрелка с двумя гранями (тёмная справа,
-        // светлая слева), белым контуром и эллиптической «тенью под
-        // машиной». Без мультяшных деталей — водителю важно понять
-        // направление с одного взгляда, а не разглядывать колёса.
-        return '<div class="driver-pin" style="transform: rotate(' + rot + 'deg)">' +
+        // Чистый 3D-индикатор направления, объёмная синяя стрелка с
+        // двумя гранями (тёмная справа, светлая слева), белым контуром
+        // и эллиптической «тенью под машиной». Поворот через CSS-
+        // transform на внутреннем div'е — внешний контейнер берёт
+        // MapLibre Marker и сам кладёт по координатам.
+        var el = document.createElement('div');
+        el.className = 'driver-pin';
+        el.style.transform = 'rotate(' + rot + 'deg)';
+        el.innerHTML =
           '<svg viewBox="0 0 48 48" xmlns="http://www.w3.org/2000/svg">' +
             '<ellipse cx="24" cy="34" rx="16" ry="4" fill="#3B82F6" opacity="0.18"/>' +
             '<path d="M24 6 L36 34 L24 28 Z" fill="#1D4ED8"/>' +
             '<path d="M24 6 L12 34 L24 28 Z" fill="#3B82F6"/>' +
             '<path d="M24 6 L24 28" stroke="#fff" stroke-width="1.2" opacity="0.85"/>' +
             '<circle cx="24" cy="6" r="2.2" fill="#fff"/>' +
-          '</svg>' +
-        '</div>';
+          '</svg>';
+        return el;
       }
 
-      function makePickupHtml() {
+      function makePickupEl() {
         // Фигурка человека-клиента — водитель сразу видит «здесь меня
         // ждут», а не безликий жёлтый кружок.
-        return '<div class="pickup-pin">' +
+        var el = document.createElement('div');
+        el.className = 'pickup-pin';
+        el.innerHTML =
           '<svg viewBox="0 0 32 32" xmlns="http://www.w3.org/2000/svg">' +
             '<circle cx="16" cy="16" r="14" fill="${DriverColors.primary}" stroke="#fff" stroke-width="2.5"/>' +
             '<circle cx="16" cy="12" r="3.2" fill="#1F2937"/>' +
             '<path d="M9 24 Q9 17 16 17 Q23 17 23 24 Z" fill="#1F2937"/>' +
-          '</svg>' +
-        '</div>';
+          '</svg>';
+        return el;
+      }
+
+      function makeDropoffEl() {
+        var el = document.createElement('div');
+        el.className = 'dropoff-pin';
+        return el;
       }
 
       function setDriver(loc) {
         if (!__map) return;
-        // Recreate the marker each time — MapGL HtmlMarker doesn't
-        // expose a stable way to mutate the inner DOM after creation,
-        // and at ~1Hz GPS updates the destroy/create cycle is cheap.
+        // MapLibre Marker умеет менять элемент только через destroy/
+        // create. На частоте GPS-апдейтов ~1Hz цикл уничтожения+создания
+        // дешевле, чем перерисовывать SVG через innerHTML руками.
         if (__driverMarker) {
-          __driverMarker.destroy();
+          __driverMarker.remove();
           __driverMarker = null;
         }
-        __driverMarker = new mapgl.HtmlMarker(__map, {
-          coordinates: [loc.longitude, loc.latitude],
-          html: makeDriverHtml(loc.heading),
-          anchor: [18, 18],
-        });
+        __driverMarker = new maplibregl.Marker({
+          element: makeDriverEl(loc.heading),
+          anchor: 'center',
+        })
+          .setLngLat([loc.longitude, loc.latitude])
+          .addTo(__map);
       }
 
       function setMarkers(m) {
         if (!__map) return;
-        // Pickup
         if (m.pickup) {
           var p = [m.pickup.longitude, m.pickup.latitude];
           if (__pickupMarker) {
-            __pickupMarker.setCoordinates(p);
+            __pickupMarker.setLngLat(p);
           } else {
-            __pickupMarker = new mapgl.HtmlMarker(__map, {
-              coordinates: p,
-              html: makePickupHtml(),
-              anchor: [18, 18],
-            });
+            __pickupMarker = new maplibregl.Marker({
+              element: makePickupEl(),
+              anchor: 'center',
+            })
+              .setLngLat(p)
+              .addTo(__map);
           }
         } else if (__pickupMarker) {
-          __pickupMarker.destroy();
+          __pickupMarker.remove();
           __pickupMarker = null;
         }
-        // Dropoff
         if (m.dropoff) {
           var d = [m.dropoff.longitude, m.dropoff.latitude];
           if (__dropoffMarker) {
-            __dropoffMarker.setCoordinates(d);
+            __dropoffMarker.setLngLat(d);
           } else {
-            __dropoffMarker = new mapgl.HtmlMarker(__map, {
-              coordinates: d,
-              html: '<div class="dropoff-pin"></div>',
-              anchor: [11, 11],
-            });
+            __dropoffMarker = new maplibregl.Marker({
+              element: makeDropoffEl(),
+              anchor: 'center',
+            })
+              .setLngLat(d)
+              .addTo(__map);
           }
         } else if (__dropoffMarker) {
-          __dropoffMarker.destroy();
+          __dropoffMarker.remove();
           __dropoffMarker = null;
         }
       }
 
+      function ensureRouteLayer() {
+        // Источник и слой добавляются один раз после style.load. До
+        // этого setRoute складывает данные в pending, и они применяются
+        // как только стиль загрузился.
+        if (!__map || !__styleLoaded || __map.getSource('route')) return;
+        __map.addSource('route', {
+          type: 'geojson',
+          data: { type: 'Feature', properties: {}, geometry: { type: 'LineString', coordinates: [] } },
+        });
+        __map.addLayer({
+          id: 'route',
+          type: 'line',
+          source: 'route',
+          layout: { 'line-cap': 'round', 'line-join': 'round' },
+          paint: { 'line-color': '${DriverColors.primary}', 'line-width': 9 },
+        });
+      }
+
+      var __pendingRoute = null;
       function setRoute(coords) {
         if (!__map) return;
-        if (__routePolyline) {
-          __routePolyline.destroy();
-          __routePolyline = null;
+        if (!__styleLoaded) {
+          __pendingRoute = coords;
+          return;
         }
-        if (coords && coords.length > 1) {
-          __routePolyline = new mapgl.Polyline(__map, {
-            coordinates: coords,
-            width: 9,
-            color: '${DriverColors.primary}',
-          });
-        }
+        ensureRouteLayer();
+        var data = {
+          type: 'Feature',
+          properties: {},
+          geometry: { type: 'LineString', coordinates: coords && coords.length > 1 ? coords : [] },
+        };
+        var src = __map.getSource('route');
+        if (src) src.setData(data);
       }
 
       function setCenter(loc, opts) {
         if (!__map) return;
         __map.setCenter([loc.longitude, loc.latitude]);
         if (opts && typeof opts.zoom === 'number') __map.setZoom(opts.zoom);
-        if (opts && typeof opts.bearing === 'number') __map.setRotation(opts.bearing);
+        if (opts && typeof opts.bearing === 'number') __map.setBearing(opts.bearing);
         if (opts && typeof opts.pitch === 'number') __map.setPitch(opts.pitch);
       }
 
@@ -272,13 +304,12 @@ function buildHtml(apiKey: string, center: [number, number], zoom: number): stri
           if (c[1] > maxLat) maxLat = c[1];
         }
         var pad = typeof padding === 'number' ? padding : 60;
-        __map.fitBounds({
-          southWest: [minLng, minLat],
-          northEast: [maxLng, maxLat],
-        }, { padding: { top: pad, right: pad, bottom: pad, left: pad } });
+        __map.fitBounds([[minLng, minLat], [maxLng, maxLat]], {
+          padding: { top: pad, right: pad, bottom: pad, left: pad },
+          duration: 600,
+        });
       }
 
-      // RN side dispatches commands via injectJavaScript that calls this.
       window.applyCommand = function (cmd) {
         try {
           switch (cmd.type) {
@@ -299,105 +330,103 @@ function buildHtml(apiKey: string, center: [number, number], zoom: number): stri
       function init() {
         try {
           if (!'${apiKey}' || '${apiKey}'.length === 0) {
-            post({ type: 'error', message: 'API-ключ 2GIS не передан в WebView (EXPO_PUBLIC_TWOGIS_KEY пустой)' });
+            post({ type: 'error', message: 'MapTiler key пустой (EXPO_PUBLIC_MAPTILER_KEY не попал в сборку)' });
             return;
           }
-          __map = new mapgl.Map('map', {
+          var styleUrl = 'https://api.maptiler.com/maps/${styleName}/style.json?key=${apiKey}';
+          __map = new maplibregl.Map({
+            container: 'map',
+            style: styleUrl,
             center: ${JSON.stringify(center)},
             zoom: ${zoom},
-            key: '${apiKey}',
             // 3D-вид как стартовое состояние карты во всём приложении.
-            // На zoom 16+ 2GIS экструдирует здания, на меньшем зуме
-            // получается просто наклонная плоскость — оба варианта
-            // ощущаются «трёхмерными» вместо плоской бумажной карты.
+            // На zoom 15+ MapTiler streets-v2 экструдирует здания.
             pitch: 45,
-            // Hide 2GIS native UI controls — RN side draws its own.
-            zoomControl: false,
-            keyControl: false,
+            attributionControl: false,
+            // Тачи: позволяем pinch/pan/rotate. Стандартный набор
+            // MapLibre — то что и было в 2GIS.
           });
-          // 'ready' постим сразу после успешного конструктора. Раньше
-          // была попытка дождаться 'idle', но MapGL v1 такого события
-          // не эмитит — ready никогда не отправлялся, очередь команд
-          // (setDriver, setRoute, setMarkers) копилась бесконечно, и
-          // на карте не было ни водителя, ни маршрута.
-          post({ type: 'ready' });
-          // MapGL v1 эмитит 'error' при невалидном ключе / отказе тайлов —
-          // отдельно подписываемся для диагностики, но это уже не
-          // блокирует ready-сигнал.
-          if (typeof __map.on === 'function') {
-            __map.on('error', function (e) {
-              // styleloaderror — самый частый тип. MapGL глотает
-              // детали внутри Error/Promise, поэтому глубоко
-              // сериализуем event + берём последние failed-запросы
-              // из network-перехватчика наверху.
-              var parts = [];
-              try {
-                var seen = [];
-                var flat = JSON.stringify(e, function (k, v) {
-                  if (typeof v === 'object' && v !== null) {
-                    if (seen.indexOf(v) >= 0) return '[circular]';
-                    seen.push(v);
-                  }
-                  if (v instanceof Error) return { name: v.name, message: v.message, stack: (v.stack || '').slice(0, 200) };
-                  return v;
-                });
-                if (flat && flat !== '{}') parts.push('evt=' + flat.slice(0, 300));
-              } catch (_) {}
-              if (e && e.type) parts.push('type=' + e.type);
-              if (e && e.message) parts.push('msg=' + e.message);
-              var net = window.__twoGisNetLog || [];
-              for (var i = net.length - 1; i >= 0 && i >= net.length - 3; i--) {
-                if (net[i].failed) {
-                  parts.push('net=' + (net[i].status || 'fail') + ' ' + net[i].url.slice(0, 80));
+          // ready постим на 'load' (стиль и все sources загружены) —
+          // только после этого можно безопасно addSource/addLayer для
+          // маршрута. setDriver работает раньше через Marker, но route
+          // нуждается в стилях.
+          __map.on('load', function () {
+            __styleLoaded = true;
+            ensureRouteLayer();
+            if (__pendingRoute) {
+              setRoute(__pendingRoute);
+              __pendingRoute = null;
+            }
+            post({ type: 'ready' });
+          });
+          __map.on('error', function (e) {
+            // MapLibre 'error' event приходит с полем .error — Error
+            // объектом с message/stack. Сериализуем глубже и добавляем
+            // последние failed-сетевые вызовы из перехватчика выше.
+            var parts = [];
+            try {
+              var seen = [];
+              var flat = JSON.stringify(e, function (k, v) {
+                if (typeof v === 'object' && v !== null) {
+                  if (seen.indexOf(v) >= 0) return '[circular]';
+                  seen.push(v);
                 }
+                if (v instanceof Error) return { name: v.name, message: v.message, stack: (v.stack || '').slice(0, 200) };
+                return v;
+              });
+              if (flat && flat !== '{}') parts.push('evt=' + flat.slice(0, 300));
+            } catch (_) {}
+            if (e && e.error && e.error.message) parts.push('msg=' + e.error.message);
+            var net = window.__mapNetLog || [];
+            for (var i = net.length - 1; i >= 0 && i >= net.length - 3; i--) {
+              if (net[i].failed) {
+                parts.push('net=' + (net[i].status || 'fail') + ' ' + net[i].url.slice(0, 80));
               }
-              post({ type: 'error', message: 'MapGL: ' + parts.join(' | ') });
-            });
-          }
-          // Any user gesture breaks follow-camera on the RN side. We
-          // detect via 'movestart' triggered with 'isUserInteraction'.
-          // MapGL doesn't expose that reason directly, so we listen for
-          // touchstart on the canvas — fires only on real user input.
-          var mapEl = document.getElementById('map');
-          if (mapEl) {
-            mapEl.addEventListener('touchstart', function () {
+            }
+            post({ type: 'error', message: 'MapLibre: ' + parts.join(' | ') });
+          });
+          // Любой жест пользователя ломает follow-camera на RN-стороне.
+          // dragstart/rotatestart/pitchstart с .originalEvent есть только
+          // у реальных тачей, не у программных move'ов от setCenter.
+          ['dragstart', 'rotatestart', 'pitchstart', 'touchstart'].forEach(function (ev) {
+            __map.on(ev, function (e) {
+              if (e && !e.originalEvent && ev !== 'touchstart') return;
               if (!__gestureSent) {
                 __gestureSent = true;
                 post({ type: 'gesture' });
-                // Reset shortly so subsequent gestures fire again.
                 setTimeout(function () { __gestureSent = false; }, 400);
               }
-            }, { passive: true });
-          }
+            });
+          });
         } catch (e) {
           post({ type: 'error', message: String(e && e.message ? e.message : e) });
         }
       }
 
-      // mapgl is loaded async — poll briefly until it's defined.
+      // maplibregl грузится async — poll коротко пока не появится.
       var __tries = 0;
-      function waitForMapgl() {
-        if (typeof mapgl !== 'undefined') {
+      function waitForLib() {
+        if (typeof maplibregl !== 'undefined') {
           init();
           return;
         }
         __tries++;
         if (__tries > 80) {
-          post({ type: 'error', message: 'mapgl failed to load' });
+          post({ type: 'error', message: 'maplibregl failed to load' });
           return;
         }
-        setTimeout(waitForMapgl, 100);
+        setTimeout(waitForLib, 100);
       }
-      waitForMapgl();
+      waitForLib();
     </script>
   </body>
 </html>`;
 }
 
-const TwoGisMapView = forwardRef<TwoGisMapHandle, Props>(function TwoGisMapView(
+const MapLibreMapView = forwardRef<MapLibreMapHandle, Props>(function MapLibreMapView(
   {
-    initialCenter = TWOGIS_DEFAULT_CENTER,
-    initialZoom = TWOGIS_DEFAULT_ZOOM,
+    initialCenter = MAP_DEFAULT_CENTER,
+    initialZoom = MAP_DEFAULT_ZOOM,
     onReady,
     onUserGesture,
     style,
@@ -406,33 +435,35 @@ const TwoGisMapView = forwardRef<TwoGisMapHandle, Props>(function TwoGisMapView(
 ) {
   const webRef = useRef<WebView>(null);
   const readyRef = useRef(false);
-  // Commands issued before the WebView finishes loading are queued and
-  // replayed on 'ready'. Otherwise a fast-mounted parent that calls
-  // setDriver immediately would see the call silently dropped.
+  // Commands, выданные до 'ready', складываются в очередь и
+  // воспроизводятся когда страница загрузится.
   const queueRef = useRef<object[]>([]);
-  // Видимая диагностика — иначе при пустом TWOGIS_API_KEY или
-  // ошибках init у пользователя просто чёрный квадрат без понимания
-  // что не так.
-  const keyMissing = TWOGIS_API_KEY.length === 0;
+  // Видимая диагностика — иначе при пустом MAPTILER_KEY или ошибках
+  // init у пользователя был бы просто чёрный квадрат без понимания.
+  const keyMissing = MAPTILER_KEY.length === 0;
   const [initError, setInitError] = useState<string | null>(null);
   // MIUI / Doze регулярно убивают WebView render-процесс когда app в
-  // фоне. Без авто-рекавери водитель видел overlay «WebView убит,
-  // перезапустите приложение». Теперь меняем remountKey → WebView
-  // целиком пересоздаётся, новый рендер-процесс стартует, init() в
-  // HTML отрабатывает заново. UI-overlay показываем только если
-  // ремаунт случился больше 2-х раз подряд за короткое время.
+  // фоне. Меняем remountKey → WebView пересоздаётся, новый рендер-
+  // процесс стартует, init() в HTML отрабатывает заново. Overlay
+  // показываем только если ремаунт случился больше 3-х раз подряд.
   const [remountKey, setRemountKey] = useState(0);
   const recoveryAttemptsRef = useRef(0);
 
   // initialCenter обычно передаётся inline-массивом из родителя — на
-  // каждый GPS-апдейт это новый референс, useMemo пересоздавал html,
-  // WebView получал новый source и перезагружал страницу целиком (с
-  // повторным скачиванием MapGL JS из CDN). Замораживаем значения,
+  // каждый GPS-апдейт это новый референс, useMemo пересоздавал бы html,
+  // WebView получал бы новый source и перезагружал страницу целиком (с
+  // повторным скачиванием MapLibre из CDN). Замораживаем значения,
   // увиденные на маунте — это и есть смысл слова "initial".
   const frozenCenterRef = useRef<[number, number]>(initialCenter);
   const frozenZoomRef = useRef<number>(initialZoom);
   const html = useMemo(
-    () => buildHtml(TWOGIS_API_KEY, frozenCenterRef.current, frozenZoomRef.current),
+    () =>
+      buildHtml(
+        MAPTILER_KEY,
+        MAPTILER_STYLE,
+        frozenCenterRef.current,
+        frozenZoomRef.current,
+      ),
     [],
   );
 
@@ -462,9 +493,6 @@ const TwoGisMapView = forwardRef<TwoGisMapHandle, Props>(function TwoGisMapView(
     queueRef.current = [];
     setInitError(null);
     setRemountKey((k) => k + 1);
-    // Если ремаунт прошёл успешно и карта не падает 20 сек — считаем
-    // что рекавери сработала, сбрасываем счётчик. Иначе следующее
-    // падение опять накапливает, и на 4-м идёт overlay.
     setTimeout(() => {
       recoveryAttemptsRef.current = 0;
     }, 20000);
@@ -483,6 +511,7 @@ const TwoGisMapView = forwardRef<TwoGisMapHandle, Props>(function TwoGisMapView(
     [dispatch],
   );
 
+  const lastMessageRef = useRef<number>(Date.now());
   const handleMessage = useCallback(
     (event: WebViewMessageEvent): void => {
       lastMessageRef.current = Date.now();
@@ -490,7 +519,6 @@ const TwoGisMapView = forwardRef<TwoGisMapHandle, Props>(function TwoGisMapView(
         const data = JSON.parse(event.nativeEvent.data) as { type: string; message?: string };
         if (data.type === 'ready') {
           readyRef.current = true;
-          // Drain queued commands.
           const queue = queueRef.current;
           queueRef.current = [];
           for (const cmd of queue) {
@@ -506,7 +534,7 @@ const TwoGisMapView = forwardRef<TwoGisMapHandle, Props>(function TwoGisMapView(
           onUserGesture?.();
         } else if (data.type === 'error') {
           // eslint-disable-next-line no-console
-          console.warn('[TwoGisMapView] map error:', data.message);
+          console.warn('[MapLibreMapView] map error:', data.message);
           setInitError(data.message ?? 'Не удалось загрузить карту');
         }
       } catch {
@@ -528,7 +556,6 @@ const TwoGisMapView = forwardRef<TwoGisMapHandle, Props>(function TwoGisMapView(
   // callback при этом не всегда срабатывает. Отслеживаем последнюю
   // активность из WebView; если после foreground'а >2 сек тишина и
   // не пришёл pong на инжекту — ремаунтим.
-  const lastMessageRef = useRef<number>(Date.now());
   useEffect(() => {
     const sub = AppState.addEventListener('change', (next) => {
       if (next !== 'active' || !readyRef.current) return;
@@ -551,11 +578,6 @@ const TwoGisMapView = forwardRef<TwoGisMapHandle, Props>(function TwoGisMapView(
         key={remountKey}
         ref={webRef}
         originWhitelist={['*']}
-        // baseUrl был 'https://mapgl.2gis.com' — это заставляло WebView
-        // выглядеть для MapGL-сервера как запрос с самого себя, и его
-        // анти-abuse защита резала загрузку стиля (styleloaderror).
-        // В обычном браузере с тем же ключом всё работает с localhost-
-        // origin'ом, поэтому копируем это поведение здесь.
         source={{ html, baseUrl: 'https://localhost/' }}
         javaScriptEnabled
         domStorageEnabled
@@ -563,9 +585,8 @@ const TwoGisMapView = forwardRef<TwoGisMapHandle, Props>(function TwoGisMapView(
         thirdPartyCookiesEnabled
         cacheEnabled
         // LOAD_CACHE_ELSE_NETWORK заставляет Android WebView сначала
-        // взять MapGL JS из дискового кеша, и обращаться к CDN только
-        // если в кеше пусто. Без этого каждый remount тянул ~500КБ
-        // скрипта по сети — на 3G это секунды чёрного экрана.
+        // взять MapLibre JS и тайлы из дискового кеша, и обращаться к
+        // CDN только если в кеше пусто.
         cacheMode="LOAD_CACHE_ELSE_NETWORK"
         onMessage={handleMessage}
         onError={(e) => {
@@ -577,13 +598,9 @@ const TwoGisMapView = forwardRef<TwoGisMapHandle, Props>(function TwoGisMapView(
           setInitError(`WebView HTTP ${statusCode}: ${url}`);
         }}
         onContentProcessDidTerminate={() => {
-          // iOS-only — на Android этот колбэк не вызывается. На всякий
-          // случай тоже делаем remount.
           attemptRemount('content process terminated');
         }}
         onRenderProcessGone={() => {
-          // Android: рендер-процесс убит OS (MIUI / Doze / OOM-killer).
-          // Автоматически пересоздаём WebView вместо ругани в overlay.
           attemptRemount('renderer gone');
         }}
         startInLoadingState
@@ -593,11 +610,7 @@ const TwoGisMapView = forwardRef<TwoGisMapHandle, Props>(function TwoGisMapView(
           </View>
         )}
         style={styles.webview}
-        // MapGL рендерится в WebGL canvas — это требует hardware layer.
-        // Раньше тут было "software" с комментарием про «чёрный квадрат
-        // на Xiaomi», но настоящий симптом был другой: HtmlMarker'ы
-        // (DOM) видны, а тайлы чёрные — это ровно software-режим, где
-        // WebGL не работает. Hardware возвращает рендер тайлов.
+        // MapLibre рендерится в WebGL canvas — нужен hardware layer.
         androidLayerType="hardware"
         bounces={false}
         scrollEnabled={false}
@@ -611,12 +624,12 @@ const TwoGisMapView = forwardRef<TwoGisMapHandle, Props>(function TwoGisMapView(
           </Text>
           <Text style={[Typography.caption, styles.errorBody]}>
             {keyMissing
-              ? 'EXPO_PUBLIC_TWOGIS_KEY не попал в сборку. Пересоберите APK с ключом в .env (см. apps/driver/src/lib/twoGisConfig.ts).'
+              ? 'EXPO_PUBLIC_MAPTILER_KEY не попал в сборку. Получите ключ на https://cloud.maptiler.com/account/keys/ (бесплатный tier 100k загрузок/мес) и положите в mobile/.env, затем пересоберите APK.'
               : initError}
           </Text>
           {!keyMissing && (
             <Text style={[Typography.caption, styles.errorBody, { marginTop: 8, opacity: 0.6 }]}>
-              key …{TWOGIS_API_KEY.slice(-4)} (len {TWOGIS_API_KEY.length})
+              key …{MAPTILER_KEY.slice(-4)} (len {MAPTILER_KEY.length})
             </Text>
           )}
         </View>
@@ -625,7 +638,7 @@ const TwoGisMapView = forwardRef<TwoGisMapHandle, Props>(function TwoGisMapView(
   );
 });
 
-export default TwoGisMapView;
+export default MapLibreMapView;
 
 const styles = StyleSheet.create({
   container: {
