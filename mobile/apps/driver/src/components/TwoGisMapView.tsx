@@ -217,30 +217,21 @@ function buildHtml(apiKey: string, center: [number, number], zoom: number): stri
             zoomControl: false,
             keyControl: false,
           });
-          // MapGL грузит тайлы асинхронно — сам new Map() не кидает
-          // exception если ключ невалидный, тайлы просто молча отдают
-          // 401. Ловим это таймаутом: если за 6 сек 'idle' не сработал
-          // и не было первой отрисовки — сообщаем наверх.
-          var __ready = false;
+          // 'ready' постим сразу после успешного конструктора. Раньше
+          // была попытка дождаться 'idle', но MapGL v1 такого события
+          // не эмитит — ready никогда не отправлялся, очередь команд
+          // (setDriver, setRoute, setMarkers) копилась бесконечно, и
+          // на карте не было ни водителя, ни маршрута.
+          post({ type: 'ready' });
+          // MapGL v1 эмитит 'error' при невалидном ключе / отказе тайлов —
+          // отдельно подписываемся для диагностики, но это уже не
+          // блокирует ready-сигнал.
           if (typeof __map.on === 'function') {
-            __map.on('idle', function () {
-              __ready = true;
-              post({ type: 'ready' });
-            });
-            // MapGL v1 эмитит 'error' при невалидном ключе / отказе тайлов.
             __map.on('error', function (e) {
               var msg = e && (e.message || e.type) ? (e.message || e.type) : 'mapgl error';
               post({ type: 'error', message: 'MapGL: ' + msg });
             });
           }
-          setTimeout(function () {
-            if (!__ready) {
-              post({
-                type: 'error',
-                message: 'Карта не загрузилась за 6 сек — проверьте ключ 2GIS или сеть',
-              });
-            }
-          }, 6000);
           // Any user gesture breaks follow-camera on the RN side. We
           // detect via 'movestart' triggered with 'isUserInteraction'.
           // MapGL doesn't expose that reason directly, so we listen for
