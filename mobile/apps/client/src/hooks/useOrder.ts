@@ -123,14 +123,14 @@ export function useOrder(): UseOrderReturn {
         car_number?: string;
       };
       if (orderRef.current && typeof payload.latitude === 'number' && typeof payload.longitude === 'number') {
+        const prevDriver = orderRef.current.driver;
         const optimistic: Order = {
           ...orderRef.current,
           driver: {
-            id: payload.driver_id ?? orderRef.current.driver?.id ?? 0,
-            name: payload.driver_name ?? orderRef.current.driver?.name ?? '',
-            phone: orderRef.current.driver?.phone ?? '',
-            car_model: payload.car_model ?? orderRef.current.driver?.car_model,
-            car_number: payload.car_number ?? orderRef.current.driver?.car_number,
+            name: payload.driver_name ?? prevDriver?.name ?? '',
+            phone: prevDriver?.phone ?? '',
+            car_model: payload.car_model ?? prevDriver?.car_model ?? '',
+            car_number: payload.car_number ?? prevDriver?.car_number ?? '',
             latitude: payload.latitude,
             longitude: payload.longitude,
           },
@@ -199,6 +199,8 @@ export function useOrder(): UseOrderReturn {
     ) {
       return;
     }
+    const lat = payload.latitude;
+    const lng = payload.longitude;
     setState((prev) => {
       if (
         prev.phase !== 'accepted' &&
@@ -214,8 +216,8 @@ export function useOrder(): UseOrderReturn {
         ...prev.order,
         driver: {
           ...prev.order.driver,
-          latitude: payload.latitude,
-          longitude: payload.longitude,
+          latitude: lat,
+          longitude: lng,
         },
       };
       orderRef.current = nextOrder;

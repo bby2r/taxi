@@ -1,7 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { Platform, StyleSheet, View } from 'react-native';
 import { MarkerAnimated, AnimatedRegion } from 'react-native-maps';
-import Svg, { Ellipse, Path, Circle } from 'react-native-svg';
+import Svg, { Defs, Ellipse, LinearGradient, Path, Rect, Stop } from 'react-native-svg';
 
 interface AnimatedDriverMarkerProps {
   coordinate: { latitude: number; longitude: number };
@@ -91,16 +91,48 @@ export default function AnimatedDriverMarker({
       tracksViewChanges={Platform.OS === 'ios' ? false : false}
     >
       <View style={styles.carShadow}>
-        <Svg width={44} height={44} viewBox="0 0 48 48">
-          {/* Объёмная синяя стрелка-индикатор как у 2GIS Navigator:
-              эллипс-тень снизу + две грани (тёмная справа, светлая
-              слева) дают ощущение 3D-пирамиды, белая разделительная
-              линия + точка-вершина — стиль навигатора, не машинки. */}
-          <Ellipse cx={24} cy={34} rx={16} ry={4} fill="#3B82F6" opacity={0.18} />
-          <Path d="M24 6 L36 34 L24 28 Z" fill="#1D4ED8" />
-          <Path d="M24 6 L12 34 L24 28 Z" fill="#3B82F6" />
-          <Path d="M24 6 L24 28" stroke="#fff" strokeWidth={1.2} opacity={0.85} />
-          <Circle cx={24} cy={6} r={2.2} fill="#fff" />
+        <Svg width={56} height={56} viewBox="0 0 56 56">
+          {/* Стильное такси сверху — удлинённый седан с градиентом
+              янтарного цвета, тонированные стёкла, чёрный таксишный
+              значок-шашечки на крыше, лёгкие колёса по бокам. Стиль
+              ближе к Яндекс.Pro чем к мультяшным иконкам. */}
+          <Defs>
+            <LinearGradient id="bodyG" x1="0" y1="0" x2="0" y2="1">
+              <Stop offset="0" stopColor="#FCD34D" />
+              <Stop offset="1" stopColor="#D97706" />
+            </LinearGradient>
+            <LinearGradient id="glassG" x1="0" y1="0" x2="0" y2="1">
+              <Stop offset="0" stopColor="#1E3A8A" stopOpacity={0.9} />
+              <Stop offset="1" stopColor="#1E40AF" stopOpacity={0.55} />
+            </LinearGradient>
+          </Defs>
+          {/* Drop shadow ellipse */}
+          <Ellipse cx={28} cy={51} rx={16} ry={2.5} fill="#000" opacity={0.3} />
+          {/* Wheels (visible as black bars on sides) */}
+          <Rect x={14} y={16} width={3} height={8} rx={1.2} fill="#0F172A" />
+          <Rect x={39} y={16} width={3} height={8} rx={1.2} fill="#0F172A" />
+          <Rect x={14} y={32} width={3} height={8} rx={1.2} fill="#0F172A" />
+          <Rect x={39} y={32} width={3} height={8} rx={1.2} fill="#0F172A" />
+          {/* Body */}
+          <Path
+            d="M18 8 Q18 4 22 4 L34 4 Q38 4 38 8 L38 48 Q38 52 34 52 L22 52 Q18 52 18 48 Z"
+            fill="url(#bodyG)"
+            stroke="#1F2937"
+            strokeWidth={1.2}
+          />
+          {/* Windshield */}
+          <Path d="M20 8 L36 8 L34 17 L22 17 Z" fill="url(#glassG)" />
+          {/* Rear window */}
+          <Path d="M22 39 L34 39 L36 48 L20 48 Z" fill="url(#glassG)" opacity={0.85} />
+          {/* Roof — TAXI badge (checkers) */}
+          <Rect x={22} y={26} width={12} height={5} rx={0.8} fill="#1F2937" />
+          <Rect x={22} y={26} width={3} height={2.5} fill="#FCD34D" />
+          <Rect x={28} y={26} width={3} height={2.5} fill="#FCD34D" />
+          <Rect x={25} y={28.5} width={3} height={2.5} fill="#FCD34D" />
+          <Rect x={31} y={28.5} width={3} height={2.5} fill="#FCD34D" />
+          {/* Headlights */}
+          <Rect x={19} y={4.5} width={3.5} height={1.5} rx={0.4} fill="#FEF9C3" />
+          <Rect x={33.5} y={4.5} width={3.5} height={1.5} rx={0.4} fill="#FEF9C3" />
         </Svg>
       </View>
     </MarkerAnimated>

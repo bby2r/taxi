@@ -16,6 +16,7 @@ import {
   PanResponder,
 } from 'react-native';
 import MapView, { Region as MapRegion, Marker, MarkerDragStartEndEvent } from 'react-native-maps';
+import Svg, { Ellipse, Path, Circle } from 'react-native-svg';
 
 // Снап-константы шторки. Вынесены за компонент — иначе пересчёт на
 // каждый рендер делает их новые reference identity, useCallback вокруг
@@ -101,11 +102,20 @@ function PulsingDot({ size = 14 }: { size?: number }): React.ReactNode {
  * фиксированный размер, без анимаций, hit-target ~50px.
  */
 function PickupPinMarker(): React.ReactNode {
+  // Клиент видит себя как объёмную синюю стрелку — стиль 2GIS
+  // Navigator. Это его собственная точка подачи и одновременно
+  // визуальный «here I am». Стрелка статичная (клиент стоит, не
+  // едет), но даёт ощущение «современного нав-приложения» вместо
+  // плоского person-badge.
   return (
     <View style={pickupPinStyles.wrapper}>
-      <View style={pickupPinStyles.badge}>
-        <Icon name="user" size={26} color={ClientColors.white} strokeWidth={2.4} />
-      </View>
+      <Svg width={48} height={48} viewBox="0 0 48 48">
+        <Ellipse cx={24} cy={34} rx={16} ry={4} fill="#3B82F6" opacity={0.18} />
+        <Path d="M24 6 L36 34 L24 28 Z" fill="#1D4ED8" />
+        <Path d="M24 6 L12 34 L24 28 Z" fill="#3B82F6" />
+        <Path d="M24 6 L24 28" stroke="#fff" strokeWidth={1.2} opacity={0.85} />
+        <Circle cx={24} cy={6} r={2.2} fill="#fff" />
+      </Svg>
       <View style={pickupPinStyles.stem} />
     </View>
   );
@@ -115,25 +125,12 @@ const pickupPinStyles = StyleSheet.create({
   wrapper: {
     alignItems: 'center',
   },
-  badge: {
-    width: 48,
-    height: 48,
-    borderRadius: 14,
-    backgroundColor: ClientColors.pickupBadge,
-    alignItems: 'center',
-    justifyContent: 'center',
-    shadowColor: ClientColors.pickupBadge,
-    shadowOpacity: 0.45,
-    shadowRadius: 10,
-    shadowOffset: { width: 0, height: 4 },
-    elevation: 8,
-  },
   stem: {
     width: 2,
-    height: 14,
+    height: 10,
     backgroundColor: ClientColors.pickupDark,
-    opacity: 0.8,
-    marginTop: -1,
+    opacity: 0.6,
+    marginTop: -4,
   },
 });
 
