@@ -593,11 +593,12 @@ const TwoGisMapView = forwardRef<TwoGisMapHandle, Props>(function TwoGisMapView(
           </View>
         )}
         style={styles.webview}
-        // androidLayerType="hardware" даёт чёрный квадрат на Xiaomi/MIUI
-        // вместо HTML контента — GPU-сёрфейс WebView не композитится.
-        // Software-режим стабильнее, потеря fps пренебрежимо мала для
-        // статической карты с редкими ререндерами.
-        androidLayerType="software"
+        // MapGL рендерится в WebGL canvas — это требует hardware layer.
+        // Раньше тут было "software" с комментарием про «чёрный квадрат
+        // на Xiaomi», но настоящий симптом был другой: HtmlMarker'ы
+        // (DOM) видны, а тайлы чёрные — это ровно software-режим, где
+        // WebGL не работает. Hardware возвращает рендер тайлов.
+        androidLayerType="hardware"
         bounces={false}
         scrollEnabled={false}
         overScrollMode="never"
