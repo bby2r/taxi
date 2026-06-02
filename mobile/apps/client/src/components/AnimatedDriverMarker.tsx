@@ -1,7 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { Platform, StyleSheet, Text, View } from 'react-native';
+import { Platform, StyleSheet, View } from 'react-native';
 import { MarkerAnimated, AnimatedRegion } from 'react-native-maps';
-import { ClientColors } from '@taxi/shared';
+import Svg, { Path, Rect } from 'react-native-svg';
 
 interface AnimatedDriverMarkerProps {
   coordinate: { latitude: number; longitude: number };
@@ -91,9 +91,21 @@ export default function AnimatedDriverMarker({
       tracksViewChanges={Platform.OS === 'ios' ? false : false}
     >
       <View style={styles.carShadow}>
-        <View style={styles.carBadge}>
-          <Text style={styles.carEmoji}>🚗</Text>
-        </View>
+        <Svg width={40} height={40} viewBox="0 0 32 32">
+          {/* Жёлтое такси сверху — корпус, стёкла, фары. Та же иконка
+              что водитель видит у себя на карте, чтобы визуально было
+              «то же самое такси едет ко мне». */}
+          <Path
+            d="M9 6 Q9 4 11 4 L21 4 Q23 4 23 6 L23 26 Q23 28 21 28 L11 28 Q9 28 9 26 Z"
+            fill="#FBBF24"
+            stroke="#1F2937"
+            strokeWidth={1.2}
+          />
+          <Path d="M10 7 L22 7 L20.5 11.5 L11.5 11.5 Z" fill="#1F2937" opacity={0.75} />
+          <Path d="M11.5 21 L20.5 21 L22 25 L10 25 Z" fill="#1F2937" opacity={0.55} />
+          <Rect x={10} y={3.5} width={2.5} height={1} rx={0.5} fill="#FEF3C7" />
+          <Rect x={19.5} y={3.5} width={2.5} height={1} rx={0.5} fill="#FEF3C7" />
+        </Svg>
       </View>
     </MarkerAnimated>
   );
@@ -115,23 +127,10 @@ function computeBearing(
 
 const styles = StyleSheet.create({
   carShadow: {
-    shadowColor: ClientColors.primaryDark,
-    shadowOpacity: 0.25,
-    shadowRadius: 8,
-    shadowOffset: { width: 0, height: 4 },
-    elevation: 6,
-  },
-  carBadge: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    backgroundColor: ClientColors.white,
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderWidth: 2,
-    borderColor: ClientColors.primary,
-  },
-  carEmoji: {
-    fontSize: 18,
+    shadowColor: '#000',
+    shadowOpacity: 0.4,
+    shadowRadius: 6,
+    shadowOffset: { width: 0, height: 3 },
+    elevation: 8,
   },
 });

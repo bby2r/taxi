@@ -54,20 +54,25 @@ function buildHtml(apiKey: string, center: [number, number], zoom: number): stri
     <style>
       html, body, #map { margin: 0; padding: 0; width: 100%; height: 100%; background: #1F2937; }
       .driver-pin {
-        width: 36px; height: 36px;
+        width: 40px; height: 40px;
         display: flex; align-items: center; justify-content: center;
         transform-origin: center;
         will-change: transform;
+        filter: drop-shadow(0 2px 4px rgba(0,0,0,0.5));
       }
       .driver-pin svg { width: 100%; height: 100%; }
-      .pickup-pin, .dropoff-pin {
+      .pickup-pin {
+        width: 36px; height: 36px;
+        filter: drop-shadow(0 2px 4px rgba(0,0,0,0.5));
+      }
+      .pickup-pin svg { width: 100%; height: 100%; }
+      .dropoff-pin {
         width: 22px; height: 22px;
         border-radius: 50%;
         border: 4px solid #fff;
-        box-shadow: 0 2px 6px rgba(0,0,0,0.35);
+        box-shadow: 0 2px 6px rgba(0,0,0,0.5);
+        background: ${DriverColors.success};
       }
-      .pickup-pin { background: ${DriverColors.primary}; }
-      .dropoff-pin { background: ${DriverColors.success}; }
     </style>
     <script src="https://mapgl.2gis.com/api/js/v1"></script>
   </head>
@@ -89,9 +94,29 @@ function buildHtml(apiKey: string, center: [number, number], zoom: number): stri
 
       function makeDriverHtml(heading) {
         var rot = (heading == null || isNaN(heading)) ? 0 : heading;
+        // Жёлтое такси сверху, как в Яндекс/Болт: корпус, лобовое и
+        // заднее стекло, фары. Поворачивается вместе с heading'ом,
+        // лобовое стекло смотрит вперёд по движению.
         return '<div class="driver-pin" style="transform: rotate(' + rot + 'deg)">' +
-          '<svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">' +
-            '<path d="M12 2 L20 22 L12 18 L4 22 Z" fill="${DriverColors.primary}" stroke="#fff" stroke-width="2" stroke-linejoin="round"/>' +
+          '<svg viewBox="0 0 32 32" xmlns="http://www.w3.org/2000/svg">' +
+            '<path d="M9 6 Q9 4 11 4 L21 4 Q23 4 23 6 L23 26 Q23 28 21 28 L11 28 Q9 28 9 26 Z" ' +
+              'fill="#FBBF24" stroke="#1F2937" stroke-width="1.2"/>' +
+            '<path d="M10 7 L22 7 L20.5 11.5 L11.5 11.5 Z" fill="#1F2937" opacity="0.75"/>' +
+            '<path d="M11.5 21 L20.5 21 L22 25 L10 25 Z" fill="#1F2937" opacity="0.55"/>' +
+            '<rect x="10" y="3.5" width="2.5" height="1" rx="0.5" fill="#FEF3C7"/>' +
+            '<rect x="19.5" y="3.5" width="2.5" height="1" rx="0.5" fill="#FEF3C7"/>' +
+          '</svg>' +
+        '</div>';
+      }
+
+      function makePickupHtml() {
+        // Фигурка человека-клиента — водитель сразу видит «здесь меня
+        // ждут», а не безликий жёлтый кружок.
+        return '<div class="pickup-pin">' +
+          '<svg viewBox="0 0 32 32" xmlns="http://www.w3.org/2000/svg">' +
+            '<circle cx="16" cy="16" r="14" fill="${DriverColors.primary}" stroke="#fff" stroke-width="2.5"/>' +
+            '<circle cx="16" cy="12" r="3.2" fill="#1F2937"/>' +
+            '<path d="M9 24 Q9 17 16 17 Q23 17 23 24 Z" fill="#1F2937"/>' +
           '</svg>' +
         '</div>';
       }
@@ -122,8 +147,8 @@ function buildHtml(apiKey: string, center: [number, number], zoom: number): stri
           } else {
             __pickupMarker = new mapgl.HtmlMarker(__map, {
               coordinates: p,
-              html: '<div class="pickup-pin"></div>',
-              anchor: [11, 11],
+              html: makePickupHtml(),
+              anchor: [18, 18],
             });
           }
         } else if (__pickupMarker) {
