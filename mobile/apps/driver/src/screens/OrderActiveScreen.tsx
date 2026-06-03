@@ -27,8 +27,7 @@ import {
 import type { Order, DriverCancellationReason, Route } from '@taxi/shared';
 import { useDriverOrder } from '../hooks/useDriverOrder';
 import MapLibreMapView, { type MapLibreMapHandle } from '../components/MapLibreMapView';
-import NavigationBanner from '../components/NavigationBanner';
-import NavStatusBar from '../components/NavStatusBar';
+import NavigationHud from '../components/NavigationHud';
 import type { DriverStackParamList } from '../navigation/types';
 
 // Driver must be within this distance of the pickup point before they can
@@ -793,25 +792,18 @@ export default function OrderActiveScreen(): React.ReactNode {
 
       {/* Turn-by-turn баннер — стрелка манёвра + «Через 100 м поверните
           направо». Видим только в нав-фазах (едет к клиенту / в поездке)
-          и только если есть текущий шаг от useNavigationStep. */}
+          и только если есть текущий шаг от useNavigationStep.
+          HUD объединяет манёвр + ETA-полоску в одну карточку — раньше
+          было два разнесённых элемента, плавающая пилюля ETA на 50%
+          экрана не свайпалась и выглядела «второй шторкой». */}
       {isNavigatingForCues && navStep && (
-        <View style={styles.navBannerWrap} pointerEvents="none">
-          <NavigationBanner
+        <View style={styles.navHudWrap} pointerEvents="none">
+          <NavigationHud
             maneuver={navStep.step.maneuver}
-            distanceMeters={navStep.distanceMeters}
+            distanceToManeuverMeters={navStep.distanceMeters}
             instruction={navStep.step.instruction}
-          />
-        </View>
-      )}
-
-      {/* Нижняя статусная пилюля «X мин / HH:MM прибытие / Y км» —
-          стиль 2GIS Navigator. Видна поверх BottomSheet, держит ETA
-          перед глазами водителя даже когда лист свёрнут до 18%. */}
-      {isNavigatingForCues && route && (
-        <View style={styles.navStatusWrap} pointerEvents="none">
-          <NavStatusBar
-            durationSeconds={route.durationSeconds}
-            distanceMeters={route.distanceMeters}
+            durationSeconds={route?.durationSeconds}
+            distanceTotalMeters={route?.distanceMeters}
           />
         </View>
       )}
@@ -944,29 +936,22 @@ const styles = StyleSheet.create({
     borderWidth: 3,
     borderColor: '#fff',
   },
-  navBannerWrap: {
+  navHudWrap: {
+    // HUD едет под status-bar'ом с подушкой 8px и захватывает всю
+    // ширину минус 12px по краям (от внутреннего marginHorizontal в
+    // NavigationHud). Высота карточки ~165px (манёвр 84 + divider 1 +
+    // ETA 60 + LED 8 + paddings).
     position: 'absolute',
     top: Platform.OS === 'android' ? (StatusBar.currentHeight ?? 24) + 8 : 56,
     left: 0,
     right: 0,
   },
-  navStatusWrap: {
-    // Над дефолтным snap'ом BottomSheet (~48% высоты экрана) — пилюля
-    // всегда видна, даже когда лист на минимуме. На фазе completed
-    // лист расширяется и накрывает пилюлю, это ок.
-    position: 'absolute',
-    bottom: '50%',
-    left: 0,
-    right: 0,
-    marginBottom: 16,
-  },
   recenterButton: {
-    // Верхний правый угол — компактная пилюля над status-bar'ом. Раньше
-    // была по центру внизу, перекрывала карту и фигуру водителя на
-    // экране. Top-right оставляет максимум обзора под карту, и водитель
-    // легко дотягивается большим пальцем правой руки на руле.
+    // Под HUD-карточкой справа. HUD занимает ~32-200px по вертикали
+    // (status bar ~32 + card ~165), recenter садится ниже на ~220px
+    // чтобы не перекрывать ни манёвр-блок, ни ETA-полоску.
     position: 'absolute',
-    top: 56,
+    top: 220,
     right: 16,
     flexDirection: 'row',
     alignItems: 'center',
