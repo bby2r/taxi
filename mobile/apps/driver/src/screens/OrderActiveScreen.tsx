@@ -945,19 +945,19 @@ const styles = StyleSheet.create({
     marginBottom: 16,
   },
   recenterButton: {
-    // Sits just above the default snap (~48% of screen height). When
-    // the driver collapses the sheet they still see this button; when
-    // they expand it the button gets covered (acceptable — driver is
-    // reading the card, not steering the map at that moment).
+    // Верхний правый угол — компактная пилюля над status-bar'ом. Раньше
+    // была по центру внизу, перекрывала карту и фигуру водителя на
+    // экране. Top-right оставляет максимум обзора под карту, и водитель
+    // легко дотягивается большим пальцем правой руки на руле.
     position: 'absolute',
-    bottom: '50%',
-    alignSelf: 'center',
+    top: 56,
+    right: 16,
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
-    paddingHorizontal: 18,
-    paddingVertical: 12,
-    borderRadius: 24,
+    gap: 6,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 20,
     backgroundColor: DriverColors.cardBackground,
     borderWidth: 1,
     borderColor: DriverColors.border,
