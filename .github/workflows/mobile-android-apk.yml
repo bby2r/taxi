@@ -51,6 +51,12 @@ jobs:
       # https://cloud.maptiler.com/account/keys/. Без ключа WebView
       # показывает «карта не настроена», остальное приложение работает.
       EXPO_PUBLIC_MAPTILER_KEY: ${{ secrets.EXPO_PUBLIC_MAPTILER_KEY }}
+      # OpenRouteService API key — routing engine с готовыми
+      # русскими инструкциями (вместо OSRM public, где fallback на
+      # локально-построенный текст). Free tier 2k запросов/день. Если
+      # секрет не задан — fetchRoute падает обратно на OSRM, ничего
+      # не ломается. Регистрация: https://openrouteservice.org/dev/#/signup
+      EXPO_PUBLIC_ORS_KEY: ${{ secrets.EXPO_PUBLIC_ORS_KEY }}
 
     steps:
       - name: Checkout repository

@@ -23,7 +23,10 @@ export type MapLibreMapHandle = {
   setDriver: (loc: LatLng & { heading?: number | null }) => void;
   setMarkers: (markers: { pickup?: LatLng | null; dropoff?: LatLng | null }) => void;
   setRoute: (coordinates: Array<[number, number]>) => void;
-  setCenter: (loc: LatLng, opts?: { zoom?: number; bearing?: number; pitch?: number }) => void;
+  setCenter: (
+    loc: LatLng,
+    opts?: { zoom?: number; bearing?: number; pitch?: number; duration?: number },
+  ) => void;
   setPitch: (pitch: number) => void;
   fitBounds: (coordinates: Array<[number, number]>, paddingPx?: number) => void;
 };
@@ -286,10 +289,17 @@ function buildHtml(apiKey: string, styleName: string, center: [number, number], 
 
       function setCenter(loc, opts) {
         if (!__map) return;
-        __map.setCenter([loc.longitude, loc.latitude]);
-        if (opts && typeof opts.zoom === 'number') __map.setZoom(opts.zoom);
-        if (opts && typeof opts.bearing === 'number') __map.setBearing(opts.bearing);
-        if (opts && typeof opts.pitch === 'number') __map.setPitch(opts.pitch);
+        // easeTo вместо setCenter+setZoom+setBearing — навигационная
+        // камера плавно интерполируется (~600мс по умолчанию) вместо
+        // дёрганых jump'ов на каждый GPS-апдейт. duration в opts
+        // переопределяет; 0 = instant (для первого центрирования или
+        // resync после ремаунта).
+        var animOpts = { center: [loc.longitude, loc.latitude], essential: true };
+        if (opts && typeof opts.zoom === 'number') animOpts.zoom = opts.zoom;
+        if (opts && typeof opts.bearing === 'number') animOpts.bearing = opts.bearing;
+        if (opts && typeof opts.pitch === 'number') animOpts.pitch = opts.pitch;
+        animOpts.duration = (opts && typeof opts.duration === 'number') ? opts.duration : 600;
+        __map.easeTo(animOpts);
       }
 
       function fitBounds(coords, padding) {

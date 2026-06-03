@@ -654,19 +654,32 @@ export default function OrderActiveScreen(): React.ReactNode {
     if (!order) return;
     if (!following) return; // user panned away — respect their view
     if (isNavigating && driverPoint) {
-      // Navigation cam (3D): центр на водителе, близкий зум, поворот по
-      // направлению движения + наклон 55° = вид «из-под лобового стекла».
-      // На zoom 17+ 2GIS автоматически рендерит экструдированные здания —
-      // получается полноценный 3D-стиль навигатора без отдельного SDK.
-      // pitch 55° — компромисс: 60° даёт более кинематографичный вид,
-      // но дома закрывают улицу впереди. 55° = улица видна, объём есть.
+      // Navigation cam (3D): центр на водителе, поворот по heading +
+      // наклон 55° = вид «из-под лобового стекла». На MapTiler streets-v2
+      // на zoom 17+ автоматически рендерятся экструдированные здания.
+      // pitch 55° — улица впереди видна, объём есть.
+      //
+      // Зум адаптируется к расстоянию до следующего манёвра:
+      //   < 80м  → 19    (close-up, чтобы увидеть точную геометрию поворота)
+      //   < 150м → 18    (приближаемся к манёвру)
+      //   иначе  → 17    (cruise — обзор улицы впереди)
+      // Так Yandex Navigator / Google Maps делают: камера буквально
+      // «приседает» к асфальту перед поворотом.
+      var zoom = 17;
+      if (navStep) {
+        if (navStep.distanceMeters < 80) zoom = 19;
+        else if (navStep.distanceMeters < 150) zoom = 18;
+      }
       mapRef.current?.setCenter(driverPoint, {
-        zoom: 17,
+        zoom,
         pitch: 55,
         bearing:
           typeof driverLocation.heading === 'number' && driverLocation.heading >= 0
             ? driverLocation.heading
             : 0,
+        // Длиннее duration на zoom-in перед поворотом — без этого камера
+        // дёргается. 800мс хватает чтобы плавно перейти на close-up.
+        duration: 800,
       });
       return;
     }
@@ -695,6 +708,9 @@ export default function OrderActiveScreen(): React.ReactNode {
     driverPoint?.longitude,
     driverLocation.heading,
     following,
+    // Без navStep.distanceMeters камера не подстраивает zoom при
+    // подъезде к повороту — пересчёт только на GPS-апдейт водителя.
+    navStep?.distanceMeters,
   ]);
 
   // Push current driver position into the WebView pin (independent of
