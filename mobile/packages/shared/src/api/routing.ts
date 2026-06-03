@@ -38,10 +38,15 @@ export interface Route {
 const OSRM_BASE_URL = 'https://router.project-osrm.org/route/v1/driving';
 
 export async function fetchRoute(from: RoutePoint, to: RoutePoint): Promise<Route> {
+  // OSRM public demo не поддерживает `language=` (это расширение
+  // Mapbox Directions), и при его передаче возвращает HTTP 400
+  // "Query string malformed" — то самое "маршрут недоступен" в UI.
+  // Локализация инструкций делается ниже в buildInstruction() —
+  // OSRM нужно только geometry+maneuver type+modifier.
   const url =
     `${OSRM_BASE_URL}/` +
     `${from.longitude},${from.latitude};${to.longitude},${to.latitude}` +
-    `?overview=full&geometries=geojson&steps=true&language=ru`;
+    `?overview=full&geometries=geojson&steps=true`;
 
   const response = await fetch(url);
   if (!response.ok) {
