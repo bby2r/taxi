@@ -18,6 +18,7 @@ export { default as Skeleton } from './components/Skeleton';
 export { AuthProvider, useAuth } from './context/AuthContext';
 
 // Hooks
+export * from './hooks/useCompassBearing';
 export * from './hooks/useLocation';
 export * from './hooks/useNavigationStep';
 export * from './hooks/usePusher';

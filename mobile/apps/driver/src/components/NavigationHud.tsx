@@ -1,29 +1,18 @@
 import React from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
-import { DriverColors, ManeuverType, Typography } from '@taxi/shared';
+import { DriverColors, ManeuverType, Route, Typography, formatMeters } from '@taxi/shared';
 
 interface NavigationHudProps {
   maneuver: ManeuverType;
   distanceToManeuverMeters: number;
   instruction: string;
-  // Полное время + дистанция до конца маршрута. Опциональны: если
-  // ещё не построился — секция ETA не рендерится, чтобы не мигать
-  // нулями.
-  durationSeconds?: number;
-  distanceTotalMeters?: number;
+  // route опционален — пока маршрут не построился, ETA-секция не
+  // рендерится. Один объект вместо двух скаляров, чтобы пара
+  // duration+distance не разъезжалась.
+  route?: Route | null;
 }
 
-// Cockpit-стиль HUD: одна карточка вверху экрана с двумя секциями —
-// текущий манёвр сверху (стрелка + дистанция до поворота + текст
-// инструкции) и ETA-полоска снизу (минуты / время прибытия / км до
-// конца). Заменяет два разнесённых элемента (NavigationBanner +
-// плавающая NavStatusBar) — раньше пилюля ETA жила отдельно на
-// 50% экрана и не свайпалась, путала водителя «второй шторкой».
-//
-// Снизу амбер-accent (1.5px gradient) — приборный LED-вид. На
-// дневном свете жёлтая полоска ловит взгляд издалека, ночью
-// подчёркивает что HUD активен.
 type IconName = React.ComponentProps<typeof MaterialCommunityIcons>['name'];
 
 const ICON: Record<ManeuverType, IconName> = {
@@ -40,17 +29,11 @@ const ICON: Record<ManeuverType, IconName> = {
 };
 
 function formatDistanceManeuver(meters: number): string {
+  // Round to 10м и "Сейчас" <50м — навигатор-специфично, в отличие
+  // от общего formatMeters в shared.
   if (meters < 50) return 'Сейчас';
-  if (meters < 1000) {
-    const rounded = Math.round(meters / 10) * 10;
-    return `${rounded} м`;
-  }
-  return `${(meters / 1000).toFixed(1)} км`;
-}
-
-function formatDistanceTotal(meters: number): string {
-  if (meters < 1000) return `${Math.round(meters)} м`;
-  return `${(meters / 1000).toFixed(1)} км`;
+  if (meters < 1000) return `${Math.round(meters / 10) * 10} м`;
+  return formatMeters(meters);
 }
 
 function formatArrival(durationSeconds: number): string {
@@ -64,17 +47,12 @@ export default function NavigationHud({
   maneuver,
   distanceToManeuverMeters,
   instruction,
-  durationSeconds,
-  distanceTotalMeters,
+  route,
 }: NavigationHudProps): React.ReactElement {
-  const showEta =
-    typeof durationSeconds === 'number' &&
-    typeof distanceTotalMeters === 'number' &&
-    durationSeconds > 0;
+  const showEta = route != null && route.durationSeconds > 0;
 
   return (
     <View style={styles.card} pointerEvents="none">
-      {/* Верхняя секция: манёвр */}
       <View style={styles.maneuverRow}>
         <View style={styles.arrowBox}>
           <MaterialCommunityIcons
@@ -95,36 +73,28 @@ export default function NavigationHud({
 
       {showEta && (
         <>
-          {/* Hairline-разделитель — две секции в одном card'е,
-              но визуально отделены. */}
           <View style={styles.divider} />
           <View style={styles.etaRow}>
             <View style={styles.etaCell}>
               <Text style={styles.etaValue}>
-                {Math.max(1, Math.round((durationSeconds ?? 0) / 60))}
+                {Math.max(1, Math.round(route.durationSeconds / 60))}
               </Text>
               <Text style={styles.etaUnit}>мин</Text>
             </View>
             <View style={styles.etaVDivider} />
             <View style={styles.etaCell}>
-              <Text style={styles.etaValue}>
-                {formatArrival(durationSeconds ?? 0)}
-              </Text>
+              <Text style={styles.etaValue}>{formatArrival(route.durationSeconds)}</Text>
               <Text style={styles.etaUnit}>прибытие</Text>
             </View>
             <View style={styles.etaVDivider} />
             <View style={styles.etaCell}>
-              <Text style={styles.etaValue}>
-                {formatDistanceTotal(distanceTotalMeters ?? 0)}
-              </Text>
+              <Text style={styles.etaValue}>{formatMeters(route.distanceMeters)}</Text>
               <Text style={styles.etaUnit}> </Text>
             </View>
           </View>
         </>
       )}
 
-      {/* Amber LED-стрипа в самом низу карточки. 2px, занимает 70%
-          ширины и центрируется — приборный «питается» вид. */}
       <View style={styles.ledAccent} />
     </View>
   );

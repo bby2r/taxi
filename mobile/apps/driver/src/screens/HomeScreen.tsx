@@ -17,7 +17,14 @@ import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import type { CompositeNavigationProp } from '@react-navigation/native';
 import type { BottomTabNavigationProp } from '@react-navigation/bottom-tabs';
 import { useBottomTabBarHeight } from '@react-navigation/bottom-tabs';
-import { useAuth, useLocation, DriverColors, Typography, DEFAULT_MAP_REGION } from '@taxi/shared';
+import {
+  useAuth,
+  useLocation,
+  useCompassBearing,
+  DriverColors,
+  Typography,
+  DEFAULT_MAP_REGION,
+} from '@taxi/shared';
 import { DriverStackParamList, DriverTabParamList } from '../navigation/types';
 import { useDriverOrder } from '../hooks/useDriverOrder';
 import { useDriverLocation } from '../hooks/useDriverLocation';
@@ -204,46 +211,19 @@ export default function HomeScreen(): React.ReactNode {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [state.phase]);
 
-  // Compass-bearing (магнитометр) — карта поворачивается за телефоном
-  // даже когда водитель стоит. На HomeScreen камера обычно показывает
-  // фиксированное положение водителя без вращения, но компас даёт
-  // живой preview ориентации — водитель тестирует «куда сейчас смотрит
-  // машина» перед тем как выехать на линию.
-  const [compassBearing, setCompassBearing] = useState<number | null>(null);
-  useEffect(() => {
-    let sub: { remove: () => void } | null = null;
-    (async () => {
-      try {
-        sub = await Location.watchHeadingAsync((h) => {
-          const raw = h?.trueHeading != null && h.trueHeading >= 0
-            ? h.trueHeading
-            : (h?.magHeading != null && h.magHeading >= 0 ? h.magHeading : null);
-          if (raw !== null) setCompassBearing(raw);
-        });
-      } catch {
-        // device без магнитометра / отказ permission — карта остаётся
-        // без bearing'а, поведение как было до фичи.
-      }
-    })();
-    return () => {
-      sub?.remove();
-    };
-  }, []);
+  // Компас приоритетнее GPS-heading на HomeScreen, потому что водитель
+  // часто стоит на месте и GPS возвращает null/0.
+  const compassBearing = useCompassBearing();
 
-  // Re-center map + update the driver pin whenever location actually
-  // moves. Pin heading reflects driverLocation.heading or compass.
   useEffect(() => {
     if (driverLocation.loading || driverLocation.error) {
       return;
     }
-    // Bearing: компас приоритетнее GPS-heading на HomeScreen, потому
-    // что водитель часто стоит на месте и GPS даёт null/0.
     const bearing =
-      compassBearing !== null
-        ? compassBearing
-        : typeof driverLocation.heading === 'number' && driverLocation.heading > 0
-          ? driverLocation.heading
-          : 0;
+      compassBearing ??
+      (typeof driverLocation.heading === 'number' && driverLocation.heading > 0
+        ? driverLocation.heading
+        : 0);
     mapRef.current?.setDriver({
       latitude: driverLocation.latitude,
       longitude: driverLocation.longitude,

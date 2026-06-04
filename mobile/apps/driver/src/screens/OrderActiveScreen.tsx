@@ -14,13 +14,13 @@ import BottomSheet, { BottomSheetView } from '@gorhom/bottom-sheet';
 import { useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import * as Speech from 'expo-speech';
-import * as Location from 'expo-location';
 import {
   DriverColors,
   Typography,
   ActionButton,
   ConfirmModal,
   useLocation,
+  useCompassBearing,
   useRoute as useNavigationRoute,
   useNavigationStep,
   haversineMeters,
@@ -440,10 +440,6 @@ export default function OrderActiveScreen(): React.ReactNode {
   // + ETA peek), default (all key info + main action), expanded (full
   // details, room for future content). Driver swipes between them.
   const snapPoints = useMemo(() => ['18%', '48%', '88%'], []);
-  // navigation: true — переключает useLocation в BestForNavigation +
-  // 1Hz апдейты + 2м distanceInterval. Без этого heading приходит
-  // null (network-based fix'ы heading не отдают), и follow-камера
-  // зависает на bearing=0 пока водитель не сделает резкий разворот.
   const driverLocation = useLocation({ navigation: true });
   const [cancelSheetOpen, setCancelSheetOpen] = useState(false);
   const [pendingAction, setPendingAction] = useState<null | {
@@ -552,88 +548,17 @@ export default function OrderActiveScreen(): React.ReactNode {
       ? { latitude: driverLocation.latitude, longitude: driverLocation.longitude }
       : null;
 
-  // Локально вычисляемый bearing — на случай когда GPS отдаёт
-  // heading=null. Так делает Яндекс/Google: между двумя последними
-  // фиксами считаем azimuth; если водитель не двигался (порог 3-4м
-  // чтобы шумы GPS не крутили камеру в припаркованном состоянии) —
-  // оставляем предыдущий bearing.
-  //
-  // computedBearing — state, не ref: камера должна перерендериться и
-  // подхватить новый bearing когда он меняется; ref не триггерит
-  // ререндер, и эффект следящий за effectiveBearing был бы stale.
-  const prevDriverPointRef = useRef<{ latitude: number; longitude: number } | null>(null);
-  const [computedBearing, setComputedBearing] = useState<number | null>(null);
-  useEffect(() => {
-    if (!driverPoint) return;
-    const prev = prevDriverPointRef.current;
-    if (prev) {
-      const dLat = driverPoint.latitude - prev.latitude;
-      const dLng = driverPoint.longitude - prev.longitude;
-      // Порог ~3-4м на широте Бишкека: ниже — GPS-джиттер крутит
-      // иконку в стоячем состоянии.
-      if (Math.abs(dLat) > 0.00003 || Math.abs(dLng) > 0.00003) {
-        const toRad = (d: number): number => (d * Math.PI) / 180;
-        const lat1 = toRad(prev.latitude);
-        const lat2 = toRad(driverPoint.latitude);
-        const dLngR = toRad(driverPoint.longitude - prev.longitude);
-        const y = Math.sin(dLngR) * Math.cos(lat2);
-        const x =
-          Math.cos(lat1) * Math.sin(lat2) -
-          Math.sin(lat1) * Math.cos(lat2) * Math.cos(dLngR);
-        const bearing = ((Math.atan2(y, x) * 180) / Math.PI + 360) % 360;
-        setComputedBearing(bearing);
-      }
-    }
-    prevDriverPointRef.current = driverPoint;
-  }, [driverPoint?.latitude, driverPoint?.longitude]);
-
-  // Compass-bearing через магнитометр телефона. trueHeading
-  // скомпенсирован под магнитное склонение. accuracy НЕ фильтруем —
-  // некоторые устройства всегда репортят 0, и фильтр блокировал всё.
-  // Лучше шумящий компас чем зависшая камера.
-  const [compassBearing, setCompassBearing] = useState<number | null>(null);
-  useEffect(() => {
-    let sub: { remove: () => void } | null = null;
-    (async () => {
-      try {
-        sub = await Location.watchHeadingAsync((h) => {
-          // trueHeading иногда -1 на некалиброванном устройстве,
-          // тогда падаем на magHeading — он всегда есть.
-          const raw = h?.trueHeading != null && h.trueHeading >= 0
-            ? h.trueHeading
-            : (h?.magHeading != null && h.magHeading >= 0 ? h.magHeading : null);
-          if (raw !== null) setCompassBearing(raw);
-        });
-      } catch {
-        // device без магнитометра / отказ permission — компас не
-        // работает, остаёмся на GPS-bearing.
-      }
-    })();
-    return () => {
-      sub?.remove();
-    };
-  }, []);
-
-  // Compass-first: компас обновляется ~20Hz и моментально реагирует
-  // на поворот телефона — это даёт ту самую отзывчивость карты,
-  // которую видно в 2GIS/Yandex. GPS-heading используется только как
-  // фолбэк когда компас не вернул ни одного reading'а (устройство без
-  // магнитометра / отказ permission).
-  //
-  // Раньше был GPS-first с проверкой heading >= 0 — но Android-провайдер
-  // возвращает 0 когда heading НЕ ВЫЧИСЛЕН (или когда едешь идеально
-  // на север), и камера зависала на bearing=0 пока компас обновлял
-  // своё значение впустую.
+  // Compass обновляется ~20Hz и моментально реагирует на поворот
+  // телефона — это даёт отзывчивость карты как в 2GIS/Yandex.
+  // GPS-heading используется как фолбэк когда компас недоступен
+  // (нет магнитометра / отказ permission). Android-провайдер возвращает
+  // heading=0 когда он НЕ ВЫЧИСЛЕН — поэтому требуем > 0.
+  const compassBearing = useCompassBearing();
   const gpsHeading =
     typeof driverLocation.heading === 'number' && driverLocation.heading > 0
       ? driverLocation.heading
       : null;
-  const effectiveBearing =
-    compassBearing !== null
-      ? compassBearing
-      : gpsHeading !== null
-        ? gpsHeading
-        : (computedBearing ?? 0);
+  const effectiveBearing = compassBearing ?? gpsHeading ?? 0;
 
   // Defensive: react-native-maps silently ignores Marker / Polyline coords
   // that come in as strings. The API now serializes lat/lng as floats, but
@@ -875,20 +800,15 @@ export default function OrderActiveScreen(): React.ReactNode {
         }}
       />
 
-      {/* Turn-by-turn баннер — стрелка манёвра + «Через 100 м поверните
-          направо». Видим только в нав-фазах (едет к клиенту / в поездке)
-          и только если есть текущий шаг от useNavigationStep.
-          HUD объединяет манёвр + ETA-полоску в одну карточку — раньше
-          было два разнесённых элемента, плавающая пилюля ETA на 50%
-          экрана не свайпалась и выглядела «второй шторкой». */}
+      {/* HUD виден только в нав-фазах (active / in_progress) и
+          только когда useNavigationStep вернул текущий шаг. */}
       {isNavigatingForCues && navStep && (
         <View style={styles.navHudWrap} pointerEvents="none">
           <NavigationHud
             maneuver={navStep.step.maneuver}
             distanceToManeuverMeters={navStep.distanceMeters}
             instruction={navStep.step.instruction}
-            durationSeconds={route?.durationSeconds}
-            distanceTotalMeters={route?.distanceMeters}
+            route={route}
           />
         </View>
       )}
@@ -1022,19 +942,13 @@ const styles = StyleSheet.create({
     borderColor: '#fff',
   },
   navHudWrap: {
-    // HUD едет под status-bar'ом с подушкой 8px и захватывает всю
-    // ширину минус 12px по краям (от внутреннего marginHorizontal в
-    // NavigationHud). Высота карточки ~165px (манёвр 84 + divider 1 +
-    // ETA 60 + LED 8 + paddings).
     position: 'absolute',
     top: Platform.OS === 'android' ? (StatusBar.currentHeight ?? 24) + 8 : 56,
     left: 0,
     right: 0,
   },
   recenterButton: {
-    // Под HUD-карточкой справа. HUD занимает ~32-200px по вертикали
-    // (status bar ~32 + card ~165), recenter садится ниже на ~220px
-    // чтобы не перекрывать ни манёвр-блок, ни ETA-полоску.
+    // Sits below the HUD card; top tuned to clear the ETA row.
     position: 'absolute',
     top: 220,
     right: 16,
