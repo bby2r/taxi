@@ -563,11 +563,6 @@ export default function OrderActiveScreen(): React.ReactNode {
   // ререндер, и эффект следящий за effectiveBearing был бы stale.
   const prevDriverPointRef = useRef<{ latitude: number; longitude: number } | null>(null);
   const [computedBearing, setComputedBearing] = useState<number | null>(null);
-  // Признак что водитель сейчас движется. Используется для выбора
-  // источника bearing (GPS на ходу vs компас в стоячем). Считается
-  // по сдвигу между фиксами + по тому что только что обновился
-  // computedBearing.
-  const lastMovementTsRef = useRef<number>(0);
   useEffect(() => {
     if (!driverPoint) return;
     const prev = prevDriverPointRef.current;
@@ -587,33 +582,31 @@ export default function OrderActiveScreen(): React.ReactNode {
           Math.sin(lat1) * Math.cos(lat2) * Math.cos(dLngR);
         const bearing = ((Math.atan2(y, x) * 180) / Math.PI + 360) % 360;
         setComputedBearing(bearing);
-        lastMovementTsRef.current = Date.now();
       }
     }
     prevDriverPointRef.current = driverPoint;
   }, [driverPoint?.latitude, driverPoint?.longitude]);
 
-  // Compass-bearing через магнитометр телефона. Используется когда
-  // водитель стоит / медленно едет — Yandex/Google переключаются на
-  // компас при скорости <3 м/с, чтобы карта поворачивалась когда
-  // водитель крутит телефон в руке.
+  // Compass-bearing через магнитометр телефона. trueHeading
+  // скомпенсирован под магнитное склонение. accuracy НЕ фильтруем —
+  // некоторые устройства всегда репортят 0, и фильтр блокировал всё.
+  // Лучше шумящий компас чем зависшая камера.
   const [compassBearing, setCompassBearing] = useState<number | null>(null);
   useEffect(() => {
     let sub: { remove: () => void } | null = null;
     (async () => {
       try {
         sub = await Location.watchHeadingAsync((h) => {
-          // trueHeading скомпенсирован под магнитное склонение в
-          // отличие от magHeading. accuracy 0-3, < 1 = неоткалиброван
-          // (показывает «вращайте восьмёркой» в Google Maps) —
-          // игнорируем чтобы не крутить карту шумом.
-          if (h && h.trueHeading >= 0 && h.accuracy >= 1) {
-            setCompassBearing(h.trueHeading);
-          }
+          // trueHeading иногда -1 на некалиброванном устройстве,
+          // тогда падаем на magHeading — он всегда есть.
+          const raw = h?.trueHeading != null && h.trueHeading >= 0
+            ? h.trueHeading
+            : (h?.magHeading != null && h.magHeading >= 0 ? h.magHeading : null);
+          if (raw !== null) setCompassBearing(raw);
         });
       } catch {
-        // device без магнитометра / отказ permission — компас просто
-        // не работает, остаёмся на GPS-bearing.
+        // device без магнитометра / отказ permission — компас не
+        // работает, остаёмся на GPS-bearing.
       }
     })();
     return () => {
@@ -621,26 +614,27 @@ export default function OrderActiveScreen(): React.ReactNode {
     };
   }, []);
 
-  // Решение какой bearing использовать:
-  //  - Водитель сдвинулся в последние 5 сек И есть GPS heading / computed
-  //    bearing → используем GPS-derived (точнее на ходу, не путается под
-  //    мостами / у зданий с магнитной помехой).
-  //  - Иначе → компас (телефон в руке у стоящего водителя крутится —
-  //    карта крутится вместе).
-  //  - Если и компас не калиброван → последний известный bearing или 0.
-  // Так же делает Yandex Navigator под капотом.
+  // Решение какой bearing использовать. Простой принцип:
+  //  - GPS-heading != null означает что водитель ЕДЕТ достаточно быстро
+  //    (expo-location вычисляет course-over-ground только когда
+  //    скорость > ~1 м/с). На ходу heading точнее компаса — не путается
+  //    под мостами и в авто с магнитными помехами от электроники.
+  //  - GPS-heading == null значит водитель стоит / еле движется → берём
+  //    компас, чтобы карта поворачивалась когда водитель крутит телефон.
+  //  - Если ни heading ни компас не доступны → computedBearing (от
+  //    движения между фиксами) как последний фолбэк.
+  // Так же делают Yandex/Google: моментальное переключение по наличию
+  // GPS-heading'а, без таймеров и порогов скорости.
   const gpsHeading =
     typeof driverLocation.heading === 'number' && driverLocation.heading >= 0
       ? driverLocation.heading
       : null;
-  const movingRecently = Date.now() - lastMovementTsRef.current < 5000;
-  const movementBearing = gpsHeading ?? computedBearing;
   const effectiveBearing =
-    movingRecently && movementBearing !== null
-      ? movementBearing
+    gpsHeading !== null
+      ? gpsHeading
       : compassBearing !== null
         ? compassBearing
-        : (movementBearing ?? 0);
+        : (computedBearing ?? 0);
 
   // Defensive: react-native-maps silently ignores Marker / Polyline coords
   // that come in as strings. The API now serializes lat/lng as floats, but
