@@ -17,7 +17,19 @@ interface LocationState {
   hasRealFix: boolean;
 }
 
-export function useLocation(): LocationState {
+interface UseLocationOptions {
+  // navigation: true — переключает GPS в BestForNavigation +
+  // distanceInterval=2м + timeInterval=1с. Heading получается надёжно
+  // только в этом режиме (Balanced/network-locations heading не отдают
+  // вообще), и обновления приходят ~1Hz для плавной follow-камеры.
+  // Цена: батарея ест ~3-4% в час против ~1% у Balanced. Включать
+  // только когда водитель реально едет по маршруту (OrderActiveScreen
+  // с навигацией) — не на всём приложении.
+  navigation?: boolean;
+}
+
+export function useLocation(options?: UseLocationOptions): LocationState {
+  const navigation = options?.navigation === true;
   const [state, setState] = useState<LocationState>({
     latitude: 42.87,
     longitude: 74.59,
@@ -52,7 +64,9 @@ export function useLocation(): LocationState {
 
         let timeoutHandle: ReturnType<typeof setTimeout> | null = null;
         const currentPromise = Location.getCurrentPositionAsync({
-          accuracy: Location.Accuracy.Balanced,
+          accuracy: navigation
+            ? Location.Accuracy.BestForNavigation
+            : Location.Accuracy.Balanced,
         });
         const timeoutPromise = new Promise<null>((resolve) => {
           timeoutHandle = setTimeout(() => resolve(null), 10000);
@@ -75,7 +89,13 @@ export function useLocation(): LocationState {
         }
 
         subscription = await Location.watchPositionAsync(
-          { accuracy: Location.Accuracy.Balanced, distanceInterval: 10, timeInterval: 5000 },
+          navigation
+            ? {
+                accuracy: Location.Accuracy.BestForNavigation,
+                distanceInterval: 2,
+                timeInterval: 1000,
+              }
+            : { accuracy: Location.Accuracy.Balanced, distanceInterval: 10, timeInterval: 5000 },
           (loc) => {
             setState({
               latitude: loc.coords.latitude,
@@ -96,7 +116,7 @@ export function useLocation(): LocationState {
     return () => {
       subscription?.remove();
     };
-  }, []);
+  }, [navigation]);
 
   return state;
 }

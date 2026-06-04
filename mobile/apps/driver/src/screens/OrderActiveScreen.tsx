@@ -439,7 +439,11 @@ export default function OrderActiveScreen(): React.ReactNode {
   // + ETA peek), default (all key info + main action), expanded (full
   // details, room for future content). Driver swipes between them.
   const snapPoints = useMemo(() => ['18%', '48%', '88%'], []);
-  const driverLocation = useLocation();
+  // navigation: true — переключает useLocation в BestForNavigation +
+  // 1Hz апдейты + 2м distanceInterval. Без этого heading приходит
+  // null (network-based fix'ы heading не отдают), и follow-камера
+  // зависает на bearing=0 пока водитель не сделает резкий разворот.
+  const driverLocation = useLocation({ navigation: true });
   const [cancelSheetOpen, setCancelSheetOpen] = useState(false);
   const [pendingAction, setPendingAction] = useState<null | {
     message: string;
@@ -546,6 +550,45 @@ export default function OrderActiveScreen(): React.ReactNode {
     !driverLocation.loading && !driverLocation.error
       ? { latitude: driverLocation.latitude, longitude: driverLocation.longitude }
       : null;
+
+  // Локально вычисляемый bearing — на случай когда GPS отдаёт
+  // heading=null. Так делает Яндекс/Google: между двумя последними
+  // фиксами считаем azimuth, кешируем; если водитель не двигался
+  // (порог 3-4м чтобы шумы GPS не крутили камеру в припаркованном
+  // состоянии) — оставляем предыдущий bearing. Реальный GPS-heading,
+  // если приходит, имеет приоритет (он точнее на скорости 30+ км/ч).
+  const prevDriverPointRef = useRef<{ latitude: number; longitude: number } | null>(null);
+  const computedBearingRef = useRef<number>(0);
+  useEffect(() => {
+    if (!driverPoint) return;
+    const prev = prevDriverPointRef.current;
+    if (prev) {
+      const dLat = driverPoint.latitude - prev.latitude;
+      const dLng = driverPoint.longitude - prev.longitude;
+      // Порог ~3-4м на широте Бишкека: ниже — GPS-джиттер крутит
+      // иконку в стоячем состоянии.
+      if (Math.abs(dLat) > 0.00003 || Math.abs(dLng) > 0.00003) {
+        const toRad = (d: number): number => (d * Math.PI) / 180;
+        const lat1 = toRad(prev.latitude);
+        const lat2 = toRad(driverPoint.latitude);
+        const dLngR = toRad(driverPoint.longitude - prev.longitude);
+        const y = Math.sin(dLngR) * Math.cos(lat2);
+        const x =
+          Math.cos(lat1) * Math.sin(lat2) -
+          Math.sin(lat1) * Math.cos(lat2) * Math.cos(dLngR);
+        const bearing = ((Math.atan2(y, x) * 180) / Math.PI + 360) % 360;
+        computedBearingRef.current = bearing;
+      }
+    }
+    prevDriverPointRef.current = driverPoint;
+  }, [driverPoint?.latitude, driverPoint?.longitude]);
+
+  // GPS-heading приоритет если есть и валидный (> 0 означает что
+  // GPS действительно посчитал курс), иначе локально-вычисленный.
+  const effectiveBearing =
+    typeof driverLocation.heading === 'number' && driverLocation.heading >= 0
+      ? driverLocation.heading
+      : computedBearingRef.current;
 
   // Defensive: react-native-maps silently ignores Marker / Polyline coords
   // that come in as strings. The API now serializes lat/lng as floats, but
@@ -672,10 +715,7 @@ export default function OrderActiveScreen(): React.ReactNode {
       mapRef.current?.setCenter(driverPoint, {
         zoom,
         pitch: 55,
-        bearing:
-          typeof driverLocation.heading === 'number' && driverLocation.heading >= 0
-            ? driverLocation.heading
-            : 0,
+        bearing: effectiveBearing,
         // Длиннее duration на zoom-in перед поворотом — без этого камера
         // дёргается. 800мс хватает чтобы плавно перейти на close-up.
         duration: 800,
@@ -705,7 +745,7 @@ export default function OrderActiveScreen(): React.ReactNode {
     route,
     driverPoint?.latitude,
     driverPoint?.longitude,
-    driverLocation.heading,
+    effectiveBearing,
     following,
     // Без navStep.distanceMeters камера не подстраивает zoom при
     // подъезде к повороту — пересчёт только на GPS-апдейт водителя.
@@ -721,12 +761,12 @@ export default function OrderActiveScreen(): React.ReactNode {
     mapRef.current?.setDriver({
       latitude: driverPoint.latitude,
       longitude: driverPoint.longitude,
-      heading: driverLocation.heading,
+      heading: effectiveBearing,
     });
   }, [
     driverPoint?.latitude,
     driverPoint?.longitude,
-    driverLocation.heading,
+    effectiveBearing,
     state.phase,
   ]);
 
