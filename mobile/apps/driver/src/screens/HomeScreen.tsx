@@ -204,22 +204,54 @@ export default function HomeScreen(): React.ReactNode {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [state.phase]);
 
+  // Compass-bearing (магнитометр) — карта поворачивается за телефоном
+  // даже когда водитель стоит. На HomeScreen камера обычно показывает
+  // фиксированное положение водителя без вращения, но компас даёт
+  // живой preview ориентации — водитель тестирует «куда сейчас смотрит
+  // машина» перед тем как выехать на линию.
+  const [compassBearing, setCompassBearing] = useState<number | null>(null);
+  useEffect(() => {
+    let sub: { remove: () => void } | null = null;
+    (async () => {
+      try {
+        sub = await Location.watchHeadingAsync((h) => {
+          const raw = h?.trueHeading != null && h.trueHeading >= 0
+            ? h.trueHeading
+            : (h?.magHeading != null && h.magHeading >= 0 ? h.magHeading : null);
+          if (raw !== null) setCompassBearing(raw);
+        });
+      } catch {
+        // device без магнитометра / отказ permission — карта остаётся
+        // без bearing'а, поведение как было до фичи.
+      }
+    })();
+    return () => {
+      sub?.remove();
+    };
+  }, []);
+
   // Re-center map + update the driver pin whenever location actually
-  // moves. The hook throttles pushes to ~5s / 10m so this only fires
-  // on meaningful movement. Pin heading reflects driverLocation.heading
-  // in degrees, 0 = north — same convention 2GIS expects.
+  // moves. Pin heading reflects driverLocation.heading or compass.
   useEffect(() => {
     if (driverLocation.loading || driverLocation.error) {
       return;
     }
+    // Bearing: компас приоритетнее GPS-heading на HomeScreen, потому
+    // что водитель часто стоит на месте и GPS даёт null/0.
+    const bearing =
+      compassBearing !== null
+        ? compassBearing
+        : typeof driverLocation.heading === 'number' && driverLocation.heading > 0
+          ? driverLocation.heading
+          : 0;
     mapRef.current?.setDriver({
       latitude: driverLocation.latitude,
       longitude: driverLocation.longitude,
-      heading: driverLocation.heading,
+      heading: bearing,
     });
     mapRef.current?.setCenter(
       { latitude: driverLocation.latitude, longitude: driverLocation.longitude },
-      { zoom: 15, pitch: 45 },
+      { zoom: 15, pitch: 45, bearing },
     );
   }, [
     driverLocation.loading,
@@ -227,6 +259,7 @@ export default function HomeScreen(): React.ReactNode {
     driverLocation.latitude,
     driverLocation.longitude,
     driverLocation.heading,
+    compassBearing,
   ]);
 
   const performToggle = async (): Promise<void> => {

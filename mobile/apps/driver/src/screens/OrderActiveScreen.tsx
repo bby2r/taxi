@@ -614,26 +614,25 @@ export default function OrderActiveScreen(): React.ReactNode {
     };
   }, []);
 
-  // Решение какой bearing использовать. Простой принцип:
-  //  - GPS-heading != null означает что водитель ЕДЕТ достаточно быстро
-  //    (expo-location вычисляет course-over-ground только когда
-  //    скорость > ~1 м/с). На ходу heading точнее компаса — не путается
-  //    под мостами и в авто с магнитными помехами от электроники.
-  //  - GPS-heading == null значит водитель стоит / еле движется → берём
-  //    компас, чтобы карта поворачивалась когда водитель крутит телефон.
-  //  - Если ни heading ни компас не доступны → computedBearing (от
-  //    движения между фиксами) как последний фолбэк.
-  // Так же делают Yandex/Google: моментальное переключение по наличию
-  // GPS-heading'а, без таймеров и порогов скорости.
+  // Compass-first: компас обновляется ~20Hz и моментально реагирует
+  // на поворот телефона — это даёт ту самую отзывчивость карты,
+  // которую видно в 2GIS/Yandex. GPS-heading используется только как
+  // фолбэк когда компас не вернул ни одного reading'а (устройство без
+  // магнитометра / отказ permission).
+  //
+  // Раньше был GPS-first с проверкой heading >= 0 — но Android-провайдер
+  // возвращает 0 когда heading НЕ ВЫЧИСЛЕН (или когда едешь идеально
+  // на север), и камера зависала на bearing=0 пока компас обновлял
+  // своё значение впустую.
   const gpsHeading =
-    typeof driverLocation.heading === 'number' && driverLocation.heading >= 0
+    typeof driverLocation.heading === 'number' && driverLocation.heading > 0
       ? driverLocation.heading
       : null;
   const effectiveBearing =
-    gpsHeading !== null
-      ? gpsHeading
-      : compassBearing !== null
-        ? compassBearing
+    compassBearing !== null
+      ? compassBearing
+      : gpsHeading !== null
+        ? gpsHeading
         : (computedBearing ?? 0);
 
   // Defensive: react-native-maps silently ignores Marker / Polyline coords
