@@ -67,20 +67,16 @@ function buildHtml(apiKey: string, styleName: string, center: [number, number], 
       html, body, #map { margin: 0; padding: 0; width: 100%; height: 100%; background: #13111f; }
       .maplibregl-ctrl-bottom-left, .maplibregl-ctrl-bottom-right,
       .maplibregl-ctrl-top-left, .maplibregl-ctrl-top-right { display: none !important; }
-      /* Pickup pin: SVG-стрелка + тонкий стержень под ней, точка
-         подачи приходится на конец стержня (anchor=bottom). */
+      /* Pickup pin: классический teardrop (Google-Maps style). Острый
+         кончик внизу — анкор 'bottom' ставит его прямо на координату
+         подачи. Раньше был triangle-up + stem, визуально неотличимый
+         от nav-стрелки направления → клиент видел свой user-dot и
+         pickup в одном месте как «двойной навигатор». */
       .pickup-pin {
-        width: 48px;
-        display: flex; flex-direction: column; align-items: center;
-        filter: drop-shadow(0 2px 4px rgba(0,0,0,0.5));
+        width: 32px; height: 44px;
+        filter: drop-shadow(0 3px 5px rgba(0,0,0,0.5));
       }
-      .pickup-pin svg { width: 48px; height: 48px; display: block; }
-      .pickup-stem {
-        width: 2px; height: 10px;
-        background: ${ClientColors.pickupDark};
-        opacity: 0.6;
-        margin-top: -4px;
-      }
+      .pickup-pin svg { width: 32px; height: 44px; display: block; }
       /* Синяя точка пользователя с пульсирующим ореолом —
          showsUserLocation эквивалент. */
       .user-dot { position: relative; width: 24px; height: 24px; }
@@ -172,19 +168,19 @@ function buildHtml(apiKey: string, styleName: string, center: [number, number], 
       }
 
       function makePickupEl() {
-        // SVG: объёмная синяя стрелка-pickup + тонкий стержень снизу.
-        // Идентичен бывшему PickupPinMarker (client/HomeScreen.tsx).
+        // Teardrop pin — голова сверху, остриё снизу (anchor='bottom'
+        // ставит остриё точно на координату подачи). Визуально это
+        // явный «pin», не путается с user-dot и не выглядит как
+        // навигаторская стрелка-направление.
         var el = document.createElement('div');
         el.className = 'pickup-pin';
         el.innerHTML =
-          '<svg viewBox="0 0 48 48" xmlns="http://www.w3.org/2000/svg">' +
-            '<ellipse cx="24" cy="34" rx="16" ry="4" fill="#3B82F6" opacity="0.18"/>' +
-            '<path d="M24 6 L36 34 L24 28 Z" fill="#1D4ED8"/>' +
-            '<path d="M24 6 L12 34 L24 28 Z" fill="#3B82F6"/>' +
-            '<path d="M24 6 L24 28" stroke="#fff" stroke-width="1.2" opacity="0.85"/>' +
-            '<circle cx="24" cy="6" r="2.2" fill="#fff"/>' +
-          '</svg>' +
-          '<div class="pickup-stem"></div>';
+          '<svg viewBox="0 0 32 44" xmlns="http://www.w3.org/2000/svg">' +
+            '<path d="M16 2 C 8 2 2 8 2 16 C 2 24 16 42 16 42 C 16 42 30 24 30 16 C 30 8 24 2 16 2 Z" ' +
+              'fill="${ClientColors.pickupBadge}" stroke="#fff" stroke-width="2.5"/>' +
+            '<circle cx="16" cy="16" r="5.5" fill="#fff"/>' +
+            '<circle cx="16" cy="16" r="3" fill="${ClientColors.pickupDark}"/>' +
+          '</svg>';
         return el;
       }
 
