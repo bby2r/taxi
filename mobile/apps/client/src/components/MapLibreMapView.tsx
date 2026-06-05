@@ -42,10 +42,11 @@ type Props = {
   pickup?: LatLng | null;
   pickupDraggable?: boolean;
   onPickupDragEnd?: (coord: LatLng) => void;
-  // Координаты водителя. WebView сам плавно тваит от предыдущей
-  // позиции к новой за 1200мс + поворачивает иконку по computeBearing
-  // (без mock-логики на JS-стороне как в AnimatedDriverMarker).
-  driver?: LatLng | null;
+  // Координаты водителя + опциональный heading из Pusher-broadcast'а
+  // (driver-app шлёт GPS-курс). Если heading отсутствует — WebView
+  // вычисляет bearing локально из двух последних позиций. Маркер
+  // плавно интерполируется (~1200мс) между фиксами.
+  driver?: (LatLng & { heading?: number | null }) | null;
   style?: object;
   onReady?: () => void;
 };
@@ -195,39 +196,62 @@ function buildHtml(apiKey: string, styleName: string, center: [number, number], 
       }
 
       function makeDriverEl(rotationDeg) {
-        // SVG-такси. Раньше это был AnimatedDriverMarker.tsx (RN SVG);
-        // здесь оно в inline-HTML, потому что MapLibre Marker берёт
-        // DOM-элемент. Поворот применяется к внутреннему svg.
+        // Top-down седан, премиум-стиль. Перед машины — наверх SVG
+        // (направление движения), кузов с амбер-градиентом (как солнце
+        // на капоте), затемнённые стёкла с двойным reflection-хайлайтом,
+        // боковые зеркала, белые передние LED-фары + красные стоп-
+        // сигналы сзади, чёрные колёса в углах, тонкий хром-line по
+        // борту. Никаких шашечек / игрушечных деталей.
         var rot = (rotationDeg == null || isNaN(rotationDeg)) ? 0 : rotationDeg;
         var el = document.createElement('div');
         el.className = 'driver-marker';
         el.innerHTML =
           '<svg viewBox="0 0 56 56" xmlns="http://www.w3.org/2000/svg" style="transform: rotate(' + rot + 'deg)">' +
             '<defs>' +
-              '<linearGradient id="bodyG" x1="0" y1="0" x2="0" y2="1">' +
+              '<linearGradient id="bodyG" x1="0.5" y1="0" x2="0.5" y2="1">' +
                 '<stop offset="0" stop-color="#FCD34D"/>' +
-                '<stop offset="1" stop-color="#D97706"/>' +
+                '<stop offset="0.45" stop-color="#F59E0B"/>' +
+                '<stop offset="1" stop-color="#92400E"/>' +
               '</linearGradient>' +
-              '<linearGradient id="glassG" x1="0" y1="0" x2="0" y2="1">' +
-                '<stop offset="0" stop-color="#1E3A8A" stop-opacity="0.9"/>' +
-                '<stop offset="1" stop-color="#1E40AF" stop-opacity="0.55"/>' +
+              '<linearGradient id="glassG" x1="0.5" y1="0" x2="0.5" y2="1">' +
+                '<stop offset="0" stop-color="#0B1220" stop-opacity="0.95"/>' +
+                '<stop offset="1" stop-color="#1E3A8A" stop-opacity="0.7"/>' +
+              '</linearGradient>' +
+              '<linearGradient id="hiG" x1="0" y1="0" x2="1" y2="0">' +
+                '<stop offset="0" stop-color="#fff" stop-opacity="0.0"/>' +
+                '<stop offset="0.5" stop-color="#fff" stop-opacity="0.18"/>' +
+                '<stop offset="1" stop-color="#fff" stop-opacity="0.0"/>' +
               '</linearGradient>' +
             '</defs>' +
-            '<ellipse cx="28" cy="51" rx="16" ry="2.5" fill="#000" opacity="0.3"/>' +
-            '<rect x="14" y="16" width="3" height="8" rx="1.2" fill="#0F172A"/>' +
-            '<rect x="39" y="16" width="3" height="8" rx="1.2" fill="#0F172A"/>' +
-            '<rect x="14" y="32" width="3" height="8" rx="1.2" fill="#0F172A"/>' +
-            '<rect x="39" y="32" width="3" height="8" rx="1.2" fill="#0F172A"/>' +
-            '<path d="M18 8 Q18 4 22 4 L34 4 Q38 4 38 8 L38 48 Q38 52 34 52 L22 52 Q18 52 18 48 Z" fill="url(#bodyG)" stroke="#1F2937" stroke-width="1.2"/>' +
-            '<path d="M20 8 L36 8 L34 17 L22 17 Z" fill="url(#glassG)"/>' +
-            '<path d="M22 39 L34 39 L36 48 L20 48 Z" fill="url(#glassG)" opacity="0.85"/>' +
-            '<rect x="22" y="26" width="12" height="5" rx="0.8" fill="#1F2937"/>' +
-            '<rect x="22" y="26" width="3" height="2.5" fill="#FCD34D"/>' +
-            '<rect x="28" y="26" width="3" height="2.5" fill="#FCD34D"/>' +
-            '<rect x="25" y="28.5" width="3" height="2.5" fill="#FCD34D"/>' +
-            '<rect x="31" y="28.5" width="3" height="2.5" fill="#FCD34D"/>' +
-            '<rect x="19" y="4.5" width="3.5" height="1.5" rx="0.4" fill="#FEF9C3"/>' +
-            '<rect x="33.5" y="4.5" width="3.5" height="1.5" rx="0.4" fill="#FEF9C3"/>' +
+            // Тень под машиной
+            '<ellipse cx="28" cy="52" rx="16" ry="2.5" fill="#000" opacity="0.32"/>' +
+            // Колёса (чёрные прямоугольники в углах)
+            '<rect x="12" y="11" width="4" height="8" rx="1.2" fill="#0F172A"/>' +
+            '<rect x="40" y="11" width="4" height="8" rx="1.2" fill="#0F172A"/>' +
+            '<rect x="12" y="37" width="4" height="8" rx="1.2" fill="#0F172A"/>' +
+            '<rect x="40" y="37" width="4" height="8" rx="1.2" fill="#0F172A"/>' +
+            // Кузов седана с амбер-градиентом, плавные front/rear обводы
+            '<path d="M17 8 Q17 4 22 4 L34 4 Q39 4 39 8 L40 26 L40 32 L39 48 Q39 52 34 52 L22 52 Q17 52 17 48 L16 32 L16 26 Z" fill="url(#bodyG)" stroke="#451A03" stroke-width="0.8"/>' +
+            // Боковые зеркала — маленькие выступы по бортам
+            '<path d="M15 14 Q12 14 13 17 Q15 17 16 16 Z" fill="#451A03"/>' +
+            '<path d="M41 14 Q44 14 43 17 Q41 17 40 16 Z" fill="#451A03"/>' +
+            // Лобовое стекло (трапеция к капоту)
+            '<path d="M19 10 L37 10 L35 22 L21 22 Z" fill="url(#glassG)" stroke="#0B1220" stroke-width="0.4"/>' +
+            // Заднее стекло
+            '<path d="M21 38 L35 38 L37 50 L19 50 Z" fill="url(#glassG)" stroke="#0B1220" stroke-width="0.4" opacity="0.92"/>' +
+            // Roof — тонкая темная панель между стёклами
+            '<rect x="21" y="22" width="14" height="16" rx="1" fill="#92400E" opacity="0.55"/>' +
+            // Reflection highlight на крыше
+            '<rect x="22" y="24" width="12" height="2" rx="1" fill="url(#hiG)"/>' +
+            // Хром-line по борту (тонкий блик)
+            '<rect x="16.5" y="28" width="0.6" height="6" fill="#FEF3C7" opacity="0.7"/>' +
+            '<rect x="38.9" y="28" width="0.6" height="6" fill="#FEF3C7" opacity="0.7"/>' +
+            // LED-фары спереди (тёплый белый, лёгкое свечение через rx)
+            '<rect x="18.5" y="4.5" width="4" height="1.6" rx="0.6" fill="#FEF9C3"/>' +
+            '<rect x="33.5" y="4.5" width="4" height="1.6" rx="0.6" fill="#FEF9C3"/>' +
+            // Стоп-сигналы сзади (красно-оранжевые)
+            '<rect x="18.5" y="50.5" width="4" height="1.4" rx="0.6" fill="#EF4444"/>' +
+            '<rect x="33.5" y="50.5" width="4" height="1.4" rx="0.6" fill="#EF4444"/>' +
           '</svg>';
         return el;
       }
@@ -303,11 +327,14 @@ function buildHtml(apiKey: string, styleName: string, center: [number, number], 
         }
         var from = __driverPrev;
         var to = { latitude: loc.latitude, longitude: loc.longitude };
-        // Считаем bearing только если водитель реально сдвинулся,
-        // иначе GPS-джиттер крутит иконку в припаркованном состоянии.
-        // Порог ~3-4 м на широте Бишкека.
+        // Bearing: приоритет heading из payload (это GPS-курс с самого
+        // устройства водителя, точнее чем наш local-compute). Если null
+        // — fallback на азимут между двумя последними фиксами с порогом
+        // ~3м чтобы GPS-джиттер не крутил иконку в стоячем состоянии.
         var bearing = (__driverMarker && __driverMarker._lastBearing) || 0;
-        if (from) {
+        if (typeof loc.heading === 'number' && loc.heading >= 0) {
+          bearing = loc.heading;
+        } else if (from) {
           var dLat = Math.abs(to.latitude - from.latitude);
           var dLng = Math.abs(to.longitude - from.longitude);
           if (dLat > 0.00003 || dLng > 0.00003) {

@@ -299,7 +299,11 @@ export default function HomeScreen(): React.ReactNode {
     typeof state.order.driver.longitude === 'number' &&
     Number.isFinite(state.order.driver.latitude) &&
     Number.isFinite(state.order.driver.longitude)
-      ? { latitude: state.order.driver.latitude, longitude: state.order.driver.longitude }
+      ? {
+          latitude: state.order.driver.latitude,
+          longitude: state.order.driver.longitude,
+          heading: state.order.driver.heading,
+        }
       : null;
 
   // Содержимое peek-бара зависит от фазы заказа и состояния детекции.

@@ -133,6 +133,7 @@ export function useOrder(): UseOrderReturn {
             car_number: payload.car_number ?? prevDriver?.car_number ?? '',
             latitude: payload.latitude,
             longitude: payload.longitude,
+            heading: prevDriver?.heading ?? null,
           },
         };
         orderRef.current = optimistic;
@@ -192,7 +193,7 @@ export function useOrder(): UseOrderReturn {
   }, [refreshAndSetPhase]);
 
   const handleDriverLocation = useCallback((data: unknown) => {
-    const payload = data as { latitude?: number; longitude?: number };
+    const payload = data as { latitude?: number; longitude?: number; heading?: number | null };
     if (
       typeof payload.latitude !== 'number' ||
       typeof payload.longitude !== 'number'
@@ -201,6 +202,7 @@ export function useOrder(): UseOrderReturn {
     }
     const lat = payload.latitude;
     const lng = payload.longitude;
+    const heading = typeof payload.heading === 'number' ? payload.heading : null;
     setState((prev) => {
       if (
         prev.phase !== 'accepted' &&
@@ -218,6 +220,7 @@ export function useOrder(): UseOrderReturn {
           ...prev.order.driver,
           latitude: lat,
           longitude: lng,
+          heading,
         },
       };
       orderRef.current = nextOrder;

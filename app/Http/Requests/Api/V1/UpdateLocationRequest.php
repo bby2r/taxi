@@ -24,6 +24,10 @@ class UpdateLocationRequest extends FormRequest
         return [
             'latitude' => ['required', 'numeric', 'between:-90,90'],
             'longitude' => ['required', 'numeric', 'between:-180,180'],
+            // Course-over-ground from device GPS / compass, 0-360°.
+            // Nullable: when the device is stationary expo-location
+            // returns null and we still want to accept the ping.
+            'heading' => ['nullable', 'numeric', 'between:0,360'],
         ];
     }
 }
