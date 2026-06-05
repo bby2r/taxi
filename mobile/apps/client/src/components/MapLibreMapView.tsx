@@ -196,12 +196,7 @@ function buildHtml(apiKey: string, styleName: string, center: [number, number], 
       }
 
       function makeDriverEl(rotationDeg) {
-        // Top-down седан, премиум-стиль. Перед машины — наверх SVG
-        // (направление движения), кузов с амбер-градиентом (как солнце
-        // на капоте), затемнённые стёкла с двойным reflection-хайлайтом,
-        // боковые зеркала, белые передние LED-фары + красные стоп-
-        // сигналы сзади, чёрные колёса в углах, тонкий хром-line по
-        // борту. Никаких шашечек / игрушечных деталей.
+        // Top-down sedan SVG. Перед машины — наверх (направление движения).
         var rot = (rotationDeg == null || isNaN(rotationDeg)) ? 0 : rotationDeg;
         var el = document.createElement('div');
         el.className = 'driver-marker';

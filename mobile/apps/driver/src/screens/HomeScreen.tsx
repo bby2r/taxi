@@ -21,6 +21,7 @@ import {
   useAuth,
   useLocation,
   useCompassBearing,
+  pickBearing,
   DriverColors,
   Typography,
   DEFAULT_MAP_REGION,
@@ -219,11 +220,7 @@ export default function HomeScreen(): React.ReactNode {
     if (driverLocation.loading || driverLocation.error) {
       return;
     }
-    const bearing =
-      compassBearing ??
-      (typeof driverLocation.heading === 'number' && driverLocation.heading > 0
-        ? driverLocation.heading
-        : 0);
+    const bearing = pickBearing(compassBearing, driverLocation.heading);
     mapRef.current?.setDriver({
       latitude: driverLocation.latitude,
       longitude: driverLocation.longitude,
@@ -330,11 +327,7 @@ export default function HomeScreen(): React.ReactNode {
     // тач-жесте — без этого setCenter был бы no-op после того как
     // водитель сам подвинул карту пальцем.
     mapRef.current?.clearOverride();
-    const bearing =
-      compassBearing ??
-      (typeof driverLocation.heading === 'number' && driverLocation.heading > 0
-        ? driverLocation.heading
-        : 0);
+    const bearing = pickBearing(compassBearing, driverLocation.heading);
     mapRef.current?.setCenter(
       { latitude: driverLocation.latitude, longitude: driverLocation.longitude },
       { zoom: 16, pitch: 45, bearing },
@@ -763,32 +756,6 @@ const styles = StyleSheet.create({
   },
   pushBannerButtonFilled: {
     backgroundColor: DriverColors.primary,
-  },
-  driverDot: {
-    width: 28,
-    height: 28,
-    borderRadius: 14,
-    justifyContent: 'center',
-    alignItems: 'center',
-    borderWidth: 3,
-    borderColor: '#fff',
-    shadowColor: '#000',
-    shadowOpacity: 0.4,
-    shadowRadius: 4,
-    shadowOffset: { width: 0, height: 2 },
-    elevation: 4,
-  },
-  driverDotOnline: {
-    backgroundColor: DriverColors.primary,
-  },
-  driverDotOffline: {
-    backgroundColor: DriverColors.textMuted,
-  },
-  driverDotInner: {
-    width: 8,
-    height: 8,
-    borderRadius: 4,
-    backgroundColor: '#fff',
   },
   bottomPanel: {
     position: 'absolute',

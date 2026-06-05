@@ -28,11 +28,9 @@ export function useCompassBearing(): number | null {
 
   useFocusEffect(
     useCallback(() => {
-      // active-флаг закрывает гонку: watchHeadingAsync резолвится
-      // асинхронно, и cleanup может сработать раньше чем подписка
-      // вернётся. Без этого первый focus был «глухим» (компас не
-      // запускался), а sub утекал — на 2-3 заходе уже образовы­валось
-      // несколько живых подписок поверх друг друга.
+      // `active` закрывает гонку между async watchHeadingAsync и
+      // useFocusEffect cleanup — без неё подписка утекала бы при
+      // быстрой смене focus → blur → focus.
       let active = true;
       let sub: { remove: () => void } | null = null;
       (async () => {

@@ -22,6 +22,7 @@ import {
   useCompassBearing,
   useRoute as useNavigationRoute,
   haversineMeters,
+  pickBearing,
 } from '@taxi/shared';
 import type { Order, DriverCancellationReason, Route } from '@taxi/shared';
 import { useDriverOrder } from '../hooks/useDriverOrder';
@@ -545,17 +546,8 @@ export default function OrderActiveScreen(): React.ReactNode {
       ? { latitude: driverLocation.latitude, longitude: driverLocation.longitude }
       : null;
 
-  // Compass обновляется ~20Hz и моментально реагирует на поворот
-  // телефона — это даёт отзывчивость карты как в 2GIS/Yandex.
-  // GPS-heading используется как фолбэк когда компас недоступен
-  // (нет магнитометра / отказ permission). Android-провайдер возвращает
-  // heading=0 когда он НЕ ВЫЧИСЛЕН — поэтому требуем > 0.
   const compassBearing = useCompassBearing();
-  const gpsHeading =
-    typeof driverLocation.heading === 'number' && driverLocation.heading > 0
-      ? driverLocation.heading
-      : null;
-  const effectiveBearing = compassBearing ?? gpsHeading ?? 0;
+  const effectiveBearing = pickBearing(compassBearing, driverLocation.heading);
 
   // Defensive: react-native-maps silently ignores Marker / Polyline coords
   // that come in as strings. The API now serializes lat/lng as floats, but
@@ -605,9 +597,6 @@ export default function OrderActiveScreen(): React.ReactNode {
     error: routeError,
   } = useNavigationRoute(routeOrigin, routeDestination);
 
-  // HUD и голос отключены: у нас нет фиксированной точки Б в заказе
-  // (село-такси / межгород — водитель сам знает маршрут), turn-by-turn
-  // подсказки бесполезны и только мешают разговору с диспетчером.
 
   // Two camera modes for the active screen:
   //
@@ -882,16 +871,7 @@ const styles = StyleSheet.create({
     alignItems: 'baseline',
     marginBottom: 4,
   },
-  driverDot: {
-    width: 18,
-    height: 18,
-    borderRadius: 9,
-    backgroundColor: DriverColors.primary,
-    borderWidth: 3,
-    borderColor: '#fff',
-  },
   recenterButton: {
-    // Top-right — без HUD'а сверху можно ставить ближе к статус-бару.
     position: 'absolute',
     top: Platform.OS === 'android' ? (StatusBar.currentHeight ?? 24) + 16 : 60,
     right: 16,

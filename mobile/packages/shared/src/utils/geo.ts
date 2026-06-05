@@ -24,3 +24,18 @@ export function formatMeters(meters: number): string {
   }
   return `${(meters / 1000).toFixed(1)} км`;
 }
+
+/**
+ * Выбор bearing'а из двух источников: компас (магнитометр телефона) и
+ * GPS-heading. Android-провайдер возвращает heading=0 когда курс НЕ
+ * вычислен (или когда едешь идеально на север) — поэтому требуем
+ * строго > 0, иначе это «нет данных».
+ */
+export function pickBearing(
+  compass: number | null,
+  gpsHeading: number | null | undefined,
+): number {
+  if (compass !== null) return compass;
+  if (typeof gpsHeading === 'number' && gpsHeading > 0) return gpsHeading;
+  return 0;
+}

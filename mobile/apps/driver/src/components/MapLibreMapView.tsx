@@ -169,12 +169,9 @@ function buildHtml(apiKey: string, styleName: string, center: [number, number], 
       }
 
       function makeDriverEl(heading) {
+        // 3D-индикатор направления, поворот через CSS transform на
+        // этом div'е (MapLibre Marker ставит translate на свой wrapper).
         var rot = (heading == null || isNaN(heading)) ? 0 : heading;
-        // Чистый 3D-индикатор направления, объёмная синяя стрелка с
-        // двумя гранями (тёмная справа, светлая слева), белым контуром
-        // и эллиптической «тенью под машиной». Поворот через CSS-
-        // transform на внутреннем div'е — внешний контейнер берёт
-        // MapLibre Marker и сам кладёт по координатам.
         var el = document.createElement('div');
         el.className = 'driver-pin';
         el.style.transform = 'rotate(' + rot + 'deg)';
@@ -211,12 +208,16 @@ function buildHtml(apiKey: string, styleName: string, center: [number, number], 
 
       function setDriver(loc) {
         if (!__map) return;
-        // MapLibre Marker умеет менять элемент только через destroy/
-        // create. На частоте GPS-апдейтов ~1Hz цикл уничтожения+создания
-        // дешевле, чем перерисовывать SVG через innerHTML руками.
+        // Мутируем существующий маркер вместо destroy/create — компас
+        // тикает ~5Hz после 8°-порога, DOM-rebuild на каждый тик
+        // ощутимо лагал на слабых WebView'ях.
+        var rot = (loc.heading == null || isNaN(loc.heading)) ? 0 : loc.heading;
         if (__driverMarker) {
-          __driverMarker.remove();
-          __driverMarker = null;
+          __driverMarker.setLngLat([loc.longitude, loc.latitude]);
+          // driver-pin div сам несёт rotation (см. makeDriverEl);
+          // MapLibre transformer-wrapper выше отвечает за translate.
+          __driverMarker.getElement().style.transform = 'rotate(' + rot + 'deg)';
+          return;
         }
         __driverMarker = new maplibregl.Marker({
           element: makeDriverEl(loc.heading),
@@ -414,13 +415,13 @@ function buildHtml(apiKey: string, styleName: string, center: [number, number], 
             }
             post({ type: 'error', message: 'MapLibre: ' + parts.join(' | ') });
           });
-          // Любой реальный тач водителя → активируем override-lock
-          // ЛОКАЛЬНО (сразу, без round-trip'а в RN) + посылаем gesture
-          // для UI-фидбэка (кнопка «Вернуться к маршруту»). originalEvent
-          // отличает user-touch от программного easeTo.
-          ['dragstart', 'rotatestart', 'pitchstart', 'touchstart'].forEach(function (ev) {
+          // Реальные user-жесты (drag/rotate/pitch). touchstart не
+          // нужен — он фаерится и на простые тапы (на маркер, мимо
+          // карты), из-за чего override-lock защёлкивался даже когда
+          // водитель карту не двигал, и камера переставала следовать.
+          ['dragstart', 'rotatestart', 'pitchstart'].forEach(function (ev) {
             __map.on(ev, function (e) {
-              if (e && !e.originalEvent && ev !== 'touchstart') return;
+              if (!e || !e.originalEvent) return;
               __userOverride = true;
               if (!__gestureSent) {
                 __gestureSent = true;
