@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
   View,
   Text,
@@ -216,28 +216,54 @@ export default function HomeScreen(): React.ReactNode {
   // часто стоит на месте и GPS возвращает null/0.
   const compassBearing = useCompassBearing();
 
+  // Скругляем до 5 знаков (~1.1м) — отрезает sub-метровый GPS-jitter,
+  // который иначе фигачил setDriver/setCenter в WebView на каждом
+  // незначимом тике и грел WebGL-камеру лишними еasе'ами.
+  const roundedLat =
+    !driverLocation.loading && !driverLocation.error
+      ? Math.round(driverLocation.latitude * 1e5) / 1e5
+      : null;
+  const roundedLng =
+    !driverLocation.loading && !driverLocation.error
+      ? Math.round(driverLocation.longitude * 1e5) / 1e5
+      : null;
+  const bearing = useMemo(
+    () => pickBearing(compassBearing, driverLocation.heading),
+    [compassBearing, driverLocation.heading],
+  );
+
+  // Маркер водителя — лёгкий CSS-transform внутри WebView, можно
+  // обновлять чаще без боли.
   useEffect(() => {
-    if (driverLocation.loading || driverLocation.error) {
-      return;
-    }
-    const bearing = pickBearing(compassBearing, driverLocation.heading);
+    if (roundedLat === null || roundedLng === null) return;
     mapRef.current?.setDriver({
-      latitude: driverLocation.latitude,
-      longitude: driverLocation.longitude,
+      latitude: roundedLat,
+      longitude: roundedLng,
       heading: bearing,
     });
+  }, [roundedLat, roundedLng, bearing]);
+
+  // Камера — первый раз с zoom/pitch (нужно «защёлкнуть» 3D-вид),
+  // дальше только center+bearing без zoom/pitch. Передача zoom=15
+  // pitch=45 на каждом тике запускала easeTo с интерполяцией
+  // zoom→15 и pitch→45 (идентично текущему значению, но всё равно
+  // CPU-цикл в WebGL). Это и был основной нагрев на HomeScreen.
+  const initialCenteredRef = useRef(false);
+  useEffect(() => {
+    if (roundedLat === null || roundedLng === null) return;
+    if (!initialCenteredRef.current) {
+      initialCenteredRef.current = true;
+      mapRef.current?.setCenter(
+        { latitude: roundedLat, longitude: roundedLng },
+        { zoom: 15, pitch: 45, bearing },
+      );
+      return;
+    }
     mapRef.current?.setCenter(
-      { latitude: driverLocation.latitude, longitude: driverLocation.longitude },
-      { zoom: 15, pitch: 45, bearing },
+      { latitude: roundedLat, longitude: roundedLng },
+      { bearing },
     );
-  }, [
-    driverLocation.loading,
-    driverLocation.error,
-    driverLocation.latitude,
-    driverLocation.longitude,
-    driverLocation.heading,
-    compassBearing,
-  ]);
+  }, [roundedLat, roundedLng, bearing]);
 
   const performToggle = async (): Promise<void> => {
     setTogglePending(true);
@@ -327,7 +353,6 @@ export default function HomeScreen(): React.ReactNode {
     // тач-жесте — без этого setCenter был бы no-op после того как
     // водитель сам подвинул карту пальцем.
     mapRef.current?.clearOverride();
-    const bearing = pickBearing(compassBearing, driverLocation.heading);
     mapRef.current?.setCenter(
       { latitude: driverLocation.latitude, longitude: driverLocation.longitude },
       { zoom: 16, pitch: 45, bearing },

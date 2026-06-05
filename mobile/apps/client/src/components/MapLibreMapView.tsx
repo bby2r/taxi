@@ -349,11 +349,14 @@ function buildHtml(apiKey: string, styleName: string, center: [number, number], 
         // Обновляем rotation у внутреннего svg.
         var svg = __driverMarker.getElement().querySelector('svg');
         if (svg) svg.style.transform = 'rotate(' + bearing + 'deg)';
-        // Smooth-tween от текущей позиции к новой за 1200мс.
+        // Smooth-tween от текущей позиции к новой за 700мс. Раньше было
+        // 1200мс при апдейтах раз в ~2с — RAF был активен большую часть
+        // времени и грел WebView. 700мс хватает чтобы глаз воспринял как
+        // плавное движение, и оставляет 1.3с «отдыха» между апдейтами.
         if (__driverTweenRaf) cancelAnimationFrame(__driverTweenRaf);
         var start = __driverMarker.getLngLat();
         var startTs = null;
-        var duration = 1200;
+        var duration = 700;
         function step(ts) {
           if (startTs === null) startTs = ts;
           var t = Math.min(1, (ts - startTs) / duration);
