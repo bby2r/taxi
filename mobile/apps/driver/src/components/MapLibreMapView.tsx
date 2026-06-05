@@ -151,6 +151,7 @@ function buildHtml(apiKey: string, styleName: string, center: [number, number], 
     <script>
       var __map = null;
       var __driverMarker = null;
+      var __driverTweenRaf = null;
       var __pickupMarker = null;
       var __dropoffMarker = null;
       var __gestureSent = false;
@@ -212,19 +213,41 @@ function buildHtml(apiKey: string, styleName: string, center: [number, number], 
         // тикает ~5Hz после 8°-порога, DOM-rebuild на каждый тик
         // ощутимо лагал на слабых WebView'ях.
         var rot = (loc.heading == null || isNaN(loc.heading)) ? 0 : loc.heading;
-        if (__driverMarker) {
-          __driverMarker.setLngLat([loc.longitude, loc.latitude]);
-          // driver-pin div сам несёт rotation (см. makeDriverEl);
-          // MapLibre transformer-wrapper выше отвечает за translate.
-          __driverMarker.getElement().style.transform = 'rotate(' + rot + 'deg)';
+        if (!__driverMarker) {
+          __driverMarker = new maplibregl.Marker({
+            element: makeDriverEl(loc.heading),
+            anchor: 'center',
+          })
+            .setLngLat([loc.longitude, loc.latitude])
+            .addTo(__map);
           return;
         }
-        __driverMarker = new maplibregl.Marker({
-          element: makeDriverEl(loc.heading),
-          anchor: 'center',
-        })
-          .setLngLat([loc.longitude, loc.latitude])
-          .addTo(__map);
+        // Поворот применяем сразу (CSS-трансформ дешёвый) — глаз ловит
+        // изменение курса быстрее, чем сдвиг точки.
+        __driverMarker.getElement().style.transform = 'rotate(' + rot + 'deg)';
+        // Плавный tween к новой точке вместо телепорта. Без него на
+        // скорости 60 км/ч маркер прыгал на ~17м каждый GPS-тик
+        // (1с при BestForNavigation) и поездка ощущалась рваной.
+        if (__driverTweenRaf) cancelAnimationFrame(__driverTweenRaf);
+        var start = __driverMarker.getLngLat();
+        var startTs = null;
+        var duration = 900;
+        function step(ts) {
+          if (startTs === null) startTs = ts;
+          var t = Math.min(1, (ts - startTs) / duration);
+          // Лёгкий ease-out — в начале tween быстрый (догоняет реальную
+          // позицию), к концу замедляется.
+          var e = 1 - Math.pow(1 - t, 2);
+          var lng = start.lng + (loc.longitude - start.lng) * e;
+          var lat = start.lat + (loc.latitude - start.lat) * e;
+          __driverMarker.setLngLat([lng, lat]);
+          if (t < 1) {
+            __driverTweenRaf = requestAnimationFrame(step);
+          } else {
+            __driverTweenRaf = null;
+          }
+        }
+        __driverTweenRaf = requestAnimationFrame(step);
       }
 
       function setMarkers(m) {
