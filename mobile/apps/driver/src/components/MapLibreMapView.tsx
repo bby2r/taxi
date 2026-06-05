@@ -29,6 +29,10 @@ export type MapLibreMapHandle = {
   ) => void;
   setPitch: (pitch: number) => void;
   fitBounds: (coordinates: Array<[number, number]>, paddingPx?: number) => void;
+  // Снимает override-lock который ставится при тач-жесте: пока он
+  // активен, setCenter/setPitch/fitBounds — no-op'ы. Вызывается RN
+  // при тапе «Вернуться к маршруту», чтобы камера снова следовала.
+  clearOverride: () => void;
 };
 
 type Props = {
@@ -151,6 +155,12 @@ function buildHtml(apiKey: string, styleName: string, center: [number, number], 
       var __dropoffMarker = null;
       var __gestureSent = false;
       var __styleLoaded = false;
+      // Override lock: после реального user-touch'а программные
+      // setCenter становятся no-op'ами, чтобы GPS/compass-апдейты не
+      // отрывали камеру от того места куда водитель её отпанил. Сбрасы-
+      // вается через applyCommand({type:'clearOverride'}) с RN-стороны
+      // (когда водитель тапает «Вернуться к маршруту»).
+      var __userOverride = false;
 
       function post(payload) {
         if (window.ReactNativeWebView && window.ReactNativeWebView.postMessage) {
@@ -289,6 +299,10 @@ function buildHtml(apiKey: string, styleName: string, center: [number, number], 
 
       function setCenter(loc, opts) {
         if (!__map) return;
+        // Override lock: водитель отпанил карту, GPS/compass-тики не
+        // должны её ёрзать обратно. Lock снимается только по явной
+        // команде clearOverride (тап «Вернуться к маршруту»).
+        if (__userOverride) return;
         // easeTo вместо setCenter+setZoom+setBearing — навигационная
         // камера плавно интерполируется (~600мс по умолчанию) вместо
         // дёрганых jump'ов на каждый GPS-апдейт. duration в opts
@@ -328,9 +342,14 @@ function buildHtml(apiKey: string, styleName: string, center: [number, number], 
             case 'setRoute': setRoute(cmd.coordinates); break;
             case 'setCenter': setCenter(cmd, cmd.opts); break;
             case 'setPitch':
+              if (__userOverride) break;
               if (__map && typeof cmd.pitch === 'number') __map.setPitch(cmd.pitch);
               break;
-            case 'fitBounds': fitBounds(cmd.coordinates, cmd.padding); break;
+            case 'fitBounds':
+              if (__userOverride) break;
+              fitBounds(cmd.coordinates, cmd.padding);
+              break;
+            case 'clearOverride': __userOverride = false; break;
           }
         } catch (e) {
           post({ type: 'error', message: String(e && e.message ? e.message : e) });
@@ -395,12 +414,14 @@ function buildHtml(apiKey: string, styleName: string, center: [number, number], 
             }
             post({ type: 'error', message: 'MapLibre: ' + parts.join(' | ') });
           });
-          // Любой жест пользователя ломает follow-camera на RN-стороне.
-          // dragstart/rotatestart/pitchstart с .originalEvent есть только
-          // у реальных тачей, не у программных move'ов от setCenter.
+          // Любой реальный тач водителя → активируем override-lock
+          // ЛОКАЛЬНО (сразу, без round-trip'а в RN) + посылаем gesture
+          // для UI-фидбэка (кнопка «Вернуться к маршруту»). originalEvent
+          // отличает user-touch от программного easeTo.
           ['dragstart', 'rotatestart', 'pitchstart', 'touchstart'].forEach(function (ev) {
             __map.on(ev, function (e) {
               if (e && !e.originalEvent && ev !== 'touchstart') return;
+              __userOverride = true;
               if (!__gestureSent) {
                 __gestureSent = true;
                 post({ type: 'gesture' });
@@ -517,6 +538,7 @@ const MapLibreMapView = forwardRef<MapLibreMapHandle, Props>(function MapLibreMa
       setCenter: (loc, opts) => dispatch({ type: 'setCenter', ...loc, opts }),
       setPitch: (pitch) => dispatch({ type: 'setPitch', pitch }),
       fitBounds: (coordinates, padding) => dispatch({ type: 'fitBounds', coordinates, padding }),
+      clearOverride: () => dispatch({ type: 'clearOverride' }),
     }),
     [dispatch],
   );

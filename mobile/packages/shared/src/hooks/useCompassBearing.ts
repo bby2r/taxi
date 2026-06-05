@@ -3,10 +3,10 @@ import { useFocusEffect } from '@react-navigation/native';
 import * as Location from 'expo-location';
 
 // Magnetometer на Android тикает 15-50 Hz. Без порога каждый reading
-// триггерит ререндер + setCenter в WebView (~40 bridge-crossings/сек),
-// а пользователь не видит разницу 0.3°. 3° = ниже порога восприятия
-// поворота карты на телефоне, но выше типичного сенсорного шума.
-const MIN_DELTA_DEGREES = 3;
+// триггерит ререндер + setCenter в WebView (~40 bridge-crossings/сек).
+// 8° = солидное чанковое движение в стиле Yandex Navigator, не
+// реагирует на микро-дрожь руки в кронштейне.
+const MIN_DELTA_DEGREES = 8;
 
 function shortestAngleDelta(a: number, b: number): number {
   let d = Math.abs(a - b);

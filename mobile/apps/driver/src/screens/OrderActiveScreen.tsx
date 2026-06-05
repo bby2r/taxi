@@ -659,6 +659,7 @@ export default function OrderActiveScreen(): React.ReactNode {
   // (newly accepted, freshly in-progress). Driver expects auto-follow
   // again after a state change even if they had panned away.
   useEffect(() => {
+    mapRef.current?.clearOverride();
     setFollowing(true);
   }, [state.phase]);
 
@@ -819,7 +820,10 @@ export default function OrderActiveScreen(): React.ReactNode {
       {isNavigating && !following && (
         <TouchableOpacity
           style={styles.recenterButton}
-          onPress={() => setFollowing(true)}
+          onPress={() => {
+            mapRef.current?.clearOverride();
+            setFollowing(true);
+          }}
           activeOpacity={0.85}
         >
           <Text style={styles.recenterIcon}>🎯</Text>
