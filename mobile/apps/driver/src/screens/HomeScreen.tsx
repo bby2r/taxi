@@ -85,7 +85,6 @@ export default function HomeScreen(): React.ReactNode {
   const driverLocation = useLocation();
   useDriverLocation({ enabled: isOnline });
   const [hasActiveIntercity, setHasActiveIntercity] = useState(false);
-  const [userPanned, setUserPanned] = useState(false);
   const mapRef = useRef<MapLibreMapHandle>(null);
   const pushStatus = usePushStatus();
   const [fsiStatus, setFsiStatus] = useState<FullScreenIntentStatus>('unknown');
@@ -327,9 +326,18 @@ export default function HomeScreen(): React.ReactNode {
     if (driverLocation.loading || driverLocation.error) {
       return;
     }
+    // clearOverride снимает WebView-side lock который встаёт на любом
+    // тач-жесте — без этого setCenter был бы no-op после того как
+    // водитель сам подвинул карту пальцем.
+    mapRef.current?.clearOverride();
+    const bearing =
+      compassBearing ??
+      (typeof driverLocation.heading === 'number' && driverLocation.heading > 0
+        ? driverLocation.heading
+        : 0);
     mapRef.current?.setCenter(
       { latitude: driverLocation.latitude, longitude: driverLocation.longitude },
-      { zoom: 16, pitch: 45 },
+      { zoom: 16, pitch: 45, bearing },
     );
   };
 
@@ -355,33 +363,7 @@ export default function HomeScreen(): React.ReactNode {
         initialCenter={initialCenter}
         initialZoom={14}
         style={StyleSheet.absoluteFill}
-        onUserGesture={() => setUserPanned(true)}
       />
-
-      {userPanned && (
-        <TouchableOpacity
-          style={styles.recenterFab}
-          onPress={() => {
-            mapRef.current?.clearOverride();
-            if (!driverLocation.loading && !driverLocation.error) {
-              const bearing =
-                compassBearing ??
-                (typeof driverLocation.heading === 'number' && driverLocation.heading > 0
-                  ? driverLocation.heading
-                  : 0);
-              mapRef.current?.setCenter(
-                { latitude: driverLocation.latitude, longitude: driverLocation.longitude },
-                { zoom: 15, pitch: 45, bearing },
-              );
-            }
-            setUserPanned(false);
-          }}
-          activeOpacity={0.85}
-          accessibilityLabel="Центрировать карту"
-        >
-          <Text style={styles.recenterFabIcon}>🎯</Text>
-        </TouchableOpacity>
-      )}
 
       <View style={styles.topBar} pointerEvents="box-none">
         <View style={styles.topPill}>
@@ -390,6 +372,14 @@ export default function HomeScreen(): React.ReactNode {
           </Text>
         </View>
         <View style={styles.topActions}>
+          <TouchableOpacity
+            onPress={handleRecenter}
+            activeOpacity={0.7}
+            style={styles.iconButton}
+            accessibilityLabel="Центрировать на мне"
+          >
+            <Text style={styles.iconText}>🎯</Text>
+          </TouchableOpacity>
           <TouchableOpacity
             onPress={() => navigation.navigate('Stats')}
             activeOpacity={0.7}
@@ -407,17 +397,6 @@ export default function HomeScreen(): React.ReactNode {
             <Text style={styles.iconText}>⏏</Text>
           </TouchableOpacity>
         </View>
-      </View>
-
-      <View style={styles.rightControls} pointerEvents="box-none">
-        <TouchableOpacity
-          onPress={handleRecenter}
-          activeOpacity={0.7}
-          style={styles.iconButton}
-          accessibilityLabel="Центрировать на мне"
-        >
-          <Text style={styles.iconText}>🎯</Text>
-        </TouchableOpacity>
       </View>
 
       {error && (
@@ -707,12 +686,6 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     gap: 8,
   },
-  rightControls: {
-    position: 'absolute',
-    right: 16,
-    bottom: 220,
-    gap: 8,
-  },
   iconButton: {
     width: 44,
     height: 44,
@@ -727,27 +700,6 @@ const styles = StyleSheet.create({
     elevation: 3,
   },
   iconText: {
-    fontSize: 20,
-  },
-  recenterFab: {
-    position: 'absolute',
-    bottom: 120,
-    right: 16,
-    width: 48,
-    height: 48,
-    borderRadius: 24,
-    backgroundColor: DriverColors.cardBackground,
-    justifyContent: 'center',
-    alignItems: 'center',
-    borderWidth: 1,
-    borderColor: DriverColors.border,
-    shadowColor: '#000',
-    shadowOpacity: 0.3,
-    shadowRadius: 8,
-    shadowOffset: { width: 0, height: 4 },
-    elevation: 8,
-  },
-  recenterFabIcon: {
     fontSize: 20,
   },
   errorBanner: {

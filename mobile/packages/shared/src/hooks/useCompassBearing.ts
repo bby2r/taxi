@@ -28,10 +28,17 @@ export function useCompassBearing(): number | null {
 
   useFocusEffect(
     useCallback(() => {
+      // active-флаг закрывает гонку: watchHeadingAsync резолвится
+      // асинхронно, и cleanup может сработать раньше чем подписка
+      // вернётся. Без этого первый focus был «глухим» (компас не
+      // запускался), а sub утекал — на 2-3 заходе уже образовы­валось
+      // несколько живых подписок поверх друг друга.
+      let active = true;
       let sub: { remove: () => void } | null = null;
       (async () => {
         try {
-          sub = await Location.watchHeadingAsync((h) => {
+          const created = await Location.watchHeadingAsync((h) => {
+            if (!active) return;
             const raw =
               h?.trueHeading != null && h.trueHeading >= 0
                 ? h.trueHeading
@@ -45,11 +52,17 @@ export function useCompassBearing(): number | null {
                 : prev,
             );
           });
+          if (!active) {
+            created.remove();
+            return;
+          }
+          sub = created;
         } catch {
           // device без магнитометра / отказ permission — null остаётся.
         }
       })();
       return () => {
+        active = false;
         sub?.remove();
       };
     }, []),
