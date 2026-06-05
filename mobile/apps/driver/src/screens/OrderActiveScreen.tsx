@@ -13,7 +13,6 @@ import {
 import BottomSheet, { BottomSheetView } from '@gorhom/bottom-sheet';
 import { useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
-import * as Speech from 'expo-speech';
 import {
   DriverColors,
   Typography,
@@ -22,13 +21,11 @@ import {
   useLocation,
   useCompassBearing,
   useRoute as useNavigationRoute,
-  useNavigationStep,
   haversineMeters,
 } from '@taxi/shared';
 import type { Order, DriverCancellationReason, Route } from '@taxi/shared';
 import { useDriverOrder } from '../hooks/useDriverOrder';
 import MapLibreMapView, { type MapLibreMapHandle } from '../components/MapLibreMapView';
-import NavigationHud from '../components/NavigationHud';
 import type { DriverStackParamList } from '../navigation/types';
 
 // Driver must be within this distance of the pickup point before they can
@@ -608,32 +605,9 @@ export default function OrderActiveScreen(): React.ReactNode {
     error: routeError,
   } = useNavigationRoute(routeOrigin, routeDestination);
 
-  // Turn-by-turn — текущий поворот + голос. Подключаем только когда
-  // едем (active / in_progress). На обзорных фазах баннер и голос
-  // выключены, лишний шум диспетчеру не нужен.
-  const isNavigatingForCues =
-    (state.phase === 'active' || state.phase === 'in_progress');
-  const { current: navStep, voiceCue, consumeVoiceCue } = useNavigationStep(
-    isNavigatingForCues ? route : null,
-    driverPoint,
-  );
-
-  // Голос через expo-speech. По прочтении сбрасываем cue в hook'е,
-  // чтобы один и тот же манёвр не озвучивался повторно при ререндерах.
-  useEffect(() => {
-    if (!voiceCue) return;
-    Speech.stop();
-    Speech.speak(voiceCue, { language: 'ru', rate: 1.0, pitch: 1.0 });
-    consumeVoiceCue();
-  }, [voiceCue, consumeVoiceCue]);
-
-  // Останавливаем голос при размонтировании / уходе с активной поездки —
-  // иначе TTS добивает фразу пока водитель уже в HomeScreen.
-  useEffect(() => {
-    return () => {
-      Speech.stop();
-    };
-  }, []);
+  // HUD и голос отключены: у нас нет фиксированной точки Б в заказе
+  // (село-такси / межгород — водитель сам знает маршрут), turn-by-turn
+  // подсказки бесполезны и только мешают разговору с диспетчером.
 
   // Two camera modes for the active screen:
   //
@@ -672,23 +646,10 @@ export default function OrderActiveScreen(): React.ReactNode {
       // на zoom 17+ автоматически рендерятся экструдированные здания.
       // pitch 55° — улица впереди видна, объём есть.
       //
-      // Зум адаптируется к расстоянию до следующего манёвра:
-      //   < 80м  → 19    (close-up, чтобы увидеть точную геометрию поворота)
-      //   < 150м → 18    (приближаемся к манёвру)
-      //   иначе  → 17    (cruise — обзор улицы впереди)
-      // Так Yandex Navigator / Google Maps делают: камера буквально
-      // «приседает» к асфальту перед поворотом.
-      var zoom = 17;
-      if (navStep) {
-        if (navStep.distanceMeters < 80) zoom = 19;
-        else if (navStep.distanceMeters < 150) zoom = 18;
-      }
       mapRef.current?.setCenter(driverPoint, {
-        zoom,
+        zoom: 17,
         pitch: 55,
         bearing: effectiveBearing,
-        // Длиннее duration на zoom-in перед поворотом — без этого камера
-        // дёргается. 800мс хватает чтобы плавно перейти на close-up.
         duration: 800,
       });
       return;
@@ -718,9 +679,6 @@ export default function OrderActiveScreen(): React.ReactNode {
     driverPoint?.longitude,
     effectiveBearing,
     following,
-    // Без navStep.distanceMeters камера не подстраивает zoom при
-    // подъезде к повороту — пересчёт только на GPS-апдейт водителя.
-    navStep?.distanceMeters,
   ]);
 
   // Push current driver position into the WebView pin (independent of
@@ -800,19 +758,6 @@ export default function OrderActiveScreen(): React.ReactNode {
           }
         }}
       />
-
-      {/* HUD виден только в нав-фазах (active / in_progress) и
-          только когда useNavigationStep вернул текущий шаг. */}
-      {isNavigatingForCues && navStep && (
-        <View style={styles.navHudWrap} pointerEvents="none">
-          <NavigationHud
-            maneuver={navStep.step.maneuver}
-            distanceToManeuverMeters={navStep.distanceMeters}
-            instruction={navStep.step.instruction}
-            route={route}
-          />
-        </View>
-      )}
 
       {/* Re-engage follow camera. Shows only when driver opted out of
           follow by panning the map mid-navigation. Tap snaps back to
@@ -945,16 +890,10 @@ const styles = StyleSheet.create({
     borderWidth: 3,
     borderColor: '#fff',
   },
-  navHudWrap: {
-    position: 'absolute',
-    top: Platform.OS === 'android' ? (StatusBar.currentHeight ?? 24) + 8 : 56,
-    left: 0,
-    right: 0,
-  },
   recenterButton: {
-    // Sits below the HUD card; top tuned to clear the ETA row.
+    // Top-right — без HUD'а сверху можно ставить ближе к статус-бару.
     position: 'absolute',
-    top: 220,
+    top: Platform.OS === 'android' ? (StatusBar.currentHeight ?? 24) + 16 : 60,
     right: 16,
     flexDirection: 'row',
     alignItems: 'center',

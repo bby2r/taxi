@@ -85,6 +85,7 @@ export default function HomeScreen(): React.ReactNode {
   const driverLocation = useLocation();
   useDriverLocation({ enabled: isOnline });
   const [hasActiveIntercity, setHasActiveIntercity] = useState(false);
+  const [userPanned, setUserPanned] = useState(false);
   const mapRef = useRef<MapLibreMapHandle>(null);
   const pushStatus = usePushStatus();
   const [fsiStatus, setFsiStatus] = useState<FullScreenIntentStatus>('unknown');
@@ -354,7 +355,33 @@ export default function HomeScreen(): React.ReactNode {
         initialCenter={initialCenter}
         initialZoom={14}
         style={StyleSheet.absoluteFill}
+        onUserGesture={() => setUserPanned(true)}
       />
+
+      {userPanned && (
+        <TouchableOpacity
+          style={styles.recenterFab}
+          onPress={() => {
+            mapRef.current?.clearOverride();
+            if (!driverLocation.loading && !driverLocation.error) {
+              const bearing =
+                compassBearing ??
+                (typeof driverLocation.heading === 'number' && driverLocation.heading > 0
+                  ? driverLocation.heading
+                  : 0);
+              mapRef.current?.setCenter(
+                { latitude: driverLocation.latitude, longitude: driverLocation.longitude },
+                { zoom: 15, pitch: 45, bearing },
+              );
+            }
+            setUserPanned(false);
+          }}
+          activeOpacity={0.85}
+          accessibilityLabel="Центрировать карту"
+        >
+          <Text style={styles.recenterFabIcon}>🎯</Text>
+        </TouchableOpacity>
+      )}
 
       <View style={styles.topBar} pointerEvents="box-none">
         <View style={styles.topPill}>
@@ -700,6 +727,27 @@ const styles = StyleSheet.create({
     elevation: 3,
   },
   iconText: {
+    fontSize: 20,
+  },
+  recenterFab: {
+    position: 'absolute',
+    bottom: 120,
+    right: 16,
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    backgroundColor: DriverColors.cardBackground,
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: DriverColors.border,
+    shadowColor: '#000',
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    shadowOffset: { width: 0, height: 4 },
+    elevation: 8,
+  },
+  recenterFabIcon: {
     fontSize: 20,
   },
   errorBanner: {
