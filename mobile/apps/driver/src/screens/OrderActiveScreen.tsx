@@ -21,6 +21,8 @@ import {
   useLocation,
   useRoute as useNavigationRoute,
   haversineMeters,
+  bearingBetween,
+  smoothBearing,
 } from '@taxi/shared';
 import type { Order, DriverCancellationReason, Route } from '@taxi/shared';
 import { useDriverOrder } from '../hooks/useDriverOrder';
@@ -31,6 +33,23 @@ import type { DriverStackParamList } from '../navigation/types';
 // confirm "Прибыл к клиенту". Stops them from tapping the button while still
 // driving and triggering an early "Водитель ожидает вас" push to the client.
 const ARRIVED_THRESHOLD_METERS = 150;
+
+// --- Follow-camera tuning (navigation phases) ---------------------------
+// Below this per-fix displacement the driver is treated as stationary and
+// the camera holds its last bearing — stops the map spinning on GPS jitter
+// at a red light. Above it, the bearing tracks the direction of travel.
+const MIN_ROTATE_METERS = 8;
+// Low-pass factor (0..1) for the camera bearing. Higher = snappier turns,
+// lower = smoother but laggier. Travel-derived bearing is already fairly
+// clean, so a moderate value keeps turns responsive without twitching.
+const BEARING_SMOOTHING = 0.5;
+// Clamp for the per-fix camera glide. We animate over roughly the real
+// interval since the last GPS fix (linearTo) so the camera pans at constant
+// speed and chains smoothly between fixes instead of easing in a 1s burst
+// and then sitting frozen until the next fix lands.
+const FOLLOW_MIN_MS = 900;
+const FOLLOW_MAX_MS = 5000;
+const FOLLOW_DEFAULT_MS = 1000;
 
 type NavigationProp = NativeStackNavigationProp<DriverStackParamList, 'OrderActive'>;
 
@@ -431,6 +450,13 @@ export default function OrderActiveScreen(): React.ReactNode {
     loading,
   } = useDriverOrder();
   const cameraRef = useRef<Mapbox.Camera>(null);
+  // Follow-camera smoothing state. Bearing is derived from the driver's
+  // direction of travel (stable) rather than raw GPS course (noisy), and
+  // the glide duration tracks the real GPS fix interval — see the camera
+  // effect below. Refs (not state) so updating them never re-renders.
+  const lastCamPosRef = useRef<{ latitude: number; longitude: number } | null>(null);
+  const camBearingRef = useRef<number | null>(null);
+  const lastFixAtRef = useRef<number | null>(null);
   const driverLocation = useLocation();
   const [cancelSheetOpen, setCancelSheetOpen] = useState(false);
   const [pendingAction, setPendingAction] = useState<null | {
@@ -609,28 +635,69 @@ export default function OrderActiveScreen(): React.ReactNode {
     if (!cameraRef.current || !order) return;
     if (!following) return; // user panned away — respect their view
     if (isNavigating && driverPoint) {
-      // Tilt + bearing + zoom. Heading comes from expo-location's
-      // `useLocation` hook (degrees, 0 = north) — Mapbox uses the same
-      // convention. animationDuration = 1000ms keeps the camera glide
-      // smooth rather than snapping per fix.
+      // Yandex-style tilt + heading-up follow. Two things keep it from
+      // juddering (the map used to twitch while the puck looked smooth):
       //
-      // padding shifts where in the viewport the centerCoordinate lands.
-      // Big paddingBottom pushes the visual center upward, so the driver
-      // arrow sits in the lower-third of the screen — leaves room to
-      // see the road ahead, matching navigation-app convention.
+      //   1. Bearing comes from the DIRECTION OF TRAVEL between consecutive
+      //      fixes, not the device's raw GPS course — `coords.heading` is
+      //      very noisy at low speed and made the whole map rotate back and
+      //      forth every fix. We only re-orient once the driver has moved a
+      //      meaningful distance, and hold the last bearing when stopped, so
+      //      the map doesn't spin at a red light. A low-pass damps the rest.
+      //
+      //   2. We glide with `linearTo` over (roughly) the real interval since
+      //      the last fix, so the camera pans at constant speed and chains
+      //      continuously between sparse fixes — instead of easing in a 1s
+      //      burst and then freezing for ~4s until the next fix.
+      //
+      // padding shifts where centerCoordinate lands: the big paddingBottom
+      // pushes the driver arrow into the lower third, leaving road ahead in
+      // view — standard navigation-app framing.
+      const now = Date.now();
+      const prevPos = lastCamPosRef.current;
+      const moved = prevPos ? haversineMeters(prevPos, driverPoint) : 0;
+      const seed =
+        typeof driverLocation.heading === 'number' && driverLocation.heading >= 0
+          ? driverLocation.heading
+          : 0;
+      let bearing = camBearingRef.current ?? seed;
+      if (prevPos && moved >= MIN_ROTATE_METERS) {
+        const travel = bearingBetween(prevPos, driverPoint);
+        bearing =
+          camBearingRef.current === null
+            ? travel
+            : smoothBearing(camBearingRef.current, travel, BEARING_SMOOTHING);
+      }
+      camBearingRef.current = bearing;
+
+      const dt = lastFixAtRef.current ? now - lastFixAtRef.current : 0;
+      const duration =
+        dt > 0
+          ? Math.min(FOLLOW_MAX_MS, Math.max(FOLLOW_MIN_MS, dt))
+          : FOLLOW_DEFAULT_MS;
+
+      lastCamPosRef.current = driverPoint;
+      lastFixAtRef.current = now;
+
       cameraRef.current.setCamera({
         centerCoordinate: [driverPoint.longitude, driverPoint.latitude],
         zoomLevel: 17,
         pitch: 55,
-        heading:
-          typeof driverLocation.heading === 'number' && driverLocation.heading >= 0
-            ? driverLocation.heading
-            : 0,
+        heading: bearing,
         padding: { paddingTop: 60, paddingBottom: 380, paddingLeft: 0, paddingRight: 0 },
-        animationDuration: 1000,
+        animationDuration: duration,
+        animationMode: 'linearTo',
       });
       return;
     }
+
+    // Left navigation (arrived / completed / no route yet) — drop the
+    // follow state so the next driving segment recomputes bearing and
+    // cadence from scratch instead of from a stale, long-ago fix.
+    lastCamPosRef.current = null;
+    camBearingRef.current = null;
+    lastFixAtRef.current = null;
+
     // Overview: compute lat/lng bounds from route or available points.
     const coords =
       route && route.coordinates.length > 0
