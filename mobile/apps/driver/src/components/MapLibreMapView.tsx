@@ -409,16 +409,35 @@ function buildHtml(apiKey: string, styleName: string, center: [number, number], 
       // flows at a steady speed with no per-fix hard stop. The lerp itself IS
       // the low-pass filter on position + bearing. DEAD ignores sub-threshold
       // heading changes so the map doesn't shimmer on tiny direction noise.
-      var FOLLOW_POS_A = 0.02;
-      var FOLLOW_BRG_A = 0.05;
+      // Per-frame chase factors. Because the target is dead-reckoned forward
+      // (below) it moves continuously, so these can be tight — low lag AND
+      // smooth. DEAD ignores sub-threshold heading noise so the map never
+      // shimmers on a jittery bearing.
+      var FOLLOW_POS_A = 0.08;
+      var FOLLOW_BRG_A = 0.10;
       var FOLLOW_DEAD_DEG = 4;
+      var PREDICT_MAX_MS = 1500; // clamp dead-reckoning so a dropped fix can't run away
+      var VEL_EMA = 0.4; // smooth the velocity estimate → soft stops/starts
+
+      function perfNow() {
+        return (window.performance && performance.now) ? performance.now() : Date.now();
+      }
 
       function followStep() {
         __followRaf = null;
         if (!__follow || !__map || __userOverride) return;
         var f = __follow;
-        f.cc[0] += (f.tc[0] - f.cc[0]) * FOLLOW_POS_A;
-        f.cc[1] += (f.tc[1] - f.cc[1]) * FOLLOW_POS_A;
+        // Dead-reckoning: extrapolate the last real target forward along the
+        // measured velocity so the camera tracks where the car *is now*
+        // between 1Hz fixes — this is what removes turn/lag without the map
+        // reacting to every sensor tick.
+        var dt = perfNow() - f.baseTs;
+        if (dt < 0) dt = 0;
+        if (dt > PREDICT_MAX_MS) dt = PREDICT_MAX_MS;
+        var ex0 = f.baseTc[0] + (f.vel ? f.vel[0] * dt : 0);
+        var ex1 = f.baseTc[1] + (f.vel ? f.vel[1] * dt : 0);
+        f.cc[0] += (ex0 - f.cc[0]) * FOLLOW_POS_A;
+        f.cc[1] += (ex1 - f.cc[1]) * FOLLOW_POS_A;
         if (f.tb != null) {
           var d = ((f.tb - f.cb + 540) % 360) - 180;
           if (Math.abs(d) > FOLLOW_DEAD_DEG) {
@@ -427,10 +446,12 @@ function buildHtml(apiKey: string, styleName: string, center: [number, number], 
         }
         __map.jumpTo({ center: [f.cc[0], f.cc[1]], bearing: f.cb, zoom: f.zoom, pitch: f.pitch });
         placeDriver(f.cc[0], f.cc[1], f.cb);
-        // Idle out once converged; the next setFollowTarget restarts the loop.
-        var dx = f.tc[0] - f.cc[0], dy = f.tc[1] - f.cc[1];
+        // Keep the 60fps loop alive while moving (velocity) or not yet
+        // converged; idle out only when genuinely stopped + settled.
+        var velMag = f.vel ? (Math.abs(f.vel[0]) + Math.abs(f.vel[1])) : 0;
+        var dcx = ex0 - f.cc[0], dcy = ex1 - f.cc[1];
         var bd = (f.tb == null) ? 0 : Math.abs(((f.tb - f.cb + 540) % 360) - 180);
-        if ((dx * dx + dy * dy) < 1e-12 && bd <= FOLLOW_DEAD_DEG) return;
+        if (velMag < 1e-9 && (dcx * dcx + dcy * dcy) < 1e-12 && bd <= FOLLOW_DEAD_DEG) return;
         __followRaf = requestAnimationFrame(followStep);
       }
 
@@ -440,22 +461,45 @@ function buildHtml(apiKey: string, styleName: string, center: [number, number], 
         var tb = (typeof cmd.bearing === 'number') ? cmd.bearing : (__follow ? __follow.tb : null);
         var zoom = (typeof cmd.zoom === 'number') ? cmd.zoom : (__follow ? __follow.zoom : __map.getZoom());
         var pitch = (typeof cmd.pitch === 'number') ? cmd.pitch : (__follow ? __follow.pitch : __map.getPitch());
+        var nowTs = perfNow();
         if (!__follow) {
           // Cancel any leftover overview marker tween — the loop owns the
-          // marker now.
+          // marker now. First target snaps current=target so we don't sweep
+          // across the map from the initial center.
           if (__driverTweenRaf) { cancelAnimationFrame(__driverTweenRaf); __driverTweenRaf = null; }
-          // First target: snap current=target so we don't sweep across the
-          // map from the initial center.
-          __follow = { tc: tc, tb: tb, cc: [tc[0], tc[1]], cb: (tb == null ? __map.getBearing() : tb), zoom: zoom, pitch: pitch };
+          __follow = {
+            baseTc: [tc[0], tc[1]], baseTs: nowTs, vel: null, skipVel: false,
+            tb: tb, cc: [tc[0], tc[1]], cb: (tb == null ? __map.getBearing() : tb),
+            zoom: zoom, pitch: pitch,
+          };
           if (!__userOverride) {
             __map.jumpTo({ center: [tc[0], tc[1]], bearing: __follow.cb, zoom: zoom, pitch: pitch });
             placeDriver(tc[0], tc[1], __follow.cb);
           }
         } else {
-          __follow.tc = tc;
-          if (tb != null) __follow.tb = tb;
-          __follow.zoom = zoom;
-          __follow.pitch = pitch;
+          var f = __follow;
+          // Velocity (deg/ms) from the last real target → this one, EMA-smoothed.
+          // skipVel is set right after a re-seed (clearOverride) so the pan gap
+          // doesn't manufacture a bogus velocity spike.
+          if (f.skipVel) {
+            f.skipVel = false;
+          } else {
+            var ddt = nowTs - f.baseTs;
+            if (ddt >= 60 && ddt <= 4000) {
+              var mv0 = (tc[0] - f.baseTc[0]) / ddt;
+              var mv1 = (tc[1] - f.baseTc[1]) / ddt;
+              f.vel = f.vel
+                ? [f.vel[0] * (1 - VEL_EMA) + mv0 * VEL_EMA, f.vel[1] * (1 - VEL_EMA) + mv1 * VEL_EMA]
+                : [mv0, mv1];
+            } else if (ddt > 4000) {
+              f.vel = null; // long gap — stop predicting until movement resumes
+            }
+          }
+          f.baseTc = [tc[0], tc[1]];
+          f.baseTs = nowTs;
+          if (tb != null) f.tb = tb;
+          f.zoom = zoom;
+          f.pitch = pitch;
         }
         if (!__followRaf && !__userOverride) __followRaf = requestAnimationFrame(followStep);
       }
@@ -486,11 +530,17 @@ function buildHtml(apiKey: string, styleName: string, center: [number, number], 
             case 'clearOverride':
               __userOverride = false;
               // Re-seed the loop from where the user left the map and resume,
-              // so it glides back to the route instead of teleporting.
+              // so it glides back instead of teleporting. Reset the
+              // dead-reckoning base + skip the next velocity sample (the pan
+              // gap would otherwise spike the prediction).
               if (__follow && __map) {
                 var c = __map.getCenter();
                 __follow.cc = [c.lng, c.lat];
                 __follow.cb = __map.getBearing();
+                __follow.baseTc = [c.lng, c.lat];
+                __follow.baseTs = perfNow();
+                __follow.vel = null;
+                __follow.skipVel = true;
                 if (!__followRaf) __followRaf = requestAnimationFrame(followStep);
               }
               break;

@@ -22,7 +22,6 @@ import {
   useRoute as useNavigationRoute,
   haversineMeters,
   bearingBetween,
-  smoothBearing,
   angularGapDeg,
 } from '@taxi/shared';
 import type { Order, DriverCancellationReason, Route } from '@taxi/shared';
@@ -37,15 +36,14 @@ const ARRIVED_THRESHOLD_METERS = 150;
 
 // --- Follow-camera target tuning (navigation phases) --------------------
 // The camera is driven by a continuous 60fps loop inside the WebView
-// (MapLibreMapView.setFollowTarget) that eases toward a target we push here
-// at GPS rate. This screen's only job is to compute a STABLE target:
-// position snapped to the route (map matching), bearing from the route /
-// GPS travel-direction — never the magnetometer — low-passed and deadzoned.
+// (MapLibreMapView.setFollowTarget) that DEAD-RECKONS the target forward and
+// eases toward it. This screen's only job is to compute a STABLE target at
+// GPS rate: position snapped to the route (map matching), bearing from the
+// route / GPS travel-direction — never the magnetometer. No low-pass here;
+// the loop owns smoothing (smoothing twice just adds rotation lag on turns).
 const ON_ROUTE_SNAP_M = 30; // snap the camera onto the route within this distance
-const POS_EMA_ALPHA = 0.5; // light low-pass on the raw GPS position
 const MOVE_FOR_BEARING_M = 5; // need this much travel to trust a GPS-derived bearing
 const BEARING_DEADZONE_DEG = 4; // ignore target-bearing changes smaller than this
-const TARGET_BEARING_ALPHA = 0.5; // low-pass the target bearing (on top of the deadzone)
 const MIN_TARGET_SEND_MS = 150; // cap how often we cross the RN→WebView bridge
 
 type NavigationProp = NativeStackNavigationProp<DriverStackParamList, 'OrderActive'>;
@@ -448,11 +446,9 @@ export default function OrderActiveScreen(): React.ReactNode {
   } = useDriverOrder();
   const mapRef = useRef<MapLibreMapHandle>(null);
   // Follow-target state (refs so updates never re-render). lastGpsRef: last
-  // raw fix, for the travel-direction bearing. emaPosRef: low-passed
-  // position. targetBearingRef: smoothed + deadzoned target bearing.
-  // lastSendRef: throttle timestamp for the RN→WebView bridge.
+  // raw fix, for the travel-direction bearing. targetBearingRef: last target
+  // bearing (deadzoned). lastSendRef: throttle for the RN→WebView bridge.
   const lastGpsRef = useRef<{ latitude: number; longitude: number } | null>(null);
-  const emaPosRef = useRef<{ latitude: number; longitude: number } | null>(null);
   const targetBearingRef = useRef<number | null>(null);
   const lastSendRef = useRef<number>(0);
   const bottomSheetRef = useRef<BottomSheet>(null);
@@ -642,7 +638,6 @@ export default function OrderActiveScreen(): React.ReactNode {
   // again after a state change even if they had panned away.
   useEffect(() => {
     mapRef.current?.clearOverride();
-    emaPosRef.current = null;
     lastGpsRef.current = null;
     targetBearingRef.current = null;
     setFollowing(true);
@@ -653,33 +648,22 @@ export default function OrderActiveScreen(): React.ReactNode {
     if (isNavigating && driverPoint) {
       if (!following) return; // user panned — WebView keeps their view (override lock)
 
-      // 1. Low-pass the raw GPS position — kills per-fix coordinate jitter
-      //    before it can shimmer the camera.
-      const prevEma = emaPosRef.current;
-      const ema = prevEma
-        ? {
-            latitude: prevEma.latitude + (driverPoint.latitude - prevEma.latitude) * POS_EMA_ALPHA,
-            longitude:
-              prevEma.longitude + (driverPoint.longitude - prevEma.longitude) * POS_EMA_ALPHA,
-          }
-        : driverPoint;
-      emaPosRef.current = ema;
-
-      // 2. Map matching: snap onto the route when close to it and take the
-      //    bearing from the road tangent (the smoothest possible source).
-      //    trimmedCoordinates[0] is the driver projected onto the route.
-      let center = ema;
+      // Map matching: snap the camera onto the route when close to it and take
+      // the bearing from the road tangent (smoothest source). trimmedCoordinates[0]
+      // is the driver projected onto the route by useRoute.
+      let center = driverPoint;
       let rawBearing: number | null = null;
       if (trimmedCoordinates.length >= 2) {
         const snapped = trimmedCoordinates[0];
-        if (haversineMeters(ema, snapped) <= ON_ROUTE_SNAP_M) {
+        if (haversineMeters(driverPoint, snapped) <= ON_ROUTE_SNAP_M) {
           center = snapped;
           rawBearing = bearingBetween(trimmedCoordinates[0], trimmedCoordinates[1]);
         }
       }
 
-      // 3. Off-route fallback: GPS course if the device reports one, else the
-      //    travel direction between consecutive fixes (trusted once moved).
+      // Off-route fallback: GPS course if the device reports one, else the
+      // travel direction between consecutive fixes (trusted once moved).
+      // Never the magnetometer.
       if (rawBearing === null) {
         const gpsHeading = driverLocation.heading;
         if (typeof gpsHeading === 'number' && gpsHeading > 0) {
@@ -693,20 +677,21 @@ export default function OrderActiveScreen(): React.ReactNode {
       }
       lastGpsRef.current = driverPoint;
 
-      // 4. Deadzone + low-pass the target bearing: ignore tiny changes (phone
-      //    shake / sensor noise), and let real turns arrive already smoothed.
+      // Deadzone the target bearing — ignore sub-threshold changes (phone
+      // shake / GPS noise). No low-pass here; the WebView loop smooths the
+      // rotation, and smoothing twice just adds lag on turns.
       let targetBearing = targetBearingRef.current;
-      if (rawBearing !== null) {
-        if (targetBearing === null) {
-          targetBearing = rawBearing;
-        } else if (angularGapDeg(targetBearing, rawBearing) >= BEARING_DEADZONE_DEG) {
-          targetBearing = smoothBearing(targetBearing, rawBearing, TARGET_BEARING_ALPHA);
-        }
+      if (
+        rawBearing !== null &&
+        (targetBearing === null ||
+          angularGapDeg(targetBearing, rawBearing) >= BEARING_DEADZONE_DEG)
+      ) {
+        targetBearing = rawBearing;
       }
       targetBearingRef.current = targetBearing;
 
-      // 5. Throttle the bridge crossing — the 60fps smoothing lives inside the
-      //    WebView loop, so we only need to refresh its target at GPS rate.
+      // Throttle the bridge crossing — dead-reckoning + 60fps smoothing live in
+      // the WebView, so we only refresh the target at GPS rate.
       const now = Date.now();
       if (now - lastSendRef.current < MIN_TARGET_SEND_MS) return;
       lastSendRef.current = now;
@@ -726,7 +711,6 @@ export default function OrderActiveScreen(): React.ReactNode {
     // 30° tilt — the 3D look is on permanently, but navigator-grade 55° on a
     // zoomed-out view distorts ugly.
     mapRef.current?.stopFollow();
-    emaPosRef.current = null;
     lastGpsRef.current = null;
     targetBearingRef.current = null;
     mapRef.current?.setPitch(30);
@@ -839,7 +823,6 @@ export default function OrderActiveScreen(): React.ReactNode {
           style={styles.recenterButton}
           onPress={() => {
             mapRef.current?.clearOverride();
-            emaPosRef.current = null;
             lastGpsRef.current = null;
             targetBearingRef.current = null;
             setFollowing(true);
