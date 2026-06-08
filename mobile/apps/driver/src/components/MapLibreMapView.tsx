@@ -25,7 +25,16 @@ export type MapLibreMapHandle = {
   setRoute: (coordinates: Array<[number, number]>) => void;
   setCenter: (
     loc: LatLng,
-    opts?: { zoom?: number; bearing?: number; pitch?: number; duration?: number },
+    opts?: {
+      zoom?: number;
+      bearing?: number;
+      pitch?: number;
+      duration?: number;
+      // linear: constant-speed easing so back-to-back follow updates chain
+      // into one continuous glide instead of easing-in/out (and pausing) at
+      // every GPS fix.
+      linear?: boolean;
+    },
   ) => void;
   setPitch: (pitch: number) => void;
   fitBounds: (coordinates: Array<[number, number]>, paddingPx?: number) => void;
@@ -337,6 +346,14 @@ function buildHtml(apiKey: string, styleName: string, center: [number, number], 
         if (opts && typeof opts.bearing === 'number') animOpts.bearing = opts.bearing;
         if (opts && typeof opts.pitch === 'number') animOpts.pitch = opts.pitch;
         animOpts.duration = (opts && typeof opts.duration === 'number') ? opts.duration : 600;
+        // Linear (constant-speed) easing for the follow camera: with the
+        // duration set just above the ~1s GPS interval, each fix's easeTo
+        // takes over the previous one mid-flight, so the map glides
+        // continuously instead of easing-in, stopping, and lurching again
+        // every second (the default ease-out does exactly that).
+        if (opts && opts.linear) {
+          animOpts.easing = function (t) { return t; };
+        }
         __map.easeTo(animOpts);
       }
 

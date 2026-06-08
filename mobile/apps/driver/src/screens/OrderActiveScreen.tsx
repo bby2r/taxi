@@ -44,7 +44,12 @@ const ARRIVED_THRESHOLD_METERS = 150;
 // turned enough since the last aim, and low-pass the applied bearing.
 const CAM_MIN_MOVE_M = 4; // re-center once moved this far (~1 GPS tick while driving)
 const CAM_MIN_TURN_DEG = 12; // re-rotate only on real turns — hysteresis over the compass's 8°
-const CAM_BEARING_ALPHA = 0.5; // low-pass the applied bearing so each re-aim is gentle
+const CAM_BEARING_ALPHA = 0.6; // low-pass the applied bearing so each re-aim is gentle
+// Camera glide duration. The GPS interval in nav mode is ~1s (timeInterval
+// 1000ms); a follow duration *above* that, paired with linear easing, lets
+// each fix's easeTo take over the previous one mid-flight → one continuous
+// glide instead of an ease-out + pause every second.
+const CAM_FOLLOW_MS = 1200;
 
 type NavigationProp = NativeStackNavigationProp<DriverStackParamList, 'OrderActive'>;
 
@@ -653,14 +658,13 @@ export default function OrderActiveScreen(): React.ReactNode {
       // наклон 55° = вид «из-под лобового стекла». На MapTiler streets-v2
       // на zoom 17+ автоматически рендерятся экструдированные здания.
       //
-      // Re-aim only when the driver has actually moved (>= CAM_MIN_MOVE_M)
-      // or turned (>= CAM_MIN_TURN_DEG) since the last aim. Without this
-      // gate the 15-50Hz magnetometer restarts the 800ms easeTo on nearly
-      // every render and the map judders; CAM_MIN_TURN_DEG > the compass's
-      // own 8° step adds hysteresis so a reading flip-flopping around the
-      // threshold doesn't keep re-aiming. The applied bearing is low-passed
-      // so each re-aim is gentle. (The driver marker keeps the live compass
-      // bearing in its own effect below — cheap CSS rotate, stays snappy.)
+      // Skip the update entirely when the driver neither moved
+      // (>= CAM_MIN_MOVE_M) nor turned (>= CAM_MIN_TURN_DEG) since the last
+      // aim — otherwise the 15-50Hz magnetometer would re-fire easeTo on
+      // nearly every render. CAM_MIN_TURN_DEG > the compass's own 8° step
+      // adds hysteresis against a reading flip-flopping around the boundary.
+      // (The driver marker keeps the live compass bearing in its own effect
+      // below — cheap CSS rotate, so it stays snappy regardless.)
       const prevBearing = camBearingRef.current;
       const prevPos = camPosRef.current;
       const moved = prevPos ? haversineMeters(prevPos, driverPoint) : Infinity;
@@ -669,17 +673,27 @@ export default function OrderActiveScreen(): React.ReactNode {
       if (moved < CAM_MIN_MOVE_M && turned < CAM_MIN_TURN_DEG) {
         return;
       }
+      // Bearing: re-orient ONLY on a real turn; on a plain forward move
+      // HOLD the last applied bearing, so straight-line driving doesn't
+      // rotate the map a few degrees every GPS fix off the compass's noise.
       const nextBearing =
-        prevBearing === null
-          ? effectiveBearing
-          : smoothBearing(prevBearing, effectiveBearing, CAM_BEARING_ALPHA);
+        turned >= CAM_MIN_TURN_DEG
+          ? prevBearing === null
+            ? effectiveBearing
+            : smoothBearing(prevBearing, effectiveBearing, CAM_BEARING_ALPHA)
+          : (prevBearing ?? effectiveBearing);
       camBearingRef.current = nextBearing;
       camPosRef.current = driverPoint;
+      // Continuous glide: duration > the ~1s GPS interval + linear easing so
+      // each fix's easeTo seamlessly takes over the previous one instead of
+      // easing-out and pausing at every point (the per-second lurch that
+      // read as "not smooth").
       mapRef.current?.setCenter(driverPoint, {
         zoom: 17,
         pitch: 55,
         bearing: nextBearing,
-        duration: 800,
+        duration: CAM_FOLLOW_MS,
+        linear: true,
       });
       return;
     }
