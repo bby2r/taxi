@@ -123,12 +123,15 @@ export function useDriverLocation({ enabled }: UseDriverLocationOptions): Locati
       if (cancelled) return;
 
       // Foreground UI watch — drives the blue dot on the home-screen
-      // map. Separate from the native heartbeat.
+      // map. Separate from the native heartbeat. Balanced + 5м/5с —
+      // High + 3м/2с заметно греет телефон в ожидании заказа, при этом
+      // навигация всё равно живёт в OrderActiveScreen, где useLocation
+      // ({navigation: true}) сам поднимает точность до BestForNavigation.
       subscription = await Location.watchPositionAsync(
         {
-          accuracy: Location.Accuracy.High,
-          distanceInterval: 3,
-          timeInterval: 2000,
+          accuracy: Location.Accuracy.Balanced,
+          distanceInterval: 5,
+          timeInterval: 5000,
         },
         (loc) => {
           coordsRef.current = {

@@ -17,6 +17,7 @@ class DriverLocationUpdated implements ShouldBroadcast
         public Order $order,
         public float $latitude,
         public float $longitude,
+        public ?float $heading = null,
     ) {}
 
     /**
@@ -43,6 +44,7 @@ class DriverLocationUpdated implements ShouldBroadcast
             'order_id' => $this->order->id,
             'latitude' => $this->latitude,
             'longitude' => $this->longitude,
+            'heading' => $this->heading,
         ];
     }
 }

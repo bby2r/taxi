@@ -13,6 +13,10 @@ export interface Driver {
   car_number: string;
   latitude: number;
   longitude: number;
+  // Course-over-ground 0-360°. null когда GPS не вычислил курс (стоит /
+  // медленно едет). Используется клиентом чтобы развернуть driver-маркер
+  // на карте по направлению движения.
+  heading: number | null;
 }
 
 export type DeclineReason =

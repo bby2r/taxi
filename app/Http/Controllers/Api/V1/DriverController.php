@@ -106,6 +106,9 @@ class DriverController extends Controller
 
         $latitude = (float) $request->validated('latitude');
         $longitude = (float) $request->validated('longitude');
+        $heading = $request->validated('heading') !== null
+            ? (float) $request->validated('heading')
+            : null;
 
         $profile->update([
             'latitude' => $latitude,
@@ -119,7 +122,7 @@ class DriverController extends Controller
             ->first();
 
         if ($activeOrder) {
-            broadcast(new DriverLocationUpdated($activeOrder, $latitude, $longitude))->toOthers();
+            broadcast(new DriverLocationUpdated($activeOrder, $latitude, $longitude, $heading))->toOthers();
         }
 
         $request->user()->load('driverProfile');

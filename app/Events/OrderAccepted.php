@@ -49,12 +49,21 @@ class OrderAccepted implements ShouldBroadcast
     {
         $this->order->loadMissing(['driver.driverProfile']);
 
+        $profile = $this->order->driver?->driverProfile;
+
         return [
             'order_id' => $this->order->id,
             'driver_id' => $this->order->driver_id,
             'driver_name' => $this->order->driver?->name,
-            'car_model' => $this->order->driver?->driverProfile?->car_model,
-            'car_number' => $this->order->driver?->driverProfile?->car_number,
+            'car_model' => $profile?->car_model,
+            'car_number' => $profile?->car_number,
+            // Сразу прокидываем последнюю известную позицию водителя.
+            // Раньше клиент дёргал refetch order на event, но если
+            // первый driver.location event ещё не прилетел, маркер
+            // машины не появлялся 1-3 секунды после «Принято». Теперь
+            // показываем сразу с момента принятия.
+            'latitude' => $profile?->latitude !== null ? (float) $profile->latitude : null,
+            'longitude' => $profile?->longitude !== null ? (float) $profile->longitude : null,
         ];
     }
 }

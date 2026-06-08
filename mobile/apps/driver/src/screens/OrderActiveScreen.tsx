@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
   Alert,
   View,
@@ -10,7 +10,7 @@ import {
   StatusBar,
   Modal,
 } from 'react-native';
-import Mapbox from '@rnmapbox/maps';
+import BottomSheet, { BottomSheetView } from '@gorhom/bottom-sheet';
 import { useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import {
@@ -19,37 +19,20 @@ import {
   ActionButton,
   ConfirmModal,
   useLocation,
+  useCompassBearing,
   useRoute as useNavigationRoute,
   haversineMeters,
-  bearingBetween,
-  smoothBearing,
+  pickBearing,
 } from '@taxi/shared';
 import type { Order, DriverCancellationReason, Route } from '@taxi/shared';
 import { useDriverOrder } from '../hooks/useDriverOrder';
-import DriverArrow from '../components/DriverArrow';
+import MapLibreMapView, { type MapLibreMapHandle } from '../components/MapLibreMapView';
 import type { DriverStackParamList } from '../navigation/types';
 
 // Driver must be within this distance of the pickup point before they can
 // confirm "Прибыл к клиенту". Stops them from tapping the button while still
 // driving and triggering an early "Водитель ожидает вас" push to the client.
 const ARRIVED_THRESHOLD_METERS = 150;
-
-// --- Follow-camera tuning (navigation phases) ---------------------------
-// Below this per-fix displacement the driver is treated as stationary and
-// the camera holds its last bearing — stops the map spinning on GPS jitter
-// at a red light. Above it, the bearing tracks the direction of travel.
-const MIN_ROTATE_METERS = 8;
-// Low-pass factor (0..1) for the camera bearing. Higher = snappier turns,
-// lower = smoother but laggier. Travel-derived bearing is already fairly
-// clean, so a moderate value keeps turns responsive without twitching.
-const BEARING_SMOOTHING = 0.5;
-// Clamp for the per-fix camera glide. We animate over roughly the real
-// interval since the last GPS fix (linearTo) so the camera pans at constant
-// speed and chains smoothly between fixes instead of easing in a 1s burst
-// and then sitting frozen until the next fix lands.
-const FOLLOW_MIN_MS = 900;
-const FOLLOW_MAX_MS = 5000;
-const FOLLOW_DEFAULT_MS = 1000;
 
 type NavigationProp = NativeStackNavigationProp<DriverStackParamList, 'OrderActive'>;
 
@@ -449,15 +432,13 @@ export default function OrderActiveScreen(): React.ReactNode {
     dismissCompleted,
     loading,
   } = useDriverOrder();
-  const cameraRef = useRef<Mapbox.Camera>(null);
-  // Follow-camera smoothing state. Bearing is derived from the driver's
-  // direction of travel (stable) rather than raw GPS course (noisy), and
-  // the glide duration tracks the real GPS fix interval — see the camera
-  // effect below. Refs (not state) so updating them never re-renders.
-  const lastCamPosRef = useRef<{ latitude: number; longitude: number } | null>(null);
-  const camBearingRef = useRef<number | null>(null);
-  const lastFixAtRef = useRef<number | null>(null);
-  const driverLocation = useLocation();
+  const mapRef = useRef<MapLibreMapHandle>(null);
+  const bottomSheetRef = useRef<BottomSheet>(null);
+  // Three positions like Yandex Taxi driver: barely visible (just handle
+  // + ETA peek), default (all key info + main action), expanded (full
+  // details, room for future content). Driver swipes between them.
+  const snapPoints = useMemo(() => ['18%', '48%', '88%'], []);
+  const driverLocation = useLocation({ navigation: true });
   const [cancelSheetOpen, setCancelSheetOpen] = useState(false);
   const [pendingAction, setPendingAction] = useState<null | {
     message: string;
@@ -524,6 +505,15 @@ export default function OrderActiveScreen(): React.ReactNode {
     }
   }, [state.phase, navigation]);
 
+  // CompletedCard is centered and needs the full sheet to render
+  // correctly — auto-expand on completion so the driver sees the
+  // payout summary without having to swipe.
+  useEffect(() => {
+    if (state.phase === 'completed') {
+      bottomSheetRef.current?.snapToIndex(2);
+    }
+  }, [state.phase]);
+
   // Block the Android hardware back button + swipe-back gesture while
   // there's an active order. Previously the driver could press back,
   // land on the home map, and lose access to the order management UI —
@@ -555,6 +545,9 @@ export default function OrderActiveScreen(): React.ReactNode {
     !driverLocation.loading && !driverLocation.error
       ? { latitude: driverLocation.latitude, longitude: driverLocation.longitude }
       : null;
+
+  const compassBearing = useCompassBearing();
+  const effectiveBearing = pickBearing(compassBearing, driverLocation.heading);
 
   // Defensive: react-native-maps silently ignores Marker / Polyline coords
   // that come in as strings. The API now serializes lat/lng as floats, but
@@ -604,6 +597,7 @@ export default function OrderActiveScreen(): React.ReactNode {
     error: routeError,
   } = useNavigationRoute(routeOrigin, routeDestination);
 
+
   // Two camera modes for the active screen:
   //
   //   - "Navigation" — driving phases (active / in_progress). Camera
@@ -628,111 +622,94 @@ export default function OrderActiveScreen(): React.ReactNode {
   // (newly accepted, freshly in-progress). Driver expects auto-follow
   // again after a state change even if they had panned away.
   useEffect(() => {
+    mapRef.current?.clearOverride();
     setFollowing(true);
   }, [state.phase]);
 
   useEffect(() => {
-    if (!cameraRef.current || !order) return;
+    if (!order) return;
     if (!following) return; // user panned away — respect their view
     if (isNavigating && driverPoint) {
-      // Yandex-style tilt + heading-up follow. Two things keep it from
-      // juddering (the map used to twitch while the puck looked smooth):
+      // Navigation cam (3D): центр на водителе, поворот по heading +
+      // наклон 55° = вид «из-под лобового стекла». На MapTiler streets-v2
+      // на zoom 17+ автоматически рендерятся экструдированные здания.
+      // pitch 55° — улица впереди видна, объём есть.
       //
-      //   1. Bearing comes from the DIRECTION OF TRAVEL between consecutive
-      //      fixes, not the device's raw GPS course — `coords.heading` is
-      //      very noisy at low speed and made the whole map rotate back and
-      //      forth every fix. We only re-orient once the driver has moved a
-      //      meaningful distance, and hold the last bearing when stopped, so
-      //      the map doesn't spin at a red light. A low-pass damps the rest.
-      //
-      //   2. We glide with `linearTo` over (roughly) the real interval since
-      //      the last fix, so the camera pans at constant speed and chains
-      //      continuously between sparse fixes — instead of easing in a 1s
-      //      burst and then freezing for ~4s until the next fix.
-      //
-      // padding shifts where centerCoordinate lands: the big paddingBottom
-      // pushes the driver arrow into the lower third, leaving road ahead in
-      // view — standard navigation-app framing.
-      const now = Date.now();
-      const prevPos = lastCamPosRef.current;
-      const moved = prevPos ? haversineMeters(prevPos, driverPoint) : 0;
-      const seed =
-        typeof driverLocation.heading === 'number' && driverLocation.heading >= 0
-          ? driverLocation.heading
-          : 0;
-      let bearing = camBearingRef.current ?? seed;
-      if (prevPos && moved >= MIN_ROTATE_METERS) {
-        const travel = bearingBetween(prevPos, driverPoint);
-        bearing =
-          camBearingRef.current === null
-            ? travel
-            : smoothBearing(camBearingRef.current, travel, BEARING_SMOOTHING);
-      }
-      camBearingRef.current = bearing;
-
-      const dt = lastFixAtRef.current ? now - lastFixAtRef.current : 0;
-      const duration =
-        dt > 0
-          ? Math.min(FOLLOW_MAX_MS, Math.max(FOLLOW_MIN_MS, dt))
-          : FOLLOW_DEFAULT_MS;
-
-      lastCamPosRef.current = driverPoint;
-      lastFixAtRef.current = now;
-
-      cameraRef.current.setCamera({
-        centerCoordinate: [driverPoint.longitude, driverPoint.latitude],
-        zoomLevel: 17,
+      mapRef.current?.setCenter(driverPoint, {
+        zoom: 17,
         pitch: 55,
-        heading: bearing,
-        padding: { paddingTop: 60, paddingBottom: 380, paddingLeft: 0, paddingRight: 0 },
-        animationDuration: duration,
-        animationMode: 'linearTo',
+        bearing: effectiveBearing,
+        duration: 800,
       });
       return;
     }
-
-    // Left navigation (arrived / completed / no route yet) — drop the
-    // follow state so the next driving segment recomputes bearing and
-    // cadence from scratch instead of from a stale, long-ago fix.
-    lastCamPosRef.current = null;
-    camBearingRef.current = null;
-    lastFixAtRef.current = null;
-
-    // Overview: compute lat/lng bounds from route or available points.
-    const coords =
+    // Overview: fit bounds across route + key points so the operator
+    // sees the whole trip. Сохраняем небольшой наклон даже в обзорном
+    // режиме — пользователь хочет 3D-стиль на постоянной основе. 30°
+    // компромисс: меньше навигаторских 55°, но не плоская бумажная
+    // карта. На зуме обзора (12-14) сильный наклон даёт уродливую
+    // перспективную дисторсию, поэтому именно 30°.
+    mapRef.current?.setPitch(30);
+    const coords: Array<[number, number]> =
       route && route.coordinates.length > 0
-        ? route.coordinates
+        ? route.coordinates.map((c) => [c.longitude, c.latitude])
         : [
-            ...(pickupPoint ? [pickupPoint] : []),
-            ...(dropoffPoint ? [dropoffPoint] : []),
-            ...(driverPoint ? [driverPoint] : []),
-          ];
+            ...(pickupPoint ? [[pickupPoint.longitude, pickupPoint.latitude]] : []),
+            ...(dropoffPoint ? [[dropoffPoint.longitude, dropoffPoint.latitude]] : []),
+            ...(driverPoint ? [[driverPoint.longitude, driverPoint.latitude]] : []),
+          ] as Array<[number, number]>;
     if (coords.length === 0) return;
-    let minLat = coords[0].latitude;
-    let maxLat = coords[0].latitude;
-    let minLng = coords[0].longitude;
-    let maxLng = coords[0].longitude;
-    for (const c of coords) {
-      if (c.latitude < minLat) minLat = c.latitude;
-      if (c.latitude > maxLat) maxLat = c.latitude;
-      if (c.longitude < minLng) minLng = c.longitude;
-      if (c.longitude > maxLng) maxLng = c.longitude;
-    }
-    cameraRef.current.fitBounds(
-      [maxLng, maxLat], // NE
-      [minLng, minLat], // SW
-      [80, 60, 60, 60], // padding: top, right, bottom, left
-      800,
-    );
+    mapRef.current?.fitBounds(coords, 80);
   }, [
     isNavigating,
     order,
     route,
     driverPoint?.latitude,
     driverPoint?.longitude,
-    driverLocation.heading,
+    effectiveBearing,
     following,
   ]);
+
+  // Push current driver position into the WebView pin (independent of
+  // the camera-follow loop above — we always want the pin to track GPS
+  // even when the user has panned away).
+  useEffect(() => {
+    if (!driverPoint) return;
+    if (!(state.phase === 'active' || state.phase === 'in_progress')) return;
+    mapRef.current?.setDriver({
+      latitude: driverPoint.latitude,
+      longitude: driverPoint.longitude,
+      heading: effectiveBearing,
+    });
+  }, [
+    driverPoint?.latitude,
+    driverPoint?.longitude,
+    effectiveBearing,
+    state.phase,
+  ]);
+
+  // Push pickup + dropoff markers. The set is recomputed whenever any
+  // of the coords change; passing null clears.
+  useEffect(() => {
+    mapRef.current?.setMarkers({
+      pickup: pickupPoint,
+      dropoff: dropoffPoint,
+    });
+  }, [
+    pickupPoint?.latitude,
+    pickupPoint?.longitude,
+    dropoffPoint?.latitude,
+    dropoffPoint?.longitude,
+  ]);
+
+  // Push route polyline coords. Empty array clears the line.
+  useEffect(() => {
+    const coords: Array<[number, number]> = trimmedCoordinates.map((c) => [
+      c.longitude,
+      c.latitude,
+    ]);
+    mapRef.current?.setRoute(coords);
+  }, [trimmedCoordinates]);
 
   if (!order) {
     return null;
@@ -750,87 +727,26 @@ export default function OrderActiveScreen(): React.ReactNode {
 
   return (
     <View style={styles.container}>
-      <Mapbox.MapView
+      <MapLibreMapView
+        ref={mapRef}
         style={styles.map}
-        styleURL={Mapbox.StyleURL.TrafficDay}
-        compassEnabled={false}
-        scaleBarEnabled={false}
-        logoEnabled={false}
-        attributionEnabled={false}
-        onCameraChanged={(state) => {
-          // reason === 'gesture' fires only when the driver pans/pinches
-          // — we never trigger gestures from code. Break follow so our
-          // useEffect stops fighting the driver's view. They'll get a
-          // "Вернуться к маршруту" button to opt back in.
-          if (
-            following &&
-            isNavigating &&
-            (state as { gestures?: { isGestureActive?: boolean } }).gestures
-              ?.isGestureActive
-          ) {
+        initialCenter={
+          driverPoint
+            ? [driverPoint.longitude, driverPoint.latitude]
+            : pickupPoint
+              ? [pickupPoint.longitude, pickupPoint.latitude]
+              : undefined
+        }
+        initialZoom={14}
+        onUserGesture={() => {
+          // Driver panned/pinched — drop follow so our camera effect
+          // stops fighting their view. "Вернуться к маршруту" button
+          // below re-engages it.
+          if (following && isNavigating) {
             setFollowing(false);
           }
         }}
-      >
-        <Mapbox.Camera ref={cameraRef} />
-
-        {/* Thick highlighted route polyline — drawn first so markers
-            sit on top. Style stays the same in both navigation and
-            overview camera modes. */}
-        {trimmedCoordinates.length > 1 && (
-          <Mapbox.ShapeSource
-            id="route-source"
-            shape={{
-              type: 'Feature',
-              properties: {},
-              geometry: {
-                type: 'LineString',
-                coordinates: trimmedCoordinates.map((c) => [c.longitude, c.latitude]),
-              },
-            }}
-          >
-            <Mapbox.LineLayer
-              id="route-line"
-              style={{
-                lineColor: DriverColors.primary,
-                lineWidth: 9,
-                lineCap: 'round',
-                lineJoin: 'round',
-                lineOpacity: 0.95,
-              }}
-            />
-          </Mapbox.ShapeSource>
-        )}
-
-        {pickupPoint && (
-          <Mapbox.PointAnnotation
-            id="pickup"
-            coordinate={[pickupPoint.longitude, pickupPoint.latitude]}
-            title={order.pickup_address || 'Клиент'}
-          >
-            <View style={styles.pickupPin} />
-          </Mapbox.PointAnnotation>
-        )}
-
-        {dropoffPoint && (
-          <Mapbox.PointAnnotation
-            id="dropoff"
-            coordinate={[dropoffPoint.longitude, dropoffPoint.latitude]}
-            title={order.dropoff_address || order.region?.name || 'Пункт Б'}
-          >
-            <View style={styles.dropoffPin} />
-          </Mapbox.PointAnnotation>
-        )}
-
-        {driverPoint && (state.phase === 'active' || state.phase === 'in_progress') && (
-          <Mapbox.PointAnnotation
-            id="driver"
-            coordinate={[driverPoint.longitude, driverPoint.latitude]}
-          >
-            <DriverArrow heading={driverLocation.heading} online />
-          </Mapbox.PointAnnotation>
-        )}
-      </Mapbox.MapView>
+      />
 
       {/* Re-engage follow camera. Shows only when driver opted out of
           follow by panning the map mid-navigation. Tap snaps back to
@@ -838,7 +754,10 @@ export default function OrderActiveScreen(): React.ReactNode {
       {isNavigating && !following && (
         <TouchableOpacity
           style={styles.recenterButton}
-          onPress={() => setFollowing(true)}
+          onPress={() => {
+            mapRef.current?.clearOverride();
+            setFollowing(true);
+          }}
           activeOpacity={0.85}
         >
           <Text style={styles.recenterIcon}>🎯</Text>
@@ -846,45 +765,54 @@ export default function OrderActiveScreen(): React.ReactNode {
         </TouchableOpacity>
       )}
 
-      <View style={styles.bottomCard}>
-        {state.phase === 'active' && (
-          <EnRouteCard
-            order={order}
-            onMarkArrived={requestArrived}
-            loading={loading}
-            route={route}
-            routeLoading={routeLoading}
-            routeError={routeError}
-            locationError={driverLocation.error}
-            distanceToPickup={
-              driverPoint && pickupPoint
-                ? haversineMeters(driverPoint, pickupPoint)
-                : null
-            }
-          />
-        )}
-        {state.phase === 'arrived' && (
-          <ArrivedCard
-            order={order}
-            onMarkStarted={requestStart}
-            onCancelRequest={() => setCancelSheetOpen(true)}
-            loading={loading}
-          />
-        )}
-        {state.phase === 'in_progress' && (
-          <InProgressCard
-            order={order}
-            onMarkCompleted={requestComplete}
-            loading={loading}
-            route={route}
-            routeLoading={routeLoading}
-            routeError={routeError}
-          />
-        )}
-        {state.phase === 'completed' && (
-          <CompletedCard order={order} onDismiss={handleDismiss} />
-        )}
-      </View>
+      <BottomSheet
+        ref={bottomSheetRef}
+        index={1}
+        snapPoints={snapPoints}
+        enablePanDownToClose={false}
+        backgroundStyle={styles.sheetBackground}
+        handleIndicatorStyle={styles.sheetHandle}
+      >
+        <BottomSheetView style={styles.sheetInner}>
+          {state.phase === 'active' && (
+            <EnRouteCard
+              order={order}
+              onMarkArrived={requestArrived}
+              loading={loading}
+              route={route}
+              routeLoading={routeLoading}
+              routeError={routeError}
+              locationError={driverLocation.error}
+              distanceToPickup={
+                driverPoint && pickupPoint
+                  ? haversineMeters(driverPoint, pickupPoint)
+                  : null
+              }
+            />
+          )}
+          {state.phase === 'arrived' && (
+            <ArrivedCard
+              order={order}
+              onMarkStarted={requestStart}
+              onCancelRequest={() => setCancelSheetOpen(true)}
+              loading={loading}
+            />
+          )}
+          {state.phase === 'in_progress' && (
+            <InProgressCard
+              order={order}
+              onMarkCompleted={requestComplete}
+              loading={loading}
+              route={route}
+              routeLoading={routeLoading}
+              routeError={routeError}
+            />
+          )}
+          {state.phase === 'completed' && (
+            <CompletedCard order={order} onDismiss={handleDismiss} />
+          )}
+        </BottomSheetView>
+      </BottomSheet>
 
       <CancelSheet
         visible={cancelSheetOpen}
@@ -916,17 +844,24 @@ const styles = StyleSheet.create({
     backgroundColor: DriverColors.background,
   },
   map: {
-    flex: 0.6,
+    ...StyleSheet.absoluteFillObject,
   },
-  bottomCard: {
-    flex: 0.4,
+  sheetBackground: {
     backgroundColor: DriverColors.background,
     borderTopLeftRadius: 24,
     borderTopRightRadius: 24,
+  },
+  sheetHandle: {
+    backgroundColor: DriverColors.border,
+    width: 44,
+    height: 5,
+    borderRadius: 3,
+  },
+  sheetInner: {
+    flex: 1,
     paddingHorizontal: 20,
-    paddingTop: 20,
+    paddingTop: 8,
     paddingBottom: 34,
-    marginTop: -24,
   },
   cardContent: {
     flex: 1,
@@ -936,24 +871,16 @@ const styles = StyleSheet.create({
     alignItems: 'baseline',
     marginBottom: 4,
   },
-  driverDot: {
-    width: 18,
-    height: 18,
-    borderRadius: 9,
-    backgroundColor: DriverColors.primary,
-    borderWidth: 3,
-    borderColor: '#fff',
-  },
   recenterButton: {
     position: 'absolute',
-    bottom: 320,
-    alignSelf: 'center',
+    top: Platform.OS === 'android' ? (StatusBar.currentHeight ?? 24) + 16 : 60,
+    right: 16,
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
-    paddingHorizontal: 18,
-    paddingVertical: 12,
-    borderRadius: 24,
+    gap: 6,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 20,
     backgroundColor: DriverColors.cardBackground,
     borderWidth: 1,
     borderColor: DriverColors.border,
@@ -970,32 +897,6 @@ const styles = StyleSheet.create({
     color: DriverColors.textPrimary,
     fontSize: 14,
     fontWeight: '700' as const,
-  },
-  pickupPin: {
-    width: 18,
-    height: 18,
-    borderRadius: 9,
-    backgroundColor: DriverColors.primary,
-    borderWidth: 4,
-    borderColor: '#fff',
-    shadowColor: '#000',
-    shadowOpacity: 0.25,
-    shadowRadius: 4,
-    shadowOffset: { width: 0, height: 2 },
-    elevation: 4,
-  },
-  dropoffPin: {
-    width: 18,
-    height: 18,
-    borderRadius: 9,
-    backgroundColor: DriverColors.success,
-    borderWidth: 4,
-    borderColor: '#fff',
-    shadowColor: '#000',
-    shadowOpacity: 0.25,
-    shadowRadius: 4,
-    shadowOffset: { width: 0, height: 2 },
-    elevation: 4,
   },
   distanceHint: {
     color: DriverColors.textMuted,

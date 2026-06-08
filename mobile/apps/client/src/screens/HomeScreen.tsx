@@ -15,7 +15,7 @@ import {
   Dimensions,
   PanResponder,
 } from 'react-native';
-import MapView, { Region as MapRegion, Marker, MarkerDragStartEndEvent } from 'react-native-maps';
+import MapLibreMapView, { type MapLibreMapHandle } from '../components/MapLibreMapView';
 
 // Снап-константы шторки. Вынесены за компонент — иначе пересчёт на
 // каждый рендер делает их новые reference identity, useCallback вокруг
@@ -30,30 +30,9 @@ const PEEK_HEIGHT = 90;
 const EXPANDED_HEIGHT = Math.min(SCREEN_HEIGHT * 0.52, 425);
 const COLLAPSE_OFFSET = EXPANDED_HEIGHT - PEEK_HEIGHT;
 
-// Тёмная карта в стиле WB Такси / Yandex Go night mode. Чёрно-серый
-// фон, контуры улиц приглушённые — наша бирюзовая метка подачи
-// и водительский маркер сразу выделяются. Стиль сжатый, ровно
-// столько что нужно — без оверкила с десятками featureType.
-const DARK_MAP_STYLE = [
-  { elementType: 'geometry', stylers: [{ color: '#1e1b2e' }] },
-  { elementType: 'labels.text.stroke', stylers: [{ color: '#1e1b2e' }] },
-  { elementType: 'labels.text.fill', stylers: [{ color: '#8c879d' }] },
-  { featureType: 'administrative', elementType: 'geometry', stylers: [{ color: '#2a2640' }] },
-  { featureType: 'poi', elementType: 'labels.text.fill', stylers: [{ color: '#6b6680' }] },
-  { featureType: 'poi.park', elementType: 'geometry', stylers: [{ color: '#1a2820' }] },
-  { featureType: 'road', elementType: 'geometry', stylers: [{ color: '#2f2a45' }] },
-  { featureType: 'road', elementType: 'geometry.stroke', stylers: [{ color: '#1e1b2e' }] },
-  { featureType: 'road', elementType: 'labels.text.fill', stylers: [{ color: '#9c97b0' }] },
-  { featureType: 'road.highway', elementType: 'geometry', stylers: [{ color: '#3d3658' }] },
-  { featureType: 'road.highway', elementType: 'geometry.stroke', stylers: [{ color: '#1e1b2e' }] },
-  { featureType: 'transit', elementType: 'geometry', stylers: [{ color: '#2a2640' }] },
-  { featureType: 'water', elementType: 'geometry', stylers: [{ color: '#13111f' }] },
-  { featureType: 'water', elementType: 'labels.text.fill', stylers: [{ color: '#3d3658' }] },
-];
 import { useLocation, ActionButton, ClientColors, ErrorPill, Radius, Spacing, Typography, reverseGeocode, Region } from '@taxi/shared';
 import { useOrder } from '../hooks/useOrder';
 import DriverCard from '../components/DriverCard';
-import AnimatedDriverMarker from '../components/AnimatedDriverMarker';
 import Icon from '../components/Icon';
 import IntervillageModal from '../components/IntervillageModal';
 import { getRegions, getTariffs, priceFor, type TariffRoute } from '../api/regions';
@@ -94,53 +73,10 @@ function PulsingDot({ size = 14 }: { size?: number }): React.ReactNode {
   );
 }
 
-/**
- * Метка подачи такси в стиле Яндекс Go — жёлтый закруглённый
- * квадрат с тёмной фигуркой человека («тут стоит пассажир»).
- * Стержень снизу указывает точно на координату подачи. Drag-friendly:
- * фиксированный размер, без анимаций, hit-target ~50px.
- */
-function PickupPinMarker(): React.ReactNode {
-  return (
-    <View style={pickupPinStyles.wrapper}>
-      <View style={pickupPinStyles.badge}>
-        <Icon name="user" size={26} color={ClientColors.white} strokeWidth={2.4} />
-      </View>
-      <View style={pickupPinStyles.stem} />
-    </View>
-  );
-}
-
-const pickupPinStyles = StyleSheet.create({
-  wrapper: {
-    alignItems: 'center',
-  },
-  badge: {
-    width: 48,
-    height: 48,
-    borderRadius: 14,
-    backgroundColor: ClientColors.pickupBadge,
-    alignItems: 'center',
-    justifyContent: 'center',
-    shadowColor: ClientColors.pickupBadge,
-    shadowOpacity: 0.45,
-    shadowRadius: 10,
-    shadowOffset: { width: 0, height: 4 },
-    elevation: 8,
-  },
-  stem: {
-    width: 2,
-    height: 14,
-    backgroundColor: ClientColors.pickupDark,
-    opacity: 0.8,
-    marginTop: -1,
-  },
-});
-
 export default function HomeScreen(): React.ReactNode {
   const location = useLocation();
   const { state, callTaxi, cancelOrder, dismissCompleted, loading, error } = useOrder();
-  const mapRef = useRef<MapView>(null);
+  const mapRef = useRef<MapLibreMapHandle>(null);
 
   const [regions, setRegions] = useState<Region[]>([]);
   const [tariffs, setTariffs] = useState<TariffRoute[]>([]);
@@ -180,13 +116,9 @@ export default function HomeScreen(): React.ReactNode {
       if (mapRef.current) {
         initialCenterDoneRef.current = true;
         mapRef.current.animateToRegion(
-          {
-            latitude: location.latitude,
-            longitude: location.longitude,
-            latitudeDelta: 0.005,
-            longitudeDelta: 0.005,
-          },
+          { latitude: location.latitude, longitude: location.longitude },
           400,
+          0.005,
         );
       } else if (attempts < 10) {
         attempts += 1;
@@ -204,13 +136,9 @@ export default function HomeScreen(): React.ReactNode {
       // уже учитывает шторку, поэтому центрирование автоматически
       // ставит точку в видимой части экрана выше peek-области.
       mapRef.current?.animateToRegion(
-        {
-          latitude: location.latitude,
-          longitude: location.longitude,
-          latitudeDelta: 0.004,
-          longitudeDelta: 0.004,
-        },
+        { latitude: location.latitude, longitude: location.longitude },
         400,
+        0.004,
       );
     }
   }, [location.hasRealFix, location.latitude, location.longitude]);
@@ -301,12 +229,10 @@ export default function HomeScreen(): React.ReactNode {
     }
   }, [state.phase, snapTo]);
 
-  const initialRegion: MapRegion = {
-    latitude: location.latitude,
-    longitude: location.longitude,
-    latitudeDelta: 0.006,
-    longitudeDelta: 0.006,
-  };
+  // initialCenter — снимок один раз на маунте (заморожен внутри
+  // MapLibreMapView через ref), затем animateToRegion двигает камеру
+  // на реальный GPS, когда он зафиксируется.
+  const initialCenter: [number, number] = [location.longitude, location.latitude];
 
   const confirmRoundTripIfNeeded = (): Promise<boolean> => {
     if (!isRoundTrip) return Promise.resolve(true);
@@ -351,9 +277,8 @@ export default function HomeScreen(): React.ReactNode {
     return error === before;
   };
 
-  const handlePinDragEnd = (e: MarkerDragStartEndEvent): void => {
-    const { latitude, longitude } = e.nativeEvent.coordinate;
-    setPickupCoord({ lat: latitude, lng: longitude });
+  const handlePinDragEnd = (coord: { latitude: number; longitude: number }): void => {
+    setPickupCoord({ lat: coord.latitude, lng: coord.longitude });
     setPinDragged(true);
   };
 
@@ -374,7 +299,11 @@ export default function HomeScreen(): React.ReactNode {
     typeof state.order.driver.longitude === 'number' &&
     Number.isFinite(state.order.driver.latitude) &&
     Number.isFinite(state.order.driver.longitude)
-      ? { latitude: state.order.driver.latitude, longitude: state.order.driver.longitude }
+      ? {
+          latitude: state.order.driver.latitude,
+          longitude: state.order.driver.longitude,
+          heading: state.order.driver.heading,
+        }
       : null;
 
   // Содержимое peek-бара зависит от фазы заказа и состояния детекции.
@@ -453,48 +382,33 @@ export default function HomeScreen(): React.ReactNode {
 
   return (
     <View style={styles.container}>
-      <MapView
+      {/* Карта (MapLibre + MapTiler через WebView). Юзер видит:
+          - синюю точку — где он реально (по GPS)
+          - синюю стрелку-pickup — куда подать такси (draggable)
+          - такси-маркер — водитель, плавно тваится между GPS-фиксами
+          PaddingBottom резервируем под пик-шторку, чтобы animateToRegion
+          центрировал точку в видимой части экрана. */}
+      <MapLibreMapView
         ref={mapRef}
         style={StyleSheet.absoluteFillObject}
-        initialRegion={initialRegion}
-        showsUserLocation
-        showsMyLocationButton={false}
-        customMapStyle={DARK_MAP_STYLE}
-        mapPadding={{
-          top: Platform.OS === 'android' ? (StatusBar.currentHeight ?? 40) + 8 : 0,
-          right: 0,
-          // Резервируем PEEK_HEIGHT снизу — map центрирует точку
-          // пользователя в видимой части (над пик-шторкой), а не в
-          // геометрическом центре экрана где её закрывает шторка.
-          bottom: PEEK_HEIGHT,
-          left: 0,
-        }}
-      >
-        {/* Метка подачи (pickup pin) — отдельно от пользовательской
-            точки. Юзер видит:
-            - синюю точку OS-native (showsUserLocation) — где он реально
-            - бирюзовую метку (наш Marker) — куда подать такси
-            Это позволяет перетащить pickup в другое место (например на
-            угол улицы) не путая «где я» и «куда подать».
-            Pin рендерится после реального GPS-fix чтобы не падать в
-            дефолтном Бишкеке. */}
-        {pickupCoord && (
-          <Marker
-            coordinate={{ latitude: pickupCoord.lat, longitude: pickupCoord.lng }}
-            // Anchor в самом низу стержня — координата подачи приходится
-            // ровно на кончик «иголки» под жёлтым бейджем.
-            anchor={{ x: 0.5, y: 1 }}
-            draggable={state.phase === 'idle' && location.hasRealFix}
-            onDragEnd={handlePinDragEnd}
-            tracksViewChanges={false}
-          >
-            <PickupPinMarker />
-          </Marker>
-        )}
-        {driverCoords && (
-          <AnimatedDriverMarker coordinate={driverCoords} title="Водитель" />
-        )}
-      </MapView>
+        initialCenter={initialCenter}
+        initialZoom={15}
+        paddingTop={Platform.OS === 'android' ? (StatusBar.currentHeight ?? 40) + 8 : 0}
+        paddingBottom={PEEK_HEIGHT}
+        userLocation={
+          location.hasRealFix
+            ? { latitude: location.latitude, longitude: location.longitude }
+            : null
+        }
+        pickup={
+          pickupCoord
+            ? { latitude: pickupCoord.lat, longitude: pickupCoord.lng }
+            : null
+        }
+        pickupDraggable={state.phase === 'idle' && location.hasRealFix}
+        onPickupDragEnd={handlePinDragEnd}
+        driver={driverCoords}
+      />
 
       {/* «Моя локация» FAB — приклеен к верхнему краю шторки. Тот
           же translateY двигает кнопку вместе со шторкой при свайпе,

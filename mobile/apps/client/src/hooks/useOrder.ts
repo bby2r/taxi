@@ -107,9 +107,44 @@ export function useOrder(): UseOrderReturn {
     }
   }, []);
 
-  const handleOrderAccepted = useCallback(() => {
-    refreshAndSetPhase('accepted');
-  }, [refreshAndSetPhase]);
+  const handleOrderAccepted = useCallback(
+    (data: unknown) => {
+      // Сразу применяем координаты из payload (latitude/longitude
+      // прокинуты сервером в OrderAccepted) — не ждём пока refetch
+      // вернётся. Иначе на 1-3 секунды после «Принято» клиент видит
+      // карту без машины: маркер AnimatedDriverMarker рендерится
+      // только когда driver.latitude число, а refetch может тормозить.
+      const payload = data as {
+        latitude?: number | null;
+        longitude?: number | null;
+        driver_id?: number;
+        driver_name?: string;
+        car_model?: string;
+        car_number?: string;
+      };
+      if (orderRef.current && typeof payload.latitude === 'number' && typeof payload.longitude === 'number') {
+        const prevDriver = orderRef.current.driver;
+        const optimistic: Order = {
+          ...orderRef.current,
+          driver: {
+            name: payload.driver_name ?? prevDriver?.name ?? '',
+            phone: prevDriver?.phone ?? '',
+            car_model: payload.car_model ?? prevDriver?.car_model ?? '',
+            car_number: payload.car_number ?? prevDriver?.car_number ?? '',
+            latitude: payload.latitude,
+            longitude: payload.longitude,
+            heading: prevDriver?.heading ?? null,
+          },
+        };
+        orderRef.current = optimistic;
+        setState(buildState('accepted', optimistic));
+      }
+      // Refetch всё равно зовём — он принесёт полные car_model/car_number
+      // и любые поля которые в Pusher payload могут быть устаревшими.
+      refreshAndSetPhase('accepted');
+    },
+    [refreshAndSetPhase],
+  );
 
   const handleDriverArrived = useCallback(() => {
     // Three-layer alert so the client can't miss the arrival, even when
@@ -158,13 +193,16 @@ export function useOrder(): UseOrderReturn {
   }, [refreshAndSetPhase]);
 
   const handleDriverLocation = useCallback((data: unknown) => {
-    const payload = data as { latitude?: number; longitude?: number };
+    const payload = data as { latitude?: number; longitude?: number; heading?: number | null };
     if (
       typeof payload.latitude !== 'number' ||
       typeof payload.longitude !== 'number'
     ) {
       return;
     }
+    const lat = payload.latitude;
+    const lng = payload.longitude;
+    const heading = typeof payload.heading === 'number' ? payload.heading : null;
     setState((prev) => {
       if (
         prev.phase !== 'accepted' &&
@@ -180,8 +218,9 @@ export function useOrder(): UseOrderReturn {
         ...prev.order,
         driver: {
           ...prev.order.driver,
-          latitude: payload.latitude,
-          longitude: payload.longitude,
+          latitude: lat,
+          longitude: lng,
+          heading,
         },
       };
       orderRef.current = nextOrder;
