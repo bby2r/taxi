@@ -19,10 +19,9 @@ import {
   ActionButton,
   ConfirmModal,
   useLocation,
-  useCompassBearing,
   useRoute as useNavigationRoute,
   haversineMeters,
-  pickBearing,
+  bearingBetween,
   smoothBearing,
   angularGapDeg,
 } from '@taxi/shared';
@@ -36,20 +35,18 @@ import type { DriverStackParamList } from '../navigation/types';
 // driving and triggering an early "Водитель ожидает вас" push to the client.
 const ARRIVED_THRESHOLD_METERS = 150;
 
-// --- Follow-camera tuning (navigation phases) ---------------------------
-// The magnetometer ticks 15-50Hz and useCompassBearing forwards 8°-steps;
-// feeding every one into the WebView easeTo() restarts the 800ms rotation
-// each tick and the whole map judders (while the CSS-transform marker stays
-// smooth). So re-aim the camera only when the driver has actually moved or
-// turned enough since the last aim, and low-pass the applied bearing.
-const CAM_MIN_MOVE_M = 4; // re-center once moved this far (~1 GPS tick while driving)
-const CAM_MIN_TURN_DEG = 12; // re-rotate only on real turns — hysteresis over the compass's 8°
-const CAM_BEARING_ALPHA = 0.6; // low-pass the applied bearing so each re-aim is gentle
-// Camera glide duration. The GPS interval in nav mode is ~1s (timeInterval
-// 1000ms); a follow duration *above* that, paired with linear easing, lets
-// each fix's easeTo take over the previous one mid-flight → one continuous
-// glide instead of an ease-out + pause every second.
-const CAM_FOLLOW_MS = 1200;
+// --- Follow-camera target tuning (navigation phases) --------------------
+// The camera is driven by a continuous 60fps loop inside the WebView
+// (MapLibreMapView.setFollowTarget) that eases toward a target we push here
+// at GPS rate. This screen's only job is to compute a STABLE target:
+// position snapped to the route (map matching), bearing from the route /
+// GPS travel-direction — never the magnetometer — low-passed and deadzoned.
+const ON_ROUTE_SNAP_M = 30; // snap the camera onto the route within this distance
+const POS_EMA_ALPHA = 0.5; // light low-pass on the raw GPS position
+const MOVE_FOR_BEARING_M = 5; // need this much travel to trust a GPS-derived bearing
+const BEARING_DEADZONE_DEG = 4; // ignore target-bearing changes smaller than this
+const TARGET_BEARING_ALPHA = 0.5; // low-pass the target bearing (on top of the deadzone)
+const MIN_TARGET_SEND_MS = 150; // cap how often we cross the RN→WebView bridge
 
 type NavigationProp = NativeStackNavigationProp<DriverStackParamList, 'OrderActive'>;
 
@@ -450,11 +447,14 @@ export default function OrderActiveScreen(): React.ReactNode {
     loading,
   } = useDriverOrder();
   const mapRef = useRef<MapLibreMapHandle>(null);
-  // Last bearing/position the follow-camera was actually aimed at. Refs
-  // (not state) so the gating below never triggers a re-render. Reset to
-  // null whenever follow re-engages, to force an immediate re-aim.
-  const camBearingRef = useRef<number | null>(null);
-  const camPosRef = useRef<{ latitude: number; longitude: number } | null>(null);
+  // Follow-target state (refs so updates never re-render). lastGpsRef: last
+  // raw fix, for the travel-direction bearing. emaPosRef: low-passed
+  // position. targetBearingRef: smoothed + deadzoned target bearing.
+  // lastSendRef: throttle timestamp for the RN→WebView bridge.
+  const lastGpsRef = useRef<{ latitude: number; longitude: number } | null>(null);
+  const emaPosRef = useRef<{ latitude: number; longitude: number } | null>(null);
+  const targetBearingRef = useRef<number | null>(null);
+  const lastSendRef = useRef<number>(0);
   const bottomSheetRef = useRef<BottomSheet>(null);
   // Three positions like Yandex Taxi driver: barely visible (just handle
   // + ETA peek), default (all key info + main action), expanded (full
@@ -568,9 +568,6 @@ export default function OrderActiveScreen(): React.ReactNode {
       ? { latitude: driverLocation.latitude, longitude: driverLocation.longitude }
       : null;
 
-  const compassBearing = useCompassBearing();
-  const effectiveBearing = pickBearing(compassBearing, driverLocation.heading);
-
   // Defensive: react-native-maps silently ignores Marker / Polyline coords
   // that come in as strings. The API now serializes lat/lng as floats, but
   // older deploys may still hand us strings — coerce here so the screen
@@ -645,68 +642,93 @@ export default function OrderActiveScreen(): React.ReactNode {
   // again after a state change even if they had panned away.
   useEffect(() => {
     mapRef.current?.clearOverride();
-    camBearingRef.current = null;
-    camPosRef.current = null;
+    emaPosRef.current = null;
+    lastGpsRef.current = null;
+    targetBearingRef.current = null;
     setFollowing(true);
   }, [state.phase]);
 
   useEffect(() => {
     if (!order) return;
-    if (!following) return; // user panned away — respect their view
     if (isNavigating && driverPoint) {
-      // Navigation cam (3D): центр на водителе, поворот по heading +
-      // наклон 55° = вид «из-под лобового стекла». На MapTiler streets-v2
-      // на zoom 17+ автоматически рендерятся экструдированные здания.
-      //
-      // Skip the update entirely when the driver neither moved
-      // (>= CAM_MIN_MOVE_M) nor turned (>= CAM_MIN_TURN_DEG) since the last
-      // aim — otherwise the 15-50Hz magnetometer would re-fire easeTo on
-      // nearly every render. CAM_MIN_TURN_DEG > the compass's own 8° step
-      // adds hysteresis against a reading flip-flopping around the boundary.
-      // (The driver marker keeps the live compass bearing in its own effect
-      // below — cheap CSS rotate, so it stays snappy regardless.)
-      const prevBearing = camBearingRef.current;
-      const prevPos = camPosRef.current;
-      const moved = prevPos ? haversineMeters(prevPos, driverPoint) : Infinity;
-      const turned =
-        prevBearing === null ? Infinity : angularGapDeg(prevBearing, effectiveBearing);
-      if (moved < CAM_MIN_MOVE_M && turned < CAM_MIN_TURN_DEG) {
-        return;
+      if (!following) return; // user panned — WebView keeps their view (override lock)
+
+      // 1. Low-pass the raw GPS position — kills per-fix coordinate jitter
+      //    before it can shimmer the camera.
+      const prevEma = emaPosRef.current;
+      const ema = prevEma
+        ? {
+            latitude: prevEma.latitude + (driverPoint.latitude - prevEma.latitude) * POS_EMA_ALPHA,
+            longitude:
+              prevEma.longitude + (driverPoint.longitude - prevEma.longitude) * POS_EMA_ALPHA,
+          }
+        : driverPoint;
+      emaPosRef.current = ema;
+
+      // 2. Map matching: snap onto the route when close to it and take the
+      //    bearing from the road tangent (the smoothest possible source).
+      //    trimmedCoordinates[0] is the driver projected onto the route.
+      let center = ema;
+      let rawBearing: number | null = null;
+      if (trimmedCoordinates.length >= 2) {
+        const snapped = trimmedCoordinates[0];
+        if (haversineMeters(ema, snapped) <= ON_ROUTE_SNAP_M) {
+          center = snapped;
+          rawBearing = bearingBetween(trimmedCoordinates[0], trimmedCoordinates[1]);
+        }
       }
-      // Bearing: re-orient ONLY on a real turn; on a plain forward move
-      // HOLD the last applied bearing, so straight-line driving doesn't
-      // rotate the map a few degrees every GPS fix off the compass's noise.
-      const nextBearing =
-        turned >= CAM_MIN_TURN_DEG
-          ? prevBearing === null
-            ? effectiveBearing
-            : smoothBearing(prevBearing, effectiveBearing, CAM_BEARING_ALPHA)
-          : (prevBearing ?? effectiveBearing);
-      camBearingRef.current = nextBearing;
-      camPosRef.current = driverPoint;
-      // Continuous glide: duration > the ~1s GPS interval + linear easing so
-      // each fix's easeTo seamlessly takes over the previous one instead of
-      // easing-out and pausing at every point (the per-second lurch that
-      // read as "not smooth").
-      mapRef.current?.setCenter(driverPoint, {
+
+      // 3. Off-route fallback: GPS course if the device reports one, else the
+      //    travel direction between consecutive fixes (trusted once moved).
+      if (rawBearing === null) {
+        const gpsHeading = driverLocation.heading;
+        if (typeof gpsHeading === 'number' && gpsHeading > 0) {
+          rawBearing = gpsHeading;
+        } else if (
+          lastGpsRef.current &&
+          haversineMeters(lastGpsRef.current, driverPoint) >= MOVE_FOR_BEARING_M
+        ) {
+          rawBearing = bearingBetween(lastGpsRef.current, driverPoint);
+        }
+      }
+      lastGpsRef.current = driverPoint;
+
+      // 4. Deadzone + low-pass the target bearing: ignore tiny changes (phone
+      //    shake / sensor noise), and let real turns arrive already smoothed.
+      let targetBearing = targetBearingRef.current;
+      if (rawBearing !== null) {
+        if (targetBearing === null) {
+          targetBearing = rawBearing;
+        } else if (angularGapDeg(targetBearing, rawBearing) >= BEARING_DEADZONE_DEG) {
+          targetBearing = smoothBearing(targetBearing, rawBearing, TARGET_BEARING_ALPHA);
+        }
+      }
+      targetBearingRef.current = targetBearing;
+
+      // 5. Throttle the bridge crossing — the 60fps smoothing lives inside the
+      //    WebView loop, so we only need to refresh its target at GPS rate.
+      const now = Date.now();
+      if (now - lastSendRef.current < MIN_TARGET_SEND_MS) return;
+      lastSendRef.current = now;
+
+      mapRef.current?.setFollowTarget({
+        latitude: center.latitude,
+        longitude: center.longitude,
+        bearing: targetBearing ?? undefined,
         zoom: 17,
         pitch: 55,
-        bearing: nextBearing,
-        duration: CAM_FOLLOW_MS,
-        linear: true,
       });
       return;
     }
-    // Left navigation — drop follow state so the next driving segment
-    // re-seeds bearing/position and forces an immediate re-aim.
-    camBearingRef.current = null;
-    camPosRef.current = null;
-    // Overview: fit bounds across route + key points so the operator
-    // sees the whole trip. Сохраняем небольшой наклон даже в обзорном
-    // режиме — пользователь хочет 3D-стиль на постоянной основе. 30°
-    // компромисс: меньше навигаторских 55°, но не плоская бумажная
-    // карта. На зуме обзора (12-14) сильный наклон даёт уродливую
-    // перспективную дисторсию, поэтому именно 30°.
+
+    // Overview (arrived / completed / no driver fix yet): stop the follow
+    // loop, drop target state, and fit the whole trip in view. Keep a slight
+    // 30° tilt — the 3D look is on permanently, but navigator-grade 55° on a
+    // zoomed-out view distorts ugly.
+    mapRef.current?.stopFollow();
+    emaPosRef.current = null;
+    lastGpsRef.current = null;
+    targetBearingRef.current = null;
     mapRef.current?.setPitch(30);
     const coords: Array<[number, number]> =
       route && route.coordinates.length > 0
@@ -722,29 +744,32 @@ export default function OrderActiveScreen(): React.ReactNode {
     isNavigating,
     order,
     route,
+    trimmedCoordinates,
     driverPoint?.latitude,
     driverPoint?.longitude,
-    effectiveBearing,
+    driverLocation.heading,
     following,
   ]);
 
-  // Push current driver position into the WebView pin (independent of
-  // the camera-follow loop above — we always want the pin to track GPS
-  // even when the user has panned away).
+  // Marker placement OUTSIDE the follow loop. While navigating-and-following,
+  // the WebView loop owns the marker (pins it at centre, perfectly synced
+  // with the camera). This effect only covers the panned-away case and the
+  // arrived phase, so the pin still tracks GPS there.
   useEffect(() => {
     if (!driverPoint) return;
-    if (!(state.phase === 'active' || state.phase === 'in_progress')) return;
-    mapRef.current?.setDriver({
-      latitude: driverPoint.latitude,
-      longitude: driverPoint.longitude,
-      heading: effectiveBearing,
-    });
-  }, [
-    driverPoint?.latitude,
-    driverPoint?.longitude,
-    effectiveBearing,
-    state.phase,
-  ]);
+    if (isNavigating && following) return; // loop owns the marker
+    if (
+      state.phase === 'active' ||
+      state.phase === 'in_progress' ||
+      state.phase === 'arrived'
+    ) {
+      mapRef.current?.setDriver({
+        latitude: driverPoint.latitude,
+        longitude: driverPoint.longitude,
+        heading: targetBearingRef.current ?? 0,
+      });
+    }
+  }, [driverPoint?.latitude, driverPoint?.longitude, isNavigating, following, state.phase]);
 
   // Push pickup + dropoff markers. The set is recomputed whenever any
   // of the coords change; passing null clears.
@@ -814,8 +839,9 @@ export default function OrderActiveScreen(): React.ReactNode {
           style={styles.recenterButton}
           onPress={() => {
             mapRef.current?.clearOverride();
-            camBearingRef.current = null;
-            camPosRef.current = null;
+            emaPosRef.current = null;
+            lastGpsRef.current = null;
+            targetBearingRef.current = null;
             setFollowing(true);
           }}
           activeOpacity={0.85}

@@ -36,6 +36,14 @@ export type MapLibreMapHandle = {
       linear?: boolean;
     },
   ) => void;
+  // Feed the continuous follow loop a new target. The loop interpolates the
+  // camera + driver marker toward it every frame (smooth, Yandex-style)
+  // instead of animating per GPS fix. Call ~1Hz; the loop renders at 60fps.
+  setFollowTarget: (
+    target: LatLng & { bearing?: number; zoom?: number; pitch?: number },
+  ) => void;
+  // Stop the follow loop (overview / arrived / unmount).
+  stopFollow: () => void;
   setPitch: (pitch: number) => void;
   fitBounds: (coordinates: Array<[number, number]>, paddingPx?: number) => void;
   // Снимает override-lock который ставится при тач-жесте: пока он
@@ -171,6 +179,12 @@ function buildHtml(apiKey: string, styleName: string, center: [number, number], 
       // вается через applyCommand({type:'clearOverride'}) с RN-стороны
       // (когда водитель тапает «Вернуться к маршруту»).
       var __userOverride = false;
+      // Continuous follow loop state. __follow holds the smoothed CURRENT
+      // camera (cc/cb) and the latest TARGET (tc/tb) coming from RN at GPS
+      // rate; followStep() lerps current→target every animation frame so the
+      // map glides like a real navigator instead of lurching per GPS fix.
+      var __follow = null;
+      var __followRaf = null;
 
       function post(payload) {
         if (window.ReactNativeWebView && window.ReactNativeWebView.postMessage) {
@@ -375,6 +389,83 @@ function buildHtml(apiKey: string, styleName: string, center: [number, number], 
         });
       }
 
+      // Shared driver-marker placement, used by both the follow loop (nav)
+      // and setDriver (overview). Creates on first use, otherwise just
+      // moves/rotates — no DOM rebuild.
+      function placeDriver(lng, lat, rotDeg) {
+        if (!__map) return;
+        var rot = (rotDeg == null || isNaN(rotDeg)) ? 0 : rotDeg;
+        if (!__driverMarker) {
+          __driverMarker = new maplibregl.Marker({ element: makeDriverEl(rot), anchor: 'center' })
+            .setLngLat([lng, lat]).addTo(__map);
+          return;
+        }
+        __driverMarker.setLngLat([lng, lat]);
+        __driverMarker.getElement().style.transform = 'rotate(' + rot + 'deg)';
+      }
+
+      // Per-frame lerp factors. POS is deliberately gentle: the camera never
+      // snaps to the ~1Hz target, it eases toward it continuously, so the map
+      // flows at a steady speed with no per-fix hard stop. The lerp itself IS
+      // the low-pass filter on position + bearing. DEAD ignores sub-threshold
+      // heading changes so the map doesn't shimmer on tiny direction noise.
+      var FOLLOW_POS_A = 0.02;
+      var FOLLOW_BRG_A = 0.05;
+      var FOLLOW_DEAD_DEG = 4;
+
+      function followStep() {
+        __followRaf = null;
+        if (!__follow || !__map || __userOverride) return;
+        var f = __follow;
+        f.cc[0] += (f.tc[0] - f.cc[0]) * FOLLOW_POS_A;
+        f.cc[1] += (f.tc[1] - f.cc[1]) * FOLLOW_POS_A;
+        if (f.tb != null) {
+          var d = ((f.tb - f.cb + 540) % 360) - 180;
+          if (Math.abs(d) > FOLLOW_DEAD_DEG) {
+            f.cb = ((f.cb + d * FOLLOW_BRG_A) % 360 + 360) % 360;
+          }
+        }
+        __map.jumpTo({ center: [f.cc[0], f.cc[1]], bearing: f.cb, zoom: f.zoom, pitch: f.pitch });
+        placeDriver(f.cc[0], f.cc[1], f.cb);
+        // Idle out once converged; the next setFollowTarget restarts the loop.
+        var dx = f.tc[0] - f.cc[0], dy = f.tc[1] - f.cc[1];
+        var bd = (f.tb == null) ? 0 : Math.abs(((f.tb - f.cb + 540) % 360) - 180);
+        if ((dx * dx + dy * dy) < 1e-12 && bd <= FOLLOW_DEAD_DEG) return;
+        __followRaf = requestAnimationFrame(followStep);
+      }
+
+      function setFollowTarget(cmd) {
+        if (!__map) return;
+        var tc = [cmd.longitude, cmd.latitude];
+        var tb = (typeof cmd.bearing === 'number') ? cmd.bearing : (__follow ? __follow.tb : null);
+        var zoom = (typeof cmd.zoom === 'number') ? cmd.zoom : (__follow ? __follow.zoom : __map.getZoom());
+        var pitch = (typeof cmd.pitch === 'number') ? cmd.pitch : (__follow ? __follow.pitch : __map.getPitch());
+        if (!__follow) {
+          // Cancel any leftover overview marker tween — the loop owns the
+          // marker now.
+          if (__driverTweenRaf) { cancelAnimationFrame(__driverTweenRaf); __driverTweenRaf = null; }
+          // First target: snap current=target so we don't sweep across the
+          // map from the initial center.
+          __follow = { tc: tc, tb: tb, cc: [tc[0], tc[1]], cb: (tb == null ? __map.getBearing() : tb), zoom: zoom, pitch: pitch };
+          if (!__userOverride) {
+            __map.jumpTo({ center: [tc[0], tc[1]], bearing: __follow.cb, zoom: zoom, pitch: pitch });
+            placeDriver(tc[0], tc[1], __follow.cb);
+          }
+        } else {
+          __follow.tc = tc;
+          if (tb != null) __follow.tb = tb;
+          __follow.zoom = zoom;
+          __follow.pitch = pitch;
+        }
+        if (!__followRaf && !__userOverride) __followRaf = requestAnimationFrame(followStep);
+      }
+
+      function stopFollow() {
+        if (__followRaf) cancelAnimationFrame(__followRaf);
+        __followRaf = null;
+        __follow = null;
+      }
+
       window.applyCommand = function (cmd) {
         try {
           switch (cmd.type) {
@@ -382,6 +473,8 @@ function buildHtml(apiKey: string, styleName: string, center: [number, number], 
             case 'setMarkers': setMarkers(cmd); break;
             case 'setRoute': setRoute(cmd.coordinates); break;
             case 'setCenter': setCenter(cmd, cmd.opts); break;
+            case 'setFollowTarget': setFollowTarget(cmd); break;
+            case 'stopFollow': stopFollow(); break;
             case 'setPitch':
               if (__userOverride) break;
               if (__map && typeof cmd.pitch === 'number') __map.setPitch(cmd.pitch);
@@ -390,7 +483,17 @@ function buildHtml(apiKey: string, styleName: string, center: [number, number], 
               if (__userOverride) break;
               fitBounds(cmd.coordinates, cmd.padding);
               break;
-            case 'clearOverride': __userOverride = false; break;
+            case 'clearOverride':
+              __userOverride = false;
+              // Re-seed the loop from where the user left the map and resume,
+              // so it glides back to the route instead of teleporting.
+              if (__follow && __map) {
+                var c = __map.getCenter();
+                __follow.cc = [c.lng, c.lat];
+                __follow.cb = __map.getBearing();
+                if (!__followRaf) __followRaf = requestAnimationFrame(followStep);
+              }
+              break;
           }
         } catch (e) {
           post({ type: 'error', message: String(e && e.message ? e.message : e) });
@@ -577,6 +680,8 @@ const MapLibreMapView = forwardRef<MapLibreMapHandle, Props>(function MapLibreMa
       setMarkers: (m) => dispatch({ type: 'setMarkers', ...m }),
       setRoute: (coordinates) => dispatch({ type: 'setRoute', coordinates }),
       setCenter: (loc, opts) => dispatch({ type: 'setCenter', ...loc, opts }),
+      setFollowTarget: (target) => dispatch({ type: 'setFollowTarget', ...target }),
+      stopFollow: () => dispatch({ type: 'stopFollow' }),
       setPitch: (pitch) => dispatch({ type: 'setPitch', pitch }),
       fitBounds: (coordinates, padding) => dispatch({ type: 'fitBounds', coordinates, padding }),
       clearOverride: () => dispatch({ type: 'clearOverride' }),

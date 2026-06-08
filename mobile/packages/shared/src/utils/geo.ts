@@ -41,6 +41,27 @@ export function pickBearing(
 }
 
 /**
+ * Initial great-circle bearing from `a` to `b`, in degrees clockwise from
+ * true north, normalized to [0, 360). This is the compass direction of
+ * travel between two consecutive positions — far more stable than the
+ * device magnetometer, which is what we want driving a heading-up camera.
+ */
+export function bearingBetween(
+  a: { latitude: number; longitude: number },
+  b: { latitude: number; longitude: number },
+): number {
+  const toRad = (deg: number): number => (deg * Math.PI) / 180;
+  const lat1 = toRad(a.latitude);
+  const lat2 = toRad(b.latitude);
+  const dLng = toRad(b.longitude - a.longitude);
+  const y = Math.sin(dLng) * Math.cos(lat2);
+  const x =
+    Math.cos(lat1) * Math.sin(lat2) -
+    Math.sin(lat1) * Math.cos(lat2) * Math.cos(dLng);
+  return ((Math.atan2(y, x) * 180) / Math.PI + 360) % 360;
+}
+
+/**
  * Shortest angular distance between two compass bearings, in degrees
  * (0..180). 350° and 10° are 20° apart, not 340°.
  */
