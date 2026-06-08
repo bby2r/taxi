@@ -39,3 +39,22 @@ export function pickBearing(
   if (typeof gpsHeading === 'number' && gpsHeading > 0) return gpsHeading;
   return 0;
 }
+
+/**
+ * Shortest angular distance between two compass bearings, in degrees
+ * (0..180). 350° and 10° are 20° apart, not 340°.
+ */
+export function angularGapDeg(a: number, b: number): number {
+  return Math.abs(((a - b + 540) % 360) - 180);
+}
+
+/**
+ * Low-pass a compass bearing toward `target` along the shortest arc —
+ * 350° → 10° rotates +20°, not −340° — by fraction `alpha` (0 = keep
+ * prev, 1 = snap to target). Result normalized to [0, 360). Keeps a
+ * heading-up navigation camera from snapping on a single noisy reading.
+ */
+export function smoothBearing(prev: number, target: number, alpha: number): number {
+  const delta = ((target - prev + 540) % 360) - 180;
+  return (((prev + alpha * delta) % 360) + 360) % 360;
+}

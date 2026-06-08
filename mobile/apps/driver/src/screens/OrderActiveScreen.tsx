@@ -23,6 +23,8 @@ import {
   useRoute as useNavigationRoute,
   haversineMeters,
   pickBearing,
+  smoothBearing,
+  angularGapDeg,
 } from '@taxi/shared';
 import type { Order, DriverCancellationReason, Route } from '@taxi/shared';
 import { useDriverOrder } from '../hooks/useDriverOrder';
@@ -33,6 +35,16 @@ import type { DriverStackParamList } from '../navigation/types';
 // confirm "Прибыл к клиенту". Stops them from tapping the button while still
 // driving and triggering an early "Водитель ожидает вас" push to the client.
 const ARRIVED_THRESHOLD_METERS = 150;
+
+// --- Follow-camera tuning (navigation phases) ---------------------------
+// The magnetometer ticks 15-50Hz and useCompassBearing forwards 8°-steps;
+// feeding every one into the WebView easeTo() restarts the 800ms rotation
+// each tick and the whole map judders (while the CSS-transform marker stays
+// smooth). So re-aim the camera only when the driver has actually moved or
+// turned enough since the last aim, and low-pass the applied bearing.
+const CAM_MIN_MOVE_M = 4; // re-center once moved this far (~1 GPS tick while driving)
+const CAM_MIN_TURN_DEG = 12; // re-rotate only on real turns — hysteresis over the compass's 8°
+const CAM_BEARING_ALPHA = 0.5; // low-pass the applied bearing so each re-aim is gentle
 
 type NavigationProp = NativeStackNavigationProp<DriverStackParamList, 'OrderActive'>;
 
@@ -433,6 +445,11 @@ export default function OrderActiveScreen(): React.ReactNode {
     loading,
   } = useDriverOrder();
   const mapRef = useRef<MapLibreMapHandle>(null);
+  // Last bearing/position the follow-camera was actually aimed at. Refs
+  // (not state) so the gating below never triggers a re-render. Reset to
+  // null whenever follow re-engages, to force an immediate re-aim.
+  const camBearingRef = useRef<number | null>(null);
+  const camPosRef = useRef<{ latitude: number; longitude: number } | null>(null);
   const bottomSheetRef = useRef<BottomSheet>(null);
   // Three positions like Yandex Taxi driver: barely visible (just handle
   // + ETA peek), default (all key info + main action), expanded (full
@@ -623,6 +640,8 @@ export default function OrderActiveScreen(): React.ReactNode {
   // again after a state change even if they had panned away.
   useEffect(() => {
     mapRef.current?.clearOverride();
+    camBearingRef.current = null;
+    camPosRef.current = null;
     setFollowing(true);
   }, [state.phase]);
 
@@ -633,16 +652,41 @@ export default function OrderActiveScreen(): React.ReactNode {
       // Navigation cam (3D): центр на водителе, поворот по heading +
       // наклон 55° = вид «из-под лобового стекла». На MapTiler streets-v2
       // на zoom 17+ автоматически рендерятся экструдированные здания.
-      // pitch 55° — улица впереди видна, объём есть.
       //
+      // Re-aim only when the driver has actually moved (>= CAM_MIN_MOVE_M)
+      // or turned (>= CAM_MIN_TURN_DEG) since the last aim. Without this
+      // gate the 15-50Hz magnetometer restarts the 800ms easeTo on nearly
+      // every render and the map judders; CAM_MIN_TURN_DEG > the compass's
+      // own 8° step adds hysteresis so a reading flip-flopping around the
+      // threshold doesn't keep re-aiming. The applied bearing is low-passed
+      // so each re-aim is gentle. (The driver marker keeps the live compass
+      // bearing in its own effect below — cheap CSS rotate, stays snappy.)
+      const prevBearing = camBearingRef.current;
+      const prevPos = camPosRef.current;
+      const moved = prevPos ? haversineMeters(prevPos, driverPoint) : Infinity;
+      const turned =
+        prevBearing === null ? Infinity : angularGapDeg(prevBearing, effectiveBearing);
+      if (moved < CAM_MIN_MOVE_M && turned < CAM_MIN_TURN_DEG) {
+        return;
+      }
+      const nextBearing =
+        prevBearing === null
+          ? effectiveBearing
+          : smoothBearing(prevBearing, effectiveBearing, CAM_BEARING_ALPHA);
+      camBearingRef.current = nextBearing;
+      camPosRef.current = driverPoint;
       mapRef.current?.setCenter(driverPoint, {
         zoom: 17,
         pitch: 55,
-        bearing: effectiveBearing,
+        bearing: nextBearing,
         duration: 800,
       });
       return;
     }
+    // Left navigation — drop follow state so the next driving segment
+    // re-seeds bearing/position and forces an immediate re-aim.
+    camBearingRef.current = null;
+    camPosRef.current = null;
     // Overview: fit bounds across route + key points so the operator
     // sees the whole trip. Сохраняем небольшой наклон даже в обзорном
     // режиме — пользователь хочет 3D-стиль на постоянной основе. 30°
@@ -756,6 +800,8 @@ export default function OrderActiveScreen(): React.ReactNode {
           style={styles.recenterButton}
           onPress={() => {
             mapRef.current?.clearOverride();
+            camBearingRef.current = null;
+            camPosRef.current = null;
             setFollowing(true);
           }}
           activeOpacity={0.85}
