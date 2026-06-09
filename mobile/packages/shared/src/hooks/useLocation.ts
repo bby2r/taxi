@@ -5,6 +5,11 @@ interface LocationState {
   latitude: number;
   longitude: number;
   heading: number | null;
+  // Epoch ms + horizontal accuracy (m) of the latest fix. Feed both to the
+  // navigation Kalman filter so it weights fixes by real timing/quality
+  // instead of guessing dt from render cadence.
+  timestamp: number | null;
+  accuracy: number | null;
   loading: boolean;
   error: string | null;
   // True once we've seen a real GPS/Wi-Fi fix from the device. Callers
@@ -34,6 +39,8 @@ export function useLocation(options?: UseLocationOptions): LocationState {
     latitude: 42.87,
     longitude: 74.59,
     heading: null,
+    timestamp: null,
+    accuracy: null,
     loading: true,
     error: null,
     hasRealFix: false,
@@ -56,6 +63,8 @@ export function useLocation(options?: UseLocationOptions): LocationState {
             latitude: last.coords.latitude,
             longitude: last.coords.longitude,
             heading: last.coords.heading,
+            timestamp: last.timestamp,
+            accuracy: last.coords.accuracy,
             loading: false,
             error: null,
             hasRealFix: true,
@@ -80,6 +89,8 @@ export function useLocation(options?: UseLocationOptions): LocationState {
             latitude: current.coords.latitude,
             longitude: current.coords.longitude,
             heading: current.coords.heading,
+            timestamp: current.timestamp,
+            accuracy: current.coords.accuracy,
             loading: false,
             error: null,
             hasRealFix: true,
@@ -101,6 +112,8 @@ export function useLocation(options?: UseLocationOptions): LocationState {
               latitude: loc.coords.latitude,
               longitude: loc.coords.longitude,
               heading: loc.coords.heading,
+              timestamp: loc.timestamp,
+              accuracy: loc.coords.accuracy,
               loading: false,
               error: null,
               hasRealFix: true,

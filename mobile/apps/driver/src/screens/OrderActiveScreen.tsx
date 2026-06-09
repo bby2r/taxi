@@ -21,8 +21,7 @@ import {
   useLocation,
   useRoute as useNavigationRoute,
   haversineMeters,
-  bearingBetween,
-  angularGapDeg,
+  GeoKalmanFilter,
 } from '@taxi/shared';
 import type { Order, DriverCancellationReason, Route } from '@taxi/shared';
 import { useDriverOrder } from '../hooks/useDriverOrder';
@@ -34,17 +33,16 @@ import type { DriverStackParamList } from '../navigation/types';
 // driving and triggering an early "Водитель ожидает вас" push to the client.
 const ARRIVED_THRESHOLD_METERS = 150;
 
-// --- Follow-camera target tuning (navigation phases) --------------------
-// The camera is driven by a continuous 60fps loop inside the WebView
-// (MapLibreMapView.setFollowTarget) that DEAD-RECKONS the target forward and
-// eases toward it. This screen's only job is to compute a STABLE target at
-// GPS rate: position snapped to the route (map matching), bearing from the
-// route / GPS travel-direction — never the magnetometer. No low-pass here;
-// the loop owns smoothing (smoothing twice just adds rotation lag on turns).
-const ON_ROUTE_SNAP_M = 30; // snap the camera onto the route within this distance
-const MOVE_FOR_BEARING_M = 5; // need this much travel to trust a GPS-derived bearing
-const BEARING_DEADZONE_DEG = 4; // ignore target-bearing changes smaller than this
-const MIN_TARGET_SEND_MS = 150; // cap how often we cross the RN→WebView bridge
+// --- Follow-camera pipeline (navigation phases) -------------------------
+// Every raw GPS fix is fed to a constant-velocity Kalman filter
+// (GeoKalmanFilter). It fuses the noisy ~1Hz fixes into a SMOOTH position +
+// velocity vector; the camera heading comes from that velocity — never the
+// magnetometer, never a single-fix point-to-point bearing (which swings
+// ±30-100° on GPS noise and is what made the map shake). The filtered
+// position + velocity (deg/ms) go to the WebView's 60fps loop, which
+// dead-reckons between fixes and eases toward the target — so turns don't lag
+// and the world doesn't spin around the car. When the car is nearly stopped
+// the filter returns no heading and we hold the last one (no red-light spin).
 
 type NavigationProp = NativeStackNavigationProp<DriverStackParamList, 'OrderActive'>;
 
@@ -445,12 +443,15 @@ export default function OrderActiveScreen(): React.ReactNode {
     loading,
   } = useDriverOrder();
   const mapRef = useRef<MapLibreMapHandle>(null);
-  // Follow-target state (refs so updates never re-render). lastGpsRef: last
-  // raw fix, for the travel-direction bearing. targetBearingRef: last target
-  // bearing (deadzoned). lastSendRef: throttle for the RN→WebView bridge.
-  const lastGpsRef = useRef<{ latitude: number; longitude: number } | null>(null);
+  // Follow-target state (refs so updates never re-render). kalmanRef: the
+  // navigation filter for the current leg (re-seeded per phase / on recenter).
+  // lastFedTsRef: timestamp of the last fix fed to the filter, so the effect
+  // re-running on unrelated deps doesn't double-feed the same fix.
+  // targetBearingRef: last heading we sent — held while the car is stopped
+  // (filter returns null) so the map doesn't spin in place.
+  const kalmanRef = useRef<GeoKalmanFilter | null>(null);
+  const lastFedTsRef = useRef<number | null>(null);
   const targetBearingRef = useRef<number | null>(null);
-  const lastSendRef = useRef<number>(0);
   const bottomSheetRef = useRef<BottomSheet>(null);
   // Three positions like Yandex Taxi driver: barely visible (just handle
   // + ETA peek), default (all key info + main action), expanded (full
@@ -638,7 +639,8 @@ export default function OrderActiveScreen(): React.ReactNode {
   // again after a state change even if they had panned away.
   useEffect(() => {
     mapRef.current?.clearOverride();
-    lastGpsRef.current = null;
+    kalmanRef.current = null;
+    lastFedTsRef.current = null;
     targetBearingRef.current = null;
     setFollowing(true);
   }, [state.phase]);
@@ -648,58 +650,38 @@ export default function OrderActiveScreen(): React.ReactNode {
     if (isNavigating && driverPoint) {
       if (!following) return; // user panned — WebView keeps their view (override lock)
 
-      // Map matching: snap the camera onto the route when close to it and take
-      // the bearing from the road tangent (smoothest source). trimmedCoordinates[0]
-      // is the driver projected onto the route by useRoute.
-      let center = driverPoint;
-      let rawBearing: number | null = null;
-      if (trimmedCoordinates.length >= 2) {
-        const snapped = trimmedCoordinates[0];
-        if (haversineMeters(driverPoint, snapped) <= ON_ROUTE_SNAP_M) {
-          center = snapped;
-          rawBearing = bearingBetween(trimmedCoordinates[0], trimmedCoordinates[1]);
-        }
+      if (!kalmanRef.current) {
+        kalmanRef.current = new GeoKalmanFilter();
+      }
+      // Feed each fix to the filter exactly once. The effect can re-run on
+      // unrelated deps (route refetch, sheet state) with no new fix — skip
+      // those so we neither perturb the filter nor restart dead-reckoning.
+      const ts = driverLocation.timestamp ?? Date.now();
+      if (ts === lastFedTsRef.current) {
+        return;
+      }
+      lastFedTsRef.current = ts;
+
+      const filtered = kalmanRef.current.update({
+        latitude: driverPoint.latitude,
+        longitude: driverPoint.longitude,
+        timestamp: ts,
+        accuracy: driverLocation.accuracy,
+      });
+      // Hold the previous heading while stopped (filter returns null) so the
+      // map keeps its orientation instead of spinning on standstill noise.
+      if (filtered.bearing !== null) {
+        targetBearingRef.current = filtered.bearing;
       }
 
-      // Off-route fallback: GPS course if the device reports one, else the
-      // travel direction between consecutive fixes (trusted once moved).
-      // Never the magnetometer.
-      if (rawBearing === null) {
-        const gpsHeading = driverLocation.heading;
-        if (typeof gpsHeading === 'number' && gpsHeading > 0) {
-          rawBearing = gpsHeading;
-        } else if (
-          lastGpsRef.current &&
-          haversineMeters(lastGpsRef.current, driverPoint) >= MOVE_FOR_BEARING_M
-        ) {
-          rawBearing = bearingBetween(lastGpsRef.current, driverPoint);
-        }
-      }
-      lastGpsRef.current = driverPoint;
-
-      // Deadzone the target bearing — ignore sub-threshold changes (phone
-      // shake / GPS noise). No low-pass here; the WebView loop smooths the
-      // rotation, and smoothing twice just adds lag on turns.
-      let targetBearing = targetBearingRef.current;
-      if (
-        rawBearing !== null &&
-        (targetBearing === null ||
-          angularGapDeg(targetBearing, rawBearing) >= BEARING_DEADZONE_DEG)
-      ) {
-        targetBearing = rawBearing;
-      }
-      targetBearingRef.current = targetBearing;
-
-      // Throttle the bridge crossing — dead-reckoning + 60fps smoothing live in
-      // the WebView, so we only refresh the target at GPS rate.
-      const now = Date.now();
-      if (now - lastSendRef.current < MIN_TARGET_SEND_MS) return;
-      lastSendRef.current = now;
-
+      // Hand the WebView a smooth position + velocity; its 60fps loop
+      // dead-reckons between fixes and eases the camera + marker toward it.
       mapRef.current?.setFollowTarget({
-        latitude: center.latitude,
-        longitude: center.longitude,
-        bearing: targetBearing ?? undefined,
+        latitude: filtered.latitude,
+        longitude: filtered.longitude,
+        bearing: targetBearingRef.current ?? undefined,
+        velLng: filtered.velLngPerMs,
+        velLat: filtered.velLatPerMs,
         zoom: 17,
         pitch: 55,
       });
@@ -711,7 +693,8 @@ export default function OrderActiveScreen(): React.ReactNode {
     // 30° tilt — the 3D look is on permanently, but navigator-grade 55° on a
     // zoomed-out view distorts ugly.
     mapRef.current?.stopFollow();
-    lastGpsRef.current = null;
+    kalmanRef.current = null;
+    lastFedTsRef.current = null;
     targetBearingRef.current = null;
     mapRef.current?.setPitch(30);
     const coords: Array<[number, number]> =
@@ -728,10 +711,10 @@ export default function OrderActiveScreen(): React.ReactNode {
     isNavigating,
     order,
     route,
-    trimmedCoordinates,
     driverPoint?.latitude,
     driverPoint?.longitude,
-    driverLocation.heading,
+    driverLocation.timestamp,
+    driverLocation.accuracy,
     following,
   ]);
 
@@ -823,7 +806,8 @@ export default function OrderActiveScreen(): React.ReactNode {
           style={styles.recenterButton}
           onPress={() => {
             mapRef.current?.clearOverride();
-            lastGpsRef.current = null;
+            kalmanRef.current = null;
+            lastFedTsRef.current = null;
             targetBearingRef.current = null;
             setFollowing(true);
           }}

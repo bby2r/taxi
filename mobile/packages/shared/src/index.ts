@@ -38,6 +38,7 @@ export * from './theme/typography';
 // Utils
 export * from './utils/constants';
 export * from './utils/geo';
+export * from './utils/kalman';
 export * from './utils/geocode';
 export * from './utils/phone';
 export * from './utils/routeTrim';

@@ -39,8 +39,17 @@ export type MapLibreMapHandle = {
   // Feed the continuous follow loop a new target. The loop interpolates the
   // camera + driver marker toward it every frame (smooth, Yandex-style)
   // instead of animating per GPS fix. Call ~1Hz; the loop renders at 60fps.
+  // velLng/velLat are the Kalman-filtered velocity (degrees per millisecond)
+  // used to dead-reckon the camera between fixes — pass them so the loop
+  // doesn't have to re-derive a (noisier) velocity from target deltas.
   setFollowTarget: (
-    target: LatLng & { bearing?: number; zoom?: number; pitch?: number },
+    target: LatLng & {
+      bearing?: number;
+      zoom?: number;
+      pitch?: number;
+      velLng?: number;
+      velLat?: number;
+    },
   ) => void;
   // Stop the follow loop (overview / arrived / unmount).
   stopFollow: () => void;
@@ -413,11 +422,11 @@ function buildHtml(apiKey: string, styleName: string, center: [number, number], 
       // (below) it moves continuously, so these can be tight — low lag AND
       // smooth. DEAD ignores sub-threshold heading noise so the map never
       // shimmers on a jittery bearing.
-      var FOLLOW_POS_A = 0.08;
-      var FOLLOW_BRG_A = 0.10;
-      var FOLLOW_DEAD_DEG = 4;
+      var FOLLOW_POS_A = 0.10;
+      var FOLLOW_BRG_A = 0.12;
+      var FOLLOW_DEAD_DEG = 2; // Kalman heading is already smooth → tiny deadzone
       var PREDICT_MAX_MS = 1500; // clamp dead-reckoning so a dropped fix can't run away
-      var VEL_EMA = 0.4; // smooth the velocity estimate → soft stops/starts
+      var VEL_EMA = 0.4; // legacy fallback only (used when RN sends no velocity)
 
       function perfNow() {
         return (window.performance && performance.now) ? performance.now() : Date.now();
@@ -461,6 +470,7 @@ function buildHtml(apiKey: string, styleName: string, center: [number, number], 
         var tb = (typeof cmd.bearing === 'number') ? cmd.bearing : (__follow ? __follow.tb : null);
         var zoom = (typeof cmd.zoom === 'number') ? cmd.zoom : (__follow ? __follow.zoom : __map.getZoom());
         var pitch = (typeof cmd.pitch === 'number') ? cmd.pitch : (__follow ? __follow.pitch : __map.getPitch());
+        var hasVel = (typeof cmd.velLng === 'number' && typeof cmd.velLat === 'number');
         var nowTs = perfNow();
         if (!__follow) {
           // Cancel any leftover overview marker tween — the loop owns the
@@ -468,7 +478,8 @@ function buildHtml(apiKey: string, styleName: string, center: [number, number], 
           // across the map from the initial center.
           if (__driverTweenRaf) { cancelAnimationFrame(__driverTweenRaf); __driverTweenRaf = null; }
           __follow = {
-            baseTc: [tc[0], tc[1]], baseTs: nowTs, vel: null, skipVel: false,
+            baseTc: [tc[0], tc[1]], baseTs: nowTs,
+            vel: hasVel ? [cmd.velLng, cmd.velLat] : null, skipVel: false,
             tb: tb, cc: [tc[0], tc[1]], cb: (tb == null ? __map.getBearing() : tb),
             zoom: zoom, pitch: pitch,
           };
@@ -478,10 +489,14 @@ function buildHtml(apiKey: string, styleName: string, center: [number, number], 
           }
         } else {
           var f = __follow;
-          // Velocity (deg/ms) from the last real target → this one, EMA-smoothed.
-          // skipVel is set right after a re-seed (clearOverride) so the pan gap
-          // doesn't manufacture a bogus velocity spike.
-          if (f.skipVel) {
+          // Prefer the Kalman velocity from RN (already smooth). Fall back to an
+          // EMA of target deltas only when no velocity was supplied. skipVel is
+          // set right after a re-seed (clearOverride) so the pan gap doesn't
+          // manufacture a bogus velocity spike.
+          if (hasVel) {
+            f.vel = [cmd.velLng, cmd.velLat];
+            f.skipVel = false;
+          } else if (f.skipVel) {
             f.skipVel = false;
           } else {
             var ddt = nowTs - f.baseTs;
