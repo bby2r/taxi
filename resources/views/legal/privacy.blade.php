@@ -6,31 +6,26 @@
     <title>Политика конфиденциальности — Alif Taxi</title>
     <link rel="icon" type="image/png" href="{{ asset('favicon.png') }}">
     <link rel="apple-touch-icon" href="{{ asset('apple-touch-icon.png') }}">
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght,SOFT@9..144,500;9..144,600&family=Manrope:wght@400;500;600;700&display=swap" rel="stylesheet">
     @vite(['resources/css/app.css', 'resources/js/app.js'])
 </head>
-<body class="flex min-h-screen flex-col bg-canvas font-sans text-ink antialiased">
-    <header class="border-b border-rule bg-white/70 backdrop-blur">
+<body class="flex min-h-screen flex-col bg-gray-50">
+    <header class="border-b border-gray-200 bg-white">
         <div class="mx-auto max-w-3xl px-6 py-6">
-            <a href="{{ route('home') }}" class="font-display text-2xl font-semibold text-primary-deep inline-flex items-baseline gap-2">
-                Alif <span class="inline-block h-2.5 w-2.5 rounded-full bg-coral"></span> Taxi
-            </a>
+            <a href="{{ route('home') }}" class="text-2xl font-bold text-amber-500">Alif Taxi</a>
         </div>
     </header>
 
     <main class="flex-1 px-6 py-10">
-        <article class="prose prose-gray mx-auto max-w-3xl text-ink-soft">
-            <h1 class="mb-2 font-display text-4xl font-medium tracking-tight text-ink">Политика конфиденциальности</h1>
-            <p class="mb-8 text-sm text-ink-mute">Редакция от {{ date('d.m.Y') }}</p>
+        <article class="prose prose-gray mx-auto max-w-3xl text-gray-800">
+            <h1 class="mb-2 text-3xl font-bold text-gray-900">Политика конфиденциальности</h1>
+            <p class="mb-8 text-sm text-gray-500">Редакция от {{ date('d.m.Y') }}</p>
 
-            <p class="mb-6 rounded-2xl border border-coral/30 bg-coral-tint p-4 text-sm text-coral-deep">
+            <p class="mb-6 rounded-lg border border-amber-200 bg-amber-50 p-4 text-sm text-amber-800">
                 <strong>Черновик для согласования с юристом.</strong> Поля в [квадратных скобках]
                 нужно заполнить реальными данными перед публикацией.
             </p>
 
-            <h2 class="mt-8 font-display text-2xl font-medium tracking-tight text-ink">1. Общие положения</h2>
+            <h2 class="mt-8 text-xl font-semibold text-gray-900">1. Общие положения</h2>
             <p>
                 Настоящая Политика конфиденциальности (далее — «Политика») определяет порядок
                 обработки персональных данных в мобильном приложении Alif Taxi (далее — «Сервис»)
@@ -47,10 +42,10 @@
                 «Об информации персонального характера».
             </p>
 
-            <h2 class="mt-8 font-display text-2xl font-medium tracking-tight text-ink">2. Какие данные мы собираем</h2>
+            <h2 class="mt-8 text-xl font-semibold text-gray-900">2. Какие данные мы собираем</h2>
             <p>В зависимости от роли пользователя Сервис обрабатывает следующие данные:</p>
 
-            <h3 class="mt-4 font-display text-lg font-semibold text-ink">2.1. Клиенты (пассажиры)</h3>
+            <h3 class="mt-4 font-semibold text-gray-900">2.1. Клиенты (пассажиры)</h3>
             <ul class="list-disc pl-6">
                 <li>номер мобильного телефона — для входа через одноразовый код (OTP);</li>
                 <li>имя — для отображения водителю при принятии заказа;</li>
@@ -59,7 +54,7 @@
                 <li>токен push-уведомлений (FCM) — для отправки уведомлений о статусе заказа.</li>
             </ul>
 
-            <h3 class="mt-4 font-display text-lg font-semibold text-ink">2.2. Водители</h3>
+            <h3 class="mt-4 font-semibold text-gray-900">2.2. Водители</h3>
             <ul class="list-disc pl-6">
                 <li>номер мобильного телефона, имя;</li>
                 <li>марка и государственный номер автомобиля;</li>
@@ -70,13 +65,13 @@
                 <li>токен push-уведомлений (FCM) — для отправки предложений новых заказов.</li>
             </ul>
 
-            <h3 class="mt-4 font-display text-lg font-semibold text-ink">2.3. Технические данные</h3>
+            <h3 class="mt-4 font-semibold text-gray-900">2.3. Технические данные</h3>
             <ul class="list-disc pl-6">
                 <li>IP-адрес, версия приложения, тип устройства, версия операционной системы;</li>
                 <li>журналы ошибок и сбоев приложения — без идентифицирующего содержимого.</li>
             </ul>
 
-            <h2 class="mt-8 font-display text-2xl font-medium tracking-tight text-ink">3. Зачем мы используем эти данные</h2>
+            <h2 class="mt-8 text-xl font-semibold text-gray-900">3. Зачем мы используем эти данные</h2>
             <ul class="list-disc pl-6">
                 <li>оформление заказа и подбор ближайшего водителя;</li>
                 <li>отображение клиенту приближения автомобиля на карте в реальном времени;</li>
@@ -86,7 +81,7 @@
                 <li>исполнение требований законодательства Кыргызской Республики.</li>
             </ul>
 
-            <h2 class="mt-8 font-display text-2xl font-medium tracking-tight text-ink">4. Кому мы передаём данные</h2>
+            <h2 class="mt-8 text-xl font-semibold text-gray-900">4. Кому мы передаём данные</h2>
             <p>Мы не продаём и не передаём Ваши данные третьим лицам, кроме случаев:</p>
             <ul class="list-disc pl-6">
                 <li>
@@ -109,7 +104,7 @@
                 </li>
             </ul>
 
-            <h2 class="mt-8 font-display text-2xl font-medium tracking-tight text-ink">5. Где хранятся данные</h2>
+            <h2 class="mt-8 text-xl font-semibold text-gray-900">5. Где хранятся данные</h2>
             <p>
                 Все основные данные хранятся на серверах Оператора. Технические подрядчики
                 (FCM, Pusher) обрабатывают только служебные данные, перечисленные выше.
@@ -121,7 +116,7 @@
                 сроков, установленных законодательством КР (не более 5 лет).
             </p>
 
-            <h2 class="mt-8 font-display text-2xl font-medium tracking-tight text-ink">6. Разрешения приложения</h2>
+            <h2 class="mt-8 text-xl font-semibold text-gray-900">6. Разрешения приложения</h2>
             <p>Мобильные приложения запрашивают следующие разрешения операционной системы:</p>
             <ul class="list-disc pl-6">
                 <li>
@@ -146,7 +141,7 @@
                 </li>
             </ul>
 
-            <h2 class="mt-8 font-display text-2xl font-medium tracking-tight text-ink">7. Ваши права</h2>
+            <h2 class="mt-8 text-xl font-semibold text-gray-900">7. Ваши права</h2>
             <p>В соответствии с законодательством Кыргызской Республики Вы имеете право:</p>
             <ul class="list-disc pl-6">
                 <li>получить информацию об обработке Ваших персональных данных;</li>
@@ -155,7 +150,7 @@
                 <li>удалить учётную запись через приложение или по запросу в поддержку.</li>
             </ul>
 
-            <h2 class="mt-8 font-display text-2xl font-medium tracking-tight text-ink">8. Безопасность</h2>
+            <h2 class="mt-8 text-xl font-semibold text-gray-900">8. Безопасность</h2>
             <p>
                 Все соединения между приложением и сервером Оператора защищены протоколом
                 HTTPS (TLS 1.2+). Пароли и одноразовые коды (OTP) хранятся в виде хеша.
@@ -163,7 +158,7 @@
                 аутентификацией для уполномоченных сотрудников Оператора.
             </p>
 
-            <h2 class="mt-8 font-display text-2xl font-medium tracking-tight text-ink">9. Дети</h2>
+            <h2 class="mt-8 text-xl font-semibold text-gray-900">9. Дети</h2>
             <p>
                 Сервис не предназначен для лиц младше 18 лет. Если Вам стало известно, что
                 несовершеннолетний предоставил нам персональные данные без согласия
@@ -171,14 +166,14 @@
                 данные.
             </p>
 
-            <h2 class="mt-8 font-display text-2xl font-medium tracking-tight text-ink">10. Изменения Политики</h2>
+            <h2 class="mt-8 text-xl font-semibold text-gray-900">10. Изменения Политики</h2>
             <p>
                 Оператор вправе изменять настоящую Политику. Дата актуальной редакции указана
                 в начале документа. При существенных изменениях пользователи будут уведомлены
                 через приложение.
             </p>
 
-            <h2 class="mt-8 font-display text-2xl font-medium tracking-tight text-ink">11. Контакты</h2>
+            <h2 class="mt-8 text-xl font-semibold text-gray-900">11. Контакты</h2>
             <p>
                 По вопросам обработки персональных данных, удаления учётной записи или
                 реализации Ваших прав свяжитесь с нами:
@@ -191,11 +186,11 @@
         </article>
     </main>
 
-    <footer class="border-t border-rule bg-white/70 backdrop-blur">
+    <footer class="border-t border-gray-200 bg-white">
         <div class="mx-auto max-w-3xl px-6 py-4 text-center">
-            <p class="text-xs text-ink-mute">
+            <p class="text-xs text-gray-400">
                 &copy; {{ date('Y') }} Alif Taxi &middot;
-                <a href="{{ route('home') }}" class="text-ink-mute hover:text-primary-deep">На главную</a>
+                <a href="{{ route('home') }}" class="text-gray-400 hover:text-gray-500">На главную</a>
             </p>
         </div>
     </footer>

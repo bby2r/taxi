@@ -8,38 +8,33 @@
     <link rel="icon" type="image/png" href="{{ asset('favicon.png') }}">
     <link rel="apple-touch-icon" href="{{ asset('apple-touch-icon.png') }}">
 
-    {{-- Distinctive type pairing: Fraunces (expressive serif with optical-size & SOFT axes)
-         for editorial display, Manrope for the warm geometric sans body. Pre-connect
-         keeps font load off the critical path. --}}
+    {{-- Distinctive type pairing: Fraunces (expressive serif with optical-size & soft variant axis)
+         for editorial display, Manrope for the warm geometric sans body. Pre-connect to keep
+         font load off the critical path. --}}
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght,SOFT@9..144,400;9..144,500;9..144,600;9..144,700;9..144,900&family=Manrope:wght@400;500;600;700&display=swap" rel="stylesheet">
 
-    {{-- Brand tokens — mirror @theme in resources/css/app.css and
-         ClientColors in mobile/packages/shared/src/theme/colors.ts. The
-         design-system rationale lives in resources/css/design-system.md. --}}
     <style>
         :root {
-            --canvas: #F4FBFA;
-            --canvas-deep: #E8F6F4;
-            --ink: #0F2937;
-            --ink-soft: #334155;
-            --ink-mute: #6B7A8F;
-            --primary: #14B8A6;
-            --primary-deep: #0F8F80;
-            --primary-tint: #CCFBF1;
-            --coral: #FF7B1A;
-            --coral-deep: #E0610A;
-            --coral-tint: #FFE7D2;
-            --violet: #6C2BD9;
-            --rule: rgba(15, 41, 55, 0.08);
+            --bg: #FAF6EC;            /* warm cream — never use pure white, feels cold/sterile */
+            --bg-deep: #F1EAD8;        /* sandy beige for layered cards */
+            --ink: #0E1D24;            /* near-black with cool tint, easier on eyes than #000 */
+            --ink-soft: #34464E;
+            --ink-mute: #708189;
+            --teal: #0E5A57;           /* primary deep teal, Alif brand */
+            --teal-deep: #073F3D;
+            --teal-soft: #D7E7E5;
+            --amber: #E8973A;          /* warm action accent, less harsh than pure orange */
+            --amber-deep: #B66A1C;
+            --rule: rgba(14, 29, 36, 0.08);
         }
 
         * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
         html, body { margin: 0; padding: 0; }
 
         html {
-            background: var(--canvas);
+            background: var(--bg);
             color: var(--ink);
             font-family: 'Manrope', system-ui, sans-serif;
             font-size: 16px;
@@ -55,15 +50,14 @@
         }
 
         /* Subtle film grain over the whole page — adds analog warmth on
-           OLED screens, prevents the mint canvas from looking "plastic".
-           Keep — without it the page reads as a flat tinted background. */
+           OLED screens, prevents the cream from looking "plastic". */
         body::before {
             content: '';
             position: fixed;
             inset: 0;
             pointer-events: none;
             z-index: 100;
-            opacity: 0.42;
+            opacity: 0.45;
             mix-blend-mode: multiply;
             background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='2' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0.06 0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
         }
@@ -106,7 +100,7 @@
         .nav {
             position: sticky; top: 0; z-index: 50;
             backdrop-filter: blur(12px);
-            background: rgba(244, 251, 250, 0.78);
+            background: rgba(250, 246, 236, 0.78);
             border-bottom: 1px solid var(--rule);
         }
         .nav-inner {
@@ -119,29 +113,25 @@
             font-variation-settings: 'opsz' 144, 'SOFT' 30;
             font-weight: 600;
             font-size: 1.5rem;
-            color: var(--primary-deep);
+            color: var(--teal);
         }
         .brand-dot {
             width: 10px; height: 10px; border-radius: 50%;
-            background: var(--coral); display: inline-block;
+            background: var(--amber); display: inline-block;
         }
         .nav-links {
             display: none; align-items: center; gap: 32px;
             font-size: 0.95rem; color: var(--ink-soft);
         }
-        .nav-links a {
-            position: relative;
-            transition: color 0.2s ease;
-        }
-        .nav-links a:hover { color: var(--primary-deep); }
+        .nav-links a:hover { color: var(--teal); }
         @media (min-width: 768px) { .nav-links { display: flex; } }
         .nav-cta {
-            background: var(--ink); color: var(--canvas);
+            background: var(--ink); color: var(--bg);
             padding: 10px 18px; border-radius: 999px;
             font-size: 0.9rem; font-weight: 600;
             transition: background 0.2s ease;
         }
-        .nav-cta:hover { background: var(--primary-deep); }
+        .nav-cta:hover { background: var(--teal); }
 
         /* ─── Hero ─────────────────────────────── */
         .hero {
@@ -151,33 +141,33 @@
         @media (min-width: 768px) { .hero { padding: 96px 0 48px; } }
 
         .hero-eyebrow {
-            display: inline-flex; align-items: center; gap: 10px;
+            display: inline-flex; align-items: center; gap: 8px;
             text-transform: uppercase;
             font-size: 0.78rem; font-weight: 700;
             letter-spacing: 0.18em;
-            color: var(--primary-deep);
+            color: var(--teal-deep);
             margin-bottom: 28px;
         }
         .pulse {
             width: 7px; height: 7px; border-radius: 50%;
-            background: var(--coral); display: inline-block;
-            box-shadow: 0 0 0 0 rgba(255, 123, 26, 0.6);
+            background: var(--amber); display: inline-block;
+            box-shadow: 0 0 0 0 rgba(232, 151, 58, 0.6);
             animation: pulse 1.8s ease-out infinite;
         }
         @keyframes pulse {
-            0% { box-shadow: 0 0 0 0 rgba(255, 123, 26, 0.55); }
-            70% { box-shadow: 0 0 0 12px rgba(255, 123, 26, 0); }
-            100% { box-shadow: 0 0 0 0 rgba(255, 123, 26, 0); }
+            0% { box-shadow: 0 0 0 0 rgba(232, 151, 58, 0.55); }
+            70% { box-shadow: 0 0 0 12px rgba(232, 151, 58, 0); }
+            100% { box-shadow: 0 0 0 0 rgba(232, 151, 58, 0); }
         }
 
         .hero-title { color: var(--ink); }
         .hero-title em {
             font-style: italic;
-            color: var(--primary-deep);
+            color: var(--teal);
             font-variation-settings: 'opsz' 144, 'SOFT' 100;
         }
         .hero-title .accent {
-            color: var(--coral-deep);
+            color: var(--amber-deep);
             font-style: italic;
             font-variation-settings: 'opsz' 144, 'SOFT' 100;
         }
@@ -205,23 +195,21 @@
             display: flex; flex-wrap: wrap; gap: 12px;
         }
 
-        /* ─── Buttons (see design-system.md → Button variants) ── */
-        .btn-primary, .btn-ghost, .btn-coral, .btn-teal {
+        .btn-primary, .btn-ghost {
             display: inline-flex; align-items: center; gap: 10px;
             padding: 16px 26px; border-radius: 999px;
             font-weight: 700; font-size: 0.95rem;
             transition: transform 0.18s ease, background 0.2s ease, box-shadow 0.2s ease;
             cursor: pointer; border: none;
-            font-family: 'Manrope', sans-serif;
         }
         .btn-primary {
-            background: var(--ink); color: var(--canvas);
-            box-shadow: 0 8px 28px -10px rgba(15, 41, 55, 0.45);
+            background: var(--ink); color: var(--bg);
+            box-shadow: 0 8px 28px -10px rgba(14, 29, 36, 0.5);
         }
         .btn-primary:hover {
-            background: var(--primary-deep);
+            background: var(--teal-deep);
             transform: translateY(-2px);
-            box-shadow: 0 16px 32px -12px rgba(15, 41, 55, 0.55);
+            box-shadow: 0 16px 32px -12px rgba(14, 29, 36, 0.55);
         }
         .btn-ghost {
             background: transparent;
@@ -230,25 +218,7 @@
         }
         .btn-ghost:hover {
             background: var(--ink);
-            color: var(--canvas);
-            transform: translateY(-2px);
-        }
-        .btn-teal {
-            background: var(--primary);
-            color: #fff;
-            box-shadow: 0 8px 28px -10px rgba(20, 184, 166, 0.5);
-        }
-        .btn-teal:hover {
-            background: var(--primary-deep);
-            transform: translateY(-2px);
-            box-shadow: 0 16px 32px -12px rgba(15, 143, 128, 0.55);
-        }
-        .btn-coral {
-            background: var(--coral); color: var(--ink);
-            box-shadow: 0 8px 28px -10px rgba(255, 123, 26, 0.45);
-        }
-        .btn-coral:hover {
-            background: #FF8F3A;
+            color: var(--bg);
             transform: translateY(-2px);
         }
 
@@ -264,8 +234,8 @@
             border-radius: 42px;
             padding: 12px;
             box-shadow:
-                0 50px 100px -30px rgba(15, 41, 55, 0.35),
-                0 30px 60px -20px rgba(20, 184, 166, 0.20),
+                0 50px 100px -30px rgba(14, 29, 36, 0.45),
+                0 30px 60px -20px rgba(14, 90, 87, 0.3),
                 inset 0 0 0 2px rgba(255, 255, 255, 0.04);
             transform: rotate(-3deg);
             position: relative;
@@ -274,7 +244,7 @@
         .phone-screen {
             width: 100%; height: 100%;
             border-radius: 32px;
-            background: linear-gradient(155deg, var(--primary-deep) 0%, var(--primary) 60%, #0A6E63 100%);
+            background: linear-gradient(155deg, var(--teal-deep) 0%, var(--teal) 60%, #0a4a48 100%);
             overflow: hidden;
             position: relative;
             display: flex; flex-direction: column;
@@ -283,15 +253,15 @@
             display: flex; justify-content: space-between;
             padding: 14px 22px 8px;
             font-family: 'Manrope', sans-serif;
-            font-size: 0.7rem; color: var(--canvas);
+            font-size: 0.7rem; color: var(--bg);
             font-weight: 600;
         }
         .phone-map {
             flex: 1;
             position: relative;
             background:
-                radial-gradient(circle at 30% 30%, rgba(255, 123, 26, 0.18) 0%, transparent 40%),
-                radial-gradient(circle at 70% 60%, rgba(204, 251, 241, 0.12) 0%, transparent 40%);
+                radial-gradient(circle at 30% 30%, rgba(232, 151, 58, 0.18) 0%, transparent 40%),
+                radial-gradient(circle at 70% 60%, rgba(215, 231, 229, 0.1) 0%, transparent 40%);
         }
         /* Animated route line drawn across the phone-map */
         .route-svg {
@@ -299,7 +269,7 @@
             width: 100%; height: 100%;
         }
         .route-path {
-            stroke: var(--coral);
+            stroke: var(--amber);
             stroke-width: 3.5;
             fill: none;
             stroke-linecap: round;
@@ -307,7 +277,7 @@
             stroke-dasharray: 1000;
             stroke-dashoffset: 1000;
             animation: draw 3.5s ease-out 0.6s forwards infinite alternate;
-            filter: drop-shadow(0 2px 8px rgba(255, 123, 26, 0.5));
+            filter: drop-shadow(0 2px 8px rgba(232, 151, 58, 0.5));
         }
         @keyframes draw {
             0% { stroke-dashoffset: 1000; }
@@ -317,16 +287,16 @@
         .map-pin {
             position: absolute;
             width: 14px; height: 14px; border-radius: 50%;
-            border: 3px solid var(--canvas);
+            border: 3px solid var(--bg);
             box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
         }
         .map-pin.start {
             top: 22%; left: 18%;
-            background: var(--canvas);
+            background: var(--bg);
         }
         .map-pin.end {
             bottom: 28%; right: 22%;
-            background: var(--coral);
+            background: var(--amber);
             animation: ping 2s ease-out infinite;
         }
         @keyframes ping {
@@ -334,7 +304,7 @@
             50% { transform: scale(1.15); }
         }
         .phone-card {
-            background: var(--canvas);
+            background: var(--bg);
             border-radius: 24px 24px 0 0;
             padding: 18px 20px 22px;
             position: relative;
@@ -364,18 +334,18 @@
         .phone-card-price {
             font-family: 'Fraunces', serif;
             font-size: 1.6rem; font-weight: 600;
-            color: var(--primary-deep);
+            color: var(--teal-deep);
         }
 
-        /* Background ornament — primary-tint radial halo behind the phone */
+        /* Background ornament — a deep teal arc-mountain motif behind the phone */
         .hero-ornament {
             position: absolute;
             right: -120px; top: 50%;
             transform: translateY(-50%);
             width: 600px; height: 600px;
             background:
-                radial-gradient(circle at center, var(--primary-tint) 0%, transparent 60%);
-            opacity: 0.7;
+                radial-gradient(circle at center, var(--teal-soft) 0%, transparent 60%);
+            opacity: 0.6;
             z-index: 0;
             pointer-events: none;
         }
@@ -401,12 +371,11 @@
             font-family: 'Fraunces', serif;
             font-size: clamp(2.5rem, 4vw, 3.5rem);
             font-weight: 500;
-            color: var(--primary-deep);
+            color: var(--teal);
             letter-spacing: -0.025em;
             line-height: 1;
             font-variation-settings: 'opsz' 144, 'SOFT' 30;
         }
-        .stat-figure .accent { color: var(--coral); }
         .stat-label {
             margin-top: 10px;
             font-size: 0.88rem; color: var(--ink-soft);
@@ -421,12 +390,12 @@
         .section-eyebrow {
             font-size: 0.78rem; font-weight: 700;
             letter-spacing: 0.18em; text-transform: uppercase;
-            color: var(--coral-deep);
+            color: var(--amber-deep);
             display: inline-flex; align-items: center; gap: 12px;
             margin-bottom: 24px;
         }
         .section-eyebrow::before {
-            content: ''; width: 32px; height: 1px; background: var(--coral-deep);
+            content: ''; width: 32px; height: 1px; background: var(--amber-deep);
         }
 
         /* ─── How it works (clients) ────────────── */
@@ -439,25 +408,23 @@
             .how-grid { grid-template-columns: repeat(3, 1fr); gap: 20px; }
         }
         .step-card {
-            background: var(--canvas-deep);
+            background: var(--bg-deep);
             padding: 32px 28px;
             border-radius: 24px;
             position: relative;
             min-height: 280px;
             display: flex; flex-direction: column;
-            transition: transform 0.3s ease, background 0.3s ease, box-shadow 0.3s ease;
+            transition: transform 0.3s ease, background 0.3s ease;
         }
         .step-card:hover {
             transform: translateY(-4px);
-            background: var(--primary-tint);
-            box-shadow: 0 24px 60px -24px rgba(15, 41, 55, 0.18),
-                        0 4px 12px -4px rgba(15, 41, 55, 0.08);
+            background: var(--teal-soft);
         }
         .step-num {
             font-family: 'Fraunces', serif;
             font-variation-settings: 'opsz' 144, 'SOFT' 100;
             font-size: 3.5rem; font-style: italic;
-            color: var(--primary-deep);
+            color: var(--teal);
             line-height: 1;
             margin-bottom: 24px;
             opacity: 0.85;
@@ -480,12 +447,10 @@
         /* ─── For drivers ───────────────────────── */
         .drivers-section {
             background: var(--ink);
-            color: var(--canvas);
+            color: var(--bg);
             margin: 96px -24px 0;
             padding: 110px 0;
             border-radius: 0;
-            position: relative;
-            overflow: hidden;
         }
         @media (min-width: 768px) {
             .drivers-section { margin: 96px -48px 0; }
@@ -496,36 +461,23 @@
                 border-radius: 36px;
             }
         }
-        /* Subtle teal aura in the dark drivers-section — anchors the
-           section to brand color even on ink background. */
-        .drivers-section::before {
-            content: '';
-            position: absolute;
-            top: -20%; right: -10%;
-            width: 600px; height: 600px;
-            background: radial-gradient(circle at center, rgba(20, 184, 166, 0.20) 0%, transparent 60%);
-            pointer-events: none;
-        }
 
         .drivers-grid {
             display: grid; gap: 48px;
             grid-template-columns: 1fr;
             align-items: center;
-            position: relative;
         }
         @media (min-width: 1024px) {
             .drivers-grid { grid-template-columns: 1fr 1fr; gap: 80px; }
         }
 
-        .drivers-title { color: var(--canvas); }
-        .drivers-title em {
-            color: var(--coral); font-style: italic;
-            font-variation-settings: 'opsz' 144, 'SOFT' 100;
-        }
+        .drivers-title { color: var(--bg); }
+        .drivers-title em { color: var(--amber); font-style: italic;
+            font-variation-settings: 'opsz' 144, 'SOFT' 100; }
 
         .drivers-sub {
             margin-top: 24px;
-            color: rgba(244, 251, 250, 0.75);
+            color: rgba(250, 246, 236, 0.75);
             font-size: 1.1rem;
             line-height: 1.55;
             max-width: 480px;
@@ -542,31 +494,29 @@
             flex-shrink: 0;
             width: 36px; height: 36px;
             border-radius: 50%;
-            background: var(--coral); color: var(--ink);
+            background: var(--amber); color: var(--ink);
             display: flex; align-items: center; justify-content: center;
             font-family: 'Fraunces', serif;
             font-weight: 700; font-size: 1rem;
         }
         .perk-text {
             font-size: 0.98rem;
-            color: rgba(244, 251, 250, 0.88);
+            color: rgba(250, 246, 236, 0.88);
             line-height: 1.5;
         }
-        .perk-text strong { color: var(--canvas); font-weight: 700; }
+        .perk-text strong { color: var(--bg); font-weight: 700; }
 
         .btn-amber {
             display: inline-flex; align-items: center; gap: 10px;
-            background: var(--coral); color: var(--ink);
+            background: var(--amber); color: var(--ink);
             padding: 16px 26px; border-radius: 999px;
             font-weight: 700; font-size: 0.95rem;
             margin-top: 36px;
-            box-shadow: 0 12px 28px -10px rgba(255, 123, 26, 0.5);
-            transition: transform 0.18s ease, background 0.2s ease, box-shadow 0.2s ease;
+            transition: transform 0.18s ease, background 0.2s ease;
         }
         .btn-amber:hover {
-            background: #FF8F3A;
+            background: #FBA94A;
             transform: translateY(-2px);
-            box-shadow: 0 18px 36px -12px rgba(255, 123, 26, 0.55);
         }
 
         .driver-card {
@@ -575,7 +525,6 @@
             border-radius: 24px;
             padding: 32px;
             backdrop-filter: blur(8px);
-            position: relative;
         }
         .driver-card-header {
             display: flex; justify-content: space-between; align-items: flex-start;
@@ -583,20 +532,20 @@
         }
         .driver-card-label {
             font-size: 0.75rem; letter-spacing: 0.15em; text-transform: uppercase;
-            color: var(--coral);
+            color: var(--amber);
             font-weight: 700;
         }
         .driver-card-stat {
             font-family: 'Fraunces', serif;
             font-size: 4rem; font-weight: 500;
-            color: var(--canvas);
+            color: var(--bg);
             line-height: 1;
             letter-spacing: -0.03em;
             font-variation-settings: 'opsz' 144, 'SOFT' 50;
         }
         .driver-card-tag {
             display: inline-block;
-            background: var(--coral); color: var(--ink);
+            background: var(--amber); color: var(--ink);
             padding: 4px 10px; border-radius: 999px;
             font-size: 0.7rem; font-weight: 700;
             letter-spacing: 0.05em;
@@ -607,8 +556,8 @@
             border-top: 1px solid rgba(255, 255, 255, 0.08);
             font-size: 0.92rem;
         }
-        .driver-card-row span:first-child { color: rgba(244, 251, 250, 0.6); }
-        .driver-card-row span:last-child { color: var(--canvas); font-weight: 600; }
+        .driver-card-row span:first-child { color: rgba(250, 246, 236, 0.6); }
+        .driver-card-row span:last-child { color: var(--bg); font-weight: 600; }
 
         /* ─── Why us — comparison ─────────────────── */
         .compare-grid {
@@ -625,25 +574,18 @@
             border: 1px solid var(--rule);
         }
         .compare-card.bad { background: transparent; }
-        /* Use primary-deep (#0F8F80) instead of primary for the good card
-           so white text hits AA (4.7:1) — bright #14B8A6 + white is
-           only ~3.2:1 which fails for body copy. */
-        .compare-card.good {
-            background: var(--primary-deep);
-            color: var(--canvas);
-            border-color: var(--primary-deep);
-        }
-        .compare-card.good .compare-title { color: var(--canvas); }
-        .compare-card.good .compare-list li { color: rgba(244, 251, 250, 0.92); }
-        .compare-card.good .compare-list li::before { color: var(--coral); }
+        .compare-card.good { background: var(--teal); color: var(--bg); border-color: var(--teal); }
+        .compare-card.good .compare-title { color: var(--bg); }
+        .compare-card.good .compare-list li { color: rgba(250, 246, 236, 0.92); }
+        .compare-card.good .compare-list li::before { color: var(--amber); }
         .compare-tag {
             display: inline-block;
             font-size: 0.72rem; letter-spacing: 0.15em; text-transform: uppercase;
             font-weight: 700; padding: 5px 11px; border-radius: 999px;
             margin-bottom: 18px;
         }
-        .compare-card.bad .compare-tag { background: var(--canvas-deep); color: var(--ink-mute); }
-        .compare-card.good .compare-tag { background: var(--coral); color: var(--ink); }
+        .compare-card.bad .compare-tag { background: var(--bg-deep); color: var(--ink-mute); }
+        .compare-card.good .compare-tag { background: var(--amber); color: var(--ink); }
         .compare-title {
             font-family: 'Fraunces', serif;
             font-size: 1.5rem; font-weight: 600;
@@ -675,10 +617,8 @@
             color: var(--ink);
             margin-bottom: 32px;
         }
-        .final-title em {
-            color: var(--primary-deep); font-style: italic;
-            font-variation-settings: 'opsz' 144, 'SOFT' 100;
-        }
+        .final-title em { color: var(--teal); font-style: italic;
+            font-variation-settings: 'opsz' 144, 'SOFT' 100; }
         .final .hero-cta-row { justify-content: center; margin-top: 8px; }
 
         /* ─── Footer ──────────────────────────────── */
@@ -712,10 +652,7 @@
             display: flex; flex-direction: column; gap: 10px;
             font-size: 0.92rem;
         }
-        .footer-links a {
-            transition: color 0.2s ease;
-        }
-        .footer-links a:hover { color: var(--primary-deep); }
+        .footer-links a:hover { color: var(--teal); }
         .footer-bottom {
             margin-top: 56px;
             padding-top: 24px;
@@ -726,7 +663,9 @@
         }
 
         /* Reveal on scroll — single staggered orchestration, no scattered
-           micro-interactions. Triggered by IntersectionObserver below. */
+           micro-interactions. CSS-only via intersection observer is not
+           supported broadly; we use animation-play-state via a small JS
+           helper at the bottom of the page. */
         .reveal {
             opacity: 0;
             transform: translateY(28px);
@@ -814,7 +753,7 @@
                                 </div>
                                 <div class="phone-card">
                                     <div class="phone-card-eyebrow">
-                                        <span class="pulse"></span>
+                                        <span class="pulse" style="--pulse-color: var(--teal);"></span>
                                         Водитель в&nbsp;пути · 4&nbsp;мин
                                     </div>
                                     <div class="phone-card-title">Азамат К.</div>
@@ -832,19 +771,19 @@
                 <div class="numbers reveal delay-5 in">
                     <div class="numbers-grid">
                         <div>
-                            <div class="stat-figure">5<span class="accent">″</span></div>
+                            <div class="stat-figure">5<span style="color: var(--amber);">″</span></div>
                             <div class="stat-label">среднее время&nbsp;на оформление заказа</div>
                         </div>
                         <div>
-                            <div class="stat-figure">100<span class="accent">%</span></div>
+                            <div class="stat-figure">100<span style="color: var(--amber);">%</span></div>
                             <div class="stat-label">фиксированная цена &mdash; никакого торга</div>
                         </div>
                         <div>
-                            <div class="stat-figure">24<span class="accent">/7</span></div>
+                            <div class="stat-figure">24<span style="color: var(--amber);">/7</span></div>
                             <div class="stat-label">диспетчерская поддержка через WhatsApp</div>
                         </div>
                         <div>
-                            <div class="stat-figure">7<span class="accent">%</span></div>
+                            <div class="stat-figure">7<span style="color: var(--amber);">%</span></div>
                             <div class="stat-label">комиссия с&nbsp;водителей &mdash; самая низкая в&nbsp;регионе</div>
                         </div>
                     </div>
@@ -892,7 +831,7 @@
             <div class="container">
                 <div class="drivers-grid">
                     <div>
-                        <div class="section-eyebrow reveal" style="color: var(--coral);">Для водителей</div>
+                        <div class="section-eyebrow reveal" style="color: var(--amber);">Для водителей</div>
                         <h2 class="display-lg drivers-title reveal delay-1">
                             Работай <em>на себя.</em><br>Без диспетчера.
                         </h2>
@@ -939,14 +878,14 @@
                         <div class="driver-card-header">
                             <div>
                                 <div class="driver-card-label">Заработок · ноябрь</div>
-                                <div class="driver-card-stat">38 400 <span style="font-size: 1.2rem; color: var(--coral);">сом</span></div>
+                                <div class="driver-card-stat">38 400 <span style="font-size: 1.2rem; color: var(--amber);">сом</span></div>
                             </div>
                             <span class="driver-card-tag">пример</span>
                         </div>
                         <div class="driver-card-row"><span>Заказов</span><span>142</span></div>
                         <div class="driver-card-row"><span>Часов в&nbsp;день&nbsp;(в среднем)</span><span>6,5</span></div>
                         <div class="driver-card-row"><span>Комиссия платформы</span><span>2 688&nbsp;сом</span></div>
-                        <div class="driver-card-row"><span>Чистая прибыль</span><span style="color: var(--coral);">35 712&nbsp;сом</span></div>
+                        <div class="driver-card-row"><span>Чистая прибыль</span><span style="color: var(--amber);">35 712&nbsp;сом</span></div>
                     </div>
                 </div>
             </div>
@@ -956,7 +895,7 @@
         <section class="section" id="compare">
             <div class="container">
                 <div class="section-eyebrow reveal">Почему мы</div>
-                <h2 class="display-lg reveal delay-1">Не&nbsp;<em style="color: var(--primary-deep); font-style: italic; font-variation-settings: 'opsz' 144, 'SOFT' 100;">WhatsApp.</em></h2>
+                <h2 class="display-lg reveal delay-1">Не&nbsp;<em>WhatsApp.</em></h2>
                 <p style="margin-top: 24px; color: var(--ink-soft); font-size: 1.1rem; max-width: 540px;" class="reveal delay-2">
                     В&nbsp;Таласе такси заказывают через сборные чаты.
                     Это&nbsp;работало&nbsp;&mdash; пока не&nbsp;появилось приложение,
