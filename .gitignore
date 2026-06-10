@@ -26,3 +26,15 @@ Homestead.yaml
 Thumbs.db
 /.expo
 /tsconfig.json
+
+# Local scratch & build artifacts — keep out of the repo
+/temp/
+/debug/
+/.claude/worktrees/
+
+# Generated artifacts that leak into vendored skills when their scripts run
+.claude/skills/**/__pycache__/
+.claude/skills/**/*.pyc
+.claude/skills/**/.omc/
+.claude/skills/**/.coverage
+.claude/skills/**/coverage-ui.json
