@@ -5,6 +5,20 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <meta name="description" content="Alif Taxi — современное такси для жителей Таласа и соседних сёл. Заказ за 5 секунд, водитель на карте, цена известна заранее.">
     <title>Alif Taxi — такси по селу и в город</title>
+
+    {{-- Open Graph / Twitter — controls how the link previews when shared in WhatsApp, Telegram, etc. --}}
+    <meta property="og:type" content="website">
+    <meta property="og:site_name" content="Alif Taxi">
+    <meta property="og:title" content="Alif Taxi — такси по селу и в город">
+    <meta property="og:description" content="Заказ за 5 секунд, водитель на карте в реальном времени, цена известна заранее. Местное такси для Таласской области.">
+    <meta property="og:url" content="{{ url('/') }}">
+    <meta property="og:image" content="{{ asset('apple-touch-icon.png') }}">
+    <meta property="og:locale" content="ru_RU">
+    <meta name="twitter:card" content="summary">
+    <meta name="twitter:title" content="Alif Taxi — такси по селу и в город">
+    <meta name="twitter:description" content="Заказ за 5 секунд, водитель на карте, цена известна заранее.">
+    <meta name="twitter:image" content="{{ asset('apple-touch-icon.png') }}">
+
     <link rel="icon" type="image/png" href="{{ asset('favicon.png') }}">
     <link rel="apple-touch-icon" href="{{ asset('apple-touch-icon.png') }}">
 
@@ -41,10 +55,12 @@
             line-height: 1.55;
             -webkit-font-smoothing: antialiased;
             -moz-osx-font-smoothing: grayscale;
+            scroll-behavior: smooth;
         }
 
         body {
             min-height: 100vh;
+            min-height: 100dvh;
             position: relative;
             overflow-x: hidden;
         }
@@ -63,6 +79,25 @@
         }
 
         a { color: inherit; text-decoration: none; }
+
+        /* Keyboard focus — a visible ring on every interactive element (a11y, CRITICAL). */
+        :focus-visible {
+            outline: 2.5px solid var(--teal);
+            outline-offset: 3px;
+            border-radius: 6px;
+        }
+        .btn-primary:focus-visible, .nav-cta:focus-visible {
+            outline-color: var(--amber-deep);
+        }
+        .drivers-section :focus-visible, .btn-amber:focus-visible {
+            outline-color: var(--amber);
+        }
+        /* Anchor jumps clear the sticky header instead of hiding under it. */
+        section[id] { scroll-margin-top: 84px; }
+        /* Remove the 300ms tap delay on touch devices. */
+        .btn-primary, .btn-ghost, .btn-amber, .nav-cta, .nav-links a, .footer-links a {
+            touch-action: manipulation;
+        }
 
         h1, h2, h3 {
             font-family: 'Fraunces', Georgia, serif;
@@ -127,7 +162,7 @@
         @media (min-width: 768px) { .nav-links { display: flex; } }
         .nav-cta {
             background: var(--ink); color: var(--bg);
-            padding: 10px 18px; border-radius: 999px;
+            padding: 13px 20px; border-radius: 999px;
             font-size: 0.9rem; font-weight: 600;
             transition: background 0.2s ease;
         }
@@ -499,6 +534,7 @@
             font-family: 'Fraunces', serif;
             font-weight: 700; font-size: 1rem;
         }
+        .perk-bullet svg { width: 18px; height: 18px; }
         .perk-text {
             font-size: 0.98rem;
             color: rgba(250, 246, 236, 0.88);
@@ -683,6 +719,7 @@
         .reveal.delay-5 { transition-delay: 0.40s; }
 
         @media (prefers-reduced-motion: reduce) {
+            html { scroll-behavior: auto; }
             .reveal { opacity: 1; transform: none; transition: none; }
             .route-path { animation: none; stroke-dashoffset: 0; }
             .pulse { animation: none; }
@@ -843,21 +880,38 @@
 
                         <div class="perks">
                             <div class="perk reveal delay-3">
-                                <div class="perk-bullet">$</div>
+                                <div class="perk-bullet" aria-hidden="true">
+                                    {{-- wallet --}}
+                                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+                                        <path d="M19 7V5.5A1.5 1.5 0 0 0 17.5 4h-11A2.5 2.5 0 0 0 4 6.5v11A2.5 2.5 0 0 0 6.5 20h12a1.5 1.5 0 0 0 1.5-1.5V9a1.5 1.5 0 0 0-1.5-1.5H6.5"/>
+                                        <circle cx="16.5" cy="13.5" r="1.15" fill="currentColor" stroke="none"/>
+                                    </svg>
+                                </div>
                                 <div class="perk-text">
                                     <strong>7% комиссия.</strong>
                                     Остальное&nbsp;&mdash; твоё. Самая низкая ставка в&nbsp;регионе.
                                 </div>
                             </div>
                             <div class="perk reveal delay-4">
-                                <div class="perk-bullet">⌖</div>
+                                <div class="perk-bullet" aria-hidden="true">
+                                    {{-- map pin --}}
+                                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+                                        <path d="M15 10.5a3 3 0 1 1-6 0 3 3 0 0 1 6 0Z"/>
+                                        <path d="M19.5 10.5c0 7.142-7.5 11.25-7.5 11.25S4.5 17.642 4.5 10.5a7.5 7.5 0 1 1 15 0Z"/>
+                                    </svg>
+                                </div>
                                 <div class="perk-text">
                                     <strong>Ближний&nbsp;к&nbsp;клиенту&nbsp;&mdash;&nbsp;первый.</strong>
                                     Алгоритм честный, без&nbsp;любимчиков.
                                 </div>
                             </div>
                             <div class="perk reveal delay-5">
-                                <div class="perk-bullet">↻</div>
+                                <div class="perk-bullet" aria-hidden="true">
+                                    {{-- clock --}}
+                                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
+                                        <path stroke-linecap="round" stroke-linejoin="round" d="M12 6v6h4.5m4.5 0a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z"/>
+                                    </svg>
+                                </div>
                                 <div class="perk-text">
                                     <strong>Гибкий график.</strong>
                                     Выход&nbsp;на&nbsp;линию&nbsp;в&nbsp;один тап. Работаешь

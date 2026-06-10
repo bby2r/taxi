@@ -6,6 +6,21 @@
 @source '../**/*.js';
 
 @theme {
-    --font-sans: 'Instrument Sans', ui-sans-serif, system-ui, sans-serif, 'Apple Color Emoji', 'Segoe UI Emoji',
-        'Segoe UI Symbol', 'Noto Color Emoji';
+    --font-sans: 'Manrope', 'Instrument Sans', ui-sans-serif, system-ui, sans-serif, 'Apple Color Emoji',
+        'Segoe UI Emoji', 'Segoe UI Symbol', 'Noto Color Emoji';
+
+    /* Alif Taxi brand tokens — one identity shared with the marketing site.
+       Tailwind v4 turns each --color-* into bg-/text-/border-/ring- utilities. */
+    --color-brand: #0e5a57;        /* deep teal — primary surface / brand */
+    --color-brand-700: #0a4a48;
+    --color-brand-deep: #073f3d;   /* darkest teal — active states */
+    --color-brand-soft: #d7e7e5;   /* tinted teal — soft fills */
+    --color-sand: #faf6ec;         /* warm cream — page canvas */
+    --color-sand-deep: #f1ead8;    /* sandy beige — layered fills */
+    --color-ink: #0e1d24;          /* near-black, cool tint — primary text */
+    --color-ink-soft: #34464e;     /* secondary text */
+    --color-ink-mute: #708189;     /* muted text / icons */
+    --color-accent: #e8973a;       /* warm amber — actions / highlights */
+    --color-accent-soft: #fbe6cf;  /* amber tint — soft chips */
+    --color-accent-deep: #b66a1c;  /* amber on light — text on cream */
 }
