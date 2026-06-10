@@ -11,6 +11,7 @@ import {
   Modal,
 } from 'react-native';
 import BottomSheet, { BottomSheetView } from '@gorhom/bottom-sheet';
+import { Feather } from '@expo/vector-icons';
 import { useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import {
@@ -102,7 +103,7 @@ function ClientContact({ order }: { order: Order }): React.ReactNode {
         </Text>
       </View>
       <View style={styles.callButton}>
-        <Text style={styles.callIcon}>📞</Text>
+        <Feather name="phone" size={18} color={DriverColors.white} />
       </View>
     </TouchableOpacity>
   );
@@ -289,9 +290,10 @@ function ArrivedCard({
 }): React.ReactNode {
   return (
     <View style={styles.cardContent}>
-      <Text style={[Typography.h3, { color: DriverColors.success }]}>
-        ✅ Вы на месте
-      </Text>
+      <View style={styles.statusTitleRow}>
+        <Feather name="check-circle" size={18} color={DriverColors.success} />
+        <Text style={[Typography.h3, { color: DriverColors.success }]}>Вы на месте</Text>
+      </View>
       <Text
         style={[Typography.caption, { color: DriverColors.textMuted, marginTop: 4 }]}
       >
@@ -407,7 +409,7 @@ function CompletedCard({
 }): React.ReactNode {
   return (
     <View style={[styles.cardContent, { alignItems: 'center', justifyContent: 'center' }]}>
-      <Text style={{ fontSize: 48 }}>✅</Text>
+      <Feather name="check-circle" size={48} color={DriverColors.success} />
       <Text
         style={[Typography.h2, { color: DriverColors.textPrimary, marginTop: 12 }]}
       >
@@ -817,7 +819,7 @@ export default function OrderActiveScreen(): React.ReactNode {
           }}
           activeOpacity={0.85}
         >
-          <Text style={styles.recenterIcon}>🎯</Text>
+          <Feather name="navigation" size={16} color={DriverColors.primary} />
           <Text style={styles.recenterText}>Вернуться к маршруту</Text>
         </TouchableOpacity>
       )}
@@ -947,8 +949,10 @@ const styles = StyleSheet.create({
     shadowOffset: { width: 0, height: 4 },
     elevation: 8,
   },
-  recenterIcon: {
-    fontSize: 16,
+  statusTitleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
   },
   recenterText: {
     color: DriverColors.textPrimary,
@@ -994,9 +998,6 @@ const styles = StyleSheet.create({
     backgroundColor: DriverColors.success,
     justifyContent: 'center',
     alignItems: 'center',
-  },
-  callIcon: {
-    fontSize: 18,
   },
   sheetBackdrop: {
     flex: 1,

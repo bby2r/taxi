@@ -47,6 +47,7 @@ export default function OnlineToggle({
         disabled={loading}
         accessibilityRole="switch"
         accessibilityState={{ checked: isOnline }}
+        accessibilityLabel={isOnline ? 'На линии' : 'Не на линии'}
       >
         <Animated.View
           style={[

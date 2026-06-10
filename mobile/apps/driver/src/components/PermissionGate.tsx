@@ -7,6 +7,7 @@ import {
   TouchableOpacity,
   View,
 } from 'react-native';
+import { Feather } from '@expo/vector-icons';
 import { ActionButton, DriverColors, Typography } from '@taxi/shared';
 import {
   hasOverlayPermission,
@@ -158,7 +159,12 @@ export default function PermissionGate({
           />
 
           <View style={styles.footer}>
-            <TouchableOpacity onPress={onDismiss} style={styles.skipButton}>
+            <TouchableOpacity
+              onPress={onDismiss}
+              style={styles.skipButton}
+              activeOpacity={0.7}
+              accessibilityRole="button"
+            >
               <Text style={[Typography.body, { color: DriverColors.textMuted }]}>Позже</Text>
             </TouchableOpacity>
             <ActionButton
@@ -184,8 +190,12 @@ interface PermissionRowProps {
 function PermissionRow({ label, description, granted, onFix }: PermissionRowProps): React.ReactElement {
   return (
     <View style={styles.row}>
-      <View style={styles.statusBadge}>
-        <Text style={styles.statusIcon}>{granted ? '✓' : '!'}</Text>
+      <View style={[styles.statusBadge, granted ? styles.statusBadgeOk : styles.statusBadgeWarn]}>
+        <Feather
+          name={granted ? 'check' : 'alert-triangle'}
+          size={15}
+          color={granted ? DriverColors.success : DriverColors.danger}
+        />
       </View>
       <View style={styles.rowText}>
         <Text style={[Typography.bodyBold, { color: DriverColors.textPrimary }]}>{label}</Text>
@@ -194,7 +204,14 @@ function PermissionRow({ label, description, granted, onFix }: PermissionRowProp
         </Text>
       </View>
       {!granted && (
-        <TouchableOpacity onPress={onFix} style={styles.fixButton}>
+        <TouchableOpacity
+          onPress={onFix}
+          style={styles.fixButton}
+          activeOpacity={0.7}
+          hitSlop={8}
+          accessibilityRole="button"
+          accessibilityLabel={`Открыть настройки: ${label}`}
+        >
           <Text style={[Typography.caption, { color: DriverColors.primary, fontWeight: '700' }]}>
             Открыть
           </Text>
@@ -240,10 +257,11 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     marginRight: 12,
   },
-  statusIcon: {
-    fontSize: 16,
-    color: DriverColors.textPrimary,
-    fontWeight: '700' as const,
+  statusBadgeOk: {
+    backgroundColor: 'rgba(16, 185, 129, 0.16)',
+  },
+  statusBadgeWarn: {
+    backgroundColor: 'rgba(239, 68, 68, 0.16)',
   },
   rowText: {
     flex: 1,

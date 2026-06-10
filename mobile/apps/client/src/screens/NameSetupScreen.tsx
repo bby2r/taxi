@@ -6,11 +6,11 @@ import {
   StyleSheet,
   KeyboardAvoidingView,
   Platform,
-  SafeAreaView,
   Alert,
   TouchableOpacity,
   ActivityIndicator,
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import {
   ClientColors,
   Radius,

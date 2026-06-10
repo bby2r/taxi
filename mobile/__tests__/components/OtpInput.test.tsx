@@ -7,7 +7,7 @@ describe('OtpInput', () => {
     const { getAllByLabelText } = render(
       <OtpInput onComplete={jest.fn()} />,
     );
-    const cells = getAllByLabelText(/Digit \d+ of 4/);
+    const cells = getAllByLabelText(/Цифра \d+ из 4/);
     expect(cells).toHaveLength(4);
   });
 
@@ -16,7 +16,7 @@ describe('OtpInput', () => {
     const { getAllByLabelText } = render(
       <OtpInput onComplete={onComplete} />,
     );
-    const cells = getAllByLabelText(/Digit \d+ of 4/);
+    const cells = getAllByLabelText(/Цифра \d+ из 4/);
 
     fireEvent.changeText(cells[0], '1');
     fireEvent.changeText(cells[1], '2');
@@ -31,7 +31,7 @@ describe('OtpInput', () => {
     const { getAllByLabelText, rerender } = render(
       <OtpInput onComplete={onComplete} error={false} />,
     );
-    const cells = getAllByLabelText(/Digit \d+ of 4/);
+    const cells = getAllByLabelText(/Цифра \d+ из 4/);
 
     // Fill all cells
     fireEvent.changeText(cells[0], '1');
@@ -43,7 +43,7 @@ describe('OtpInput', () => {
     rerender(<OtpInput onComplete={onComplete} error={true} />);
 
     // After error, cells should be cleared
-    const updatedCells = getAllByLabelText(/Digit \d+ of 4/);
+    const updatedCells = getAllByLabelText(/Цифра \d+ из 4/);
     updatedCells.forEach((cell) => {
       expect(cell.props.value).toBe('');
     });
@@ -53,7 +53,7 @@ describe('OtpInput', () => {
     const { getAllByLabelText } = render(
       <OtpInput onComplete={jest.fn()} />,
     );
-    const cells = getAllByLabelText(/Digit \d+ of 4/);
+    const cells = getAllByLabelText(/Цифра \d+ из 4/);
 
     // Fill first cell so second cell is relevant
     fireEvent.changeText(cells[0], '1');

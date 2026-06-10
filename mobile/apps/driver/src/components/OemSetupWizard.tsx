@@ -8,6 +8,7 @@ import {
   TouchableOpacity,
   View,
 } from 'react-native';
+import { Feather } from '@expo/vector-icons';
 import { ActionButton, DriverColors, Typography } from '@taxi/shared';
 import {
   openOemPowerSettings,
@@ -173,8 +174,10 @@ export default function OemSetupWizard({
             onPress={onSkip}
             style={styles.closeBtn}
             hitSlop={{ top: 12, right: 12, bottom: 12, left: 12 }}
+            accessibilityRole="button"
+            accessibilityLabel="Закрыть"
           >
-            <Text style={styles.closeBtnText}>✕</Text>
+            <Feather name="x" size={22} color={DriverColors.textMuted} />
           </TouchableOpacity>
           <Text style={[Typography.h2, styles.title]}>Чтобы не пропускать заказы</Text>
           <Text style={[Typography.body, styles.subtitle]}>
@@ -200,6 +203,7 @@ export default function OemSetupWizard({
                 {step.action !== 'manual' && (
                   <TouchableOpacity
                     style={styles.stepButton}
+                    activeOpacity={0.7}
                     onPress={() => {
                       if (step.action === 'oem') {
                         openOemPowerSettings();
@@ -216,7 +220,7 @@ export default function OemSetupWizard({
           </ScrollView>
 
           <View style={styles.footer}>
-            <TouchableOpacity onPress={onSkip} style={styles.skipButton}>
+            <TouchableOpacity onPress={onSkip} style={styles.skipButton} activeOpacity={0.7} accessibilityRole="button">
               <Text style={[Typography.body, { color: DriverColors.textMuted }]}>
                 Не сейчас
               </Text>
@@ -249,11 +253,6 @@ const styles = StyleSheet.create({
     right: 14,
     padding: 4,
     zIndex: 1,
-  },
-  closeBtnText: {
-    color: DriverColors.textMuted,
-    fontSize: 22,
-    fontWeight: '700' as const,
   },
   title: {
     color: DriverColors.textPrimary,

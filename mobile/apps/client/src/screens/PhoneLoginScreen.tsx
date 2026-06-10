@@ -6,7 +6,6 @@ import {
   StyleSheet,
   KeyboardAvoidingView,
   Platform,
-  SafeAreaView,
   Alert,
   TouchableOpacity,
   ActivityIndicator,
@@ -14,6 +13,7 @@ import {
   Easing,
   Image,
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import Svg, {
   Circle,

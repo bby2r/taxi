@@ -11,6 +11,7 @@ import {
   ActivityIndicator,
   Linking,
 } from 'react-native';
+import { Feather } from '@expo/vector-icons';
 import * as Location from 'expo-location';
 import { useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
@@ -402,25 +403,28 @@ export default function HomeScreen(): React.ReactNode {
             onPress={handleRecenter}
             activeOpacity={0.7}
             style={styles.iconButton}
+            accessibilityRole="button"
             accessibilityLabel="Центрировать на мне"
           >
-            <Text style={styles.iconText}>🎯</Text>
+            <Feather name="crosshair" size={20} color={DriverColors.textPrimary} />
           </TouchableOpacity>
           <TouchableOpacity
             onPress={() => navigation.navigate('Stats')}
             activeOpacity={0.7}
             style={styles.iconButton}
+            accessibilityRole="button"
             accessibilityLabel="Статистика"
           >
-            <Text style={styles.iconText}>📊</Text>
+            <Feather name="bar-chart-2" size={20} color={DriverColors.textPrimary} />
           </TouchableOpacity>
           <TouchableOpacity
             onPress={auth.logout}
             activeOpacity={0.7}
             style={styles.iconButton}
+            accessibilityRole="button"
             accessibilityLabel="Выйти"
           >
-            <Text style={styles.iconText}>⏏</Text>
+            <Feather name="log-out" size={20} color={DriverColors.textPrimary} />
           </TouchableOpacity>
         </View>
       </View>
@@ -435,9 +439,12 @@ export default function HomeScreen(): React.ReactNode {
 
       {pushStatus.kind !== 'success' && pushStatus.kind !== 'starting' && (
         <View style={styles.pushBanner}>
-          <Text style={[Typography.bodyBold, { color: DriverColors.danger }]}>
-            ⚠ Push-уведомления не настроены
-          </Text>
+          <View style={styles.bannerTitleRow}>
+            <Feather name="alert-triangle" size={16} color={DriverColors.danger} />
+            <Text style={[Typography.bodyBold, styles.bannerTitleText]}>
+              Push-уведомления не настроены
+            </Text>
+          </View>
           <Text
             style={[Typography.caption, styles.pushBannerHint]}
             testID="push-banner-reason"
@@ -491,9 +498,12 @@ export default function HomeScreen(): React.ReactNode {
           activeOpacity={0.85}
           testID="fsi-banner"
         >
-          <Text style={[Typography.bodyBold, { color: DriverColors.danger }]}>
-            ⚠ Заказ не открывается на экране
-          </Text>
+          <View style={styles.bannerTitleRow}>
+            <Feather name="alert-triangle" size={16} color={DriverColors.danger} />
+            <Text style={[Typography.bodyBold, styles.bannerTitleText]}>
+              Заказ не открывается на экране
+            </Text>
+          </View>
           <Text style={[Typography.caption, styles.pushBannerHint]}>
             Включите «Уведомления на весь экран» в настройках телефона. Без этого заказы будут приходить только маленькой шторкой сверху, без таймера и кнопки «Принять».
           </Text>
@@ -513,9 +523,12 @@ export default function HomeScreen(): React.ReactNode {
           activeOpacity={0.85}
           testID="overlay-banner"
         >
-          <Text style={[Typography.bodyBold, { color: DriverColors.danger }]}>
-            ⚠ Поверх других приложений выключено
-          </Text>
+          <View style={styles.bannerTitleRow}>
+            <Feather name="alert-triangle" size={16} color={DriverColors.danger} />
+            <Text style={[Typography.bodyBold, styles.bannerTitleText]}>
+              Поверх других приложений выключено
+            </Text>
+          </View>
           <Text style={[Typography.caption, styles.pushBannerHint]}>
             Включите «Поверх других приложений», чтобы заказ всплывал карточкой снизу прямо когда вы в WhatsApp или браузере, без открытия приложения.
           </Text>
@@ -539,9 +552,12 @@ export default function HomeScreen(): React.ReactNode {
           activeOpacity={0.85}
           testID="battery-banner"
         >
-          <Text style={[Typography.bodyBold, { color: DriverColors.danger }]}>
-            ⚠ Приложение может вылетать в фоне
-          </Text>
+          <View style={styles.bannerTitleRow}>
+            <Feather name="alert-triangle" size={16} color={DriverColors.danger} />
+            <Text style={[Typography.bodyBold, styles.bannerTitleText]}>
+              Приложение может вылетать в фоне
+            </Text>
+          </View>
           <Text style={[Typography.caption, styles.pushBannerHint]}>
             {PROBLEMATIC_OEMS.has(manufacturer)
               ? 'На этом телефоне система жёстко контролирует фоновые приложения. Откройте настройки и разрешите автозапуск + отключите оптимизацию батареи — иначе заказы перестанут приходить через 5-10 минут.'
@@ -725,8 +741,14 @@ const styles = StyleSheet.create({
     shadowOffset: { width: 0, height: 2 },
     elevation: 3,
   },
-  iconText: {
-    fontSize: 20,
+  bannerTitleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  bannerTitleText: {
+    color: DriverColors.danger,
+    flex: 1,
   },
   errorBanner: {
     position: 'absolute',

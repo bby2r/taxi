@@ -12,6 +12,7 @@ import {
   TouchableOpacity,
   View,
 } from 'react-native';
+import { Feather } from '@expo/vector-icons';
 import {
   DriverColors,
   Typography,
@@ -213,7 +214,8 @@ export default function IntercityScreen(): React.ReactNode {
       >
         {error && (
           <View style={styles.errorPill}>
-            <Text style={[Typography.caption, styles.errorText]}>⚠ {error}</Text>
+            <Feather name="alert-triangle" size={14} color={DriverColors.danger} />
+            <Text style={[Typography.caption, styles.errorText]}>{error}</Text>
           </View>
         )}
 
@@ -229,7 +231,7 @@ export default function IntercityScreen(): React.ReactNode {
 
         {!activeTrip && slots.length === 0 && (
           <View style={styles.emptyBlock}>
-            <Text style={styles.emptyIcon}>🚌</Text>
+            <Feather name="truck" size={40} color={DriverColors.textMuted} style={styles.emptyIcon} />
             <Text style={styles.emptyTitle}>Открытых рейсов сейчас нет</Text>
             <Text style={styles.emptyText}>
               Утренний cron создаёт slot'ы по активным расписаниям. Список обновляется каждые 15 сек.
@@ -360,7 +362,10 @@ function ActiveTripCard({
               {p.name ?? '—'} {p.seats_count > 1 ? `(${p.seats_count} мест)` : ''}
             </Text>
             {p.pickup_address && (
-              <Text style={styles.passengerAddress}>📍 {p.pickup_address}</Text>
+              <View style={styles.addressRow}>
+                <Feather name="map-pin" size={11} color={DriverColors.textSecondary} />
+                <Text style={styles.passengerAddress}>{p.pickup_address}</Text>
+              </View>
             )}
           </View>
           {p.phone && (
@@ -368,8 +373,10 @@ function ActiveTripCard({
               style={styles.passengerCallButton}
               onPress={() => Linking.openURL(`tel:${p.phone}`)}
               activeOpacity={0.85}
+              accessibilityRole="button"
+              accessibilityLabel="Позвонить пассажиру"
             >
-              <Text style={styles.passengerCallText}>📞</Text>
+              <Feather name="phone" size={18} color={DriverColors.background} />
             </TouchableOpacity>
           )}
           {(isClaimed || isReady) && (
@@ -377,8 +384,11 @@ function ActiveTripCard({
               style={styles.passengerNoShowButton}
               onPress={() => onNoShow(p)}
               activeOpacity={0.85}
+              hitSlop={8}
+              accessibilityRole="button"
+              accessibilityLabel="Отметить, что пассажир не пришёл"
             >
-              <Text style={styles.passengerNoShowText}>✕</Text>
+              <Feather name="x" size={16} color={DriverColors.danger} />
             </TouchableOpacity>
           )}
         </View>
@@ -448,6 +458,9 @@ const styles = StyleSheet.create({
     paddingLeft: 4,
   },
   errorPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
     backgroundColor: '#FFF1F1',
     borderColor: '#FFD4D4',
     borderWidth: 1,
@@ -456,9 +469,9 @@ const styles = StyleSheet.create({
     paddingVertical: 10,
     marginBottom: 12,
   },
-  errorText: { color: DriverColors.danger },
+  errorText: { color: DriverColors.danger, flex: 1 },
   emptyBlock: { alignItems: 'center', paddingVertical: 60, paddingHorizontal: 24 },
-  emptyIcon: { fontSize: 48, marginBottom: 12 },
+  emptyIcon: { marginBottom: 12 },
   emptyTitle: {
     fontSize: 17,
     fontWeight: '700' as const,
@@ -614,10 +627,16 @@ const styles = StyleSheet.create({
     fontWeight: '700' as const,
     color: DriverColors.textPrimary,
   },
+  addressRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    marginTop: 2,
+  },
   passengerAddress: {
     fontSize: 12,
     color: DriverColors.textSecondary,
-    marginTop: 2,
+    flex: 1,
   },
   passengerCallButton: {
     width: 40,
@@ -627,9 +646,6 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  passengerCallText: {
-    fontSize: 18,
-  },
   passengerNoShowButton: {
     width: 32,
     height: 32,
@@ -637,11 +653,6 @@ const styles = StyleSheet.create({
     backgroundColor: '#FFE4E4',
     alignItems: 'center',
     justifyContent: 'center',
-  },
-  passengerNoShowText: {
-    fontSize: 14,
-    fontWeight: '800' as const,
-    color: DriverColors.danger,
   },
   actionButton: {
     marginTop: 14,

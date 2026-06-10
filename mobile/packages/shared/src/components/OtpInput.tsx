@@ -82,7 +82,7 @@ export default function OtpInput({
           keyboardType="number-pad"
           maxLength={1}
           selectTextOnFocus
-          accessibilityLabel={`Digit ${index + 1} of ${length}`}
+          accessibilityLabel={`Цифра ${index + 1} из ${length}`}
         />
       ))}
     </Animated.View>

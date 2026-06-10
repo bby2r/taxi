@@ -10,15 +10,16 @@ interface StatCardProps {
 
 export default function StatCard({ title, orders, earnings }: StatCardProps): React.ReactNode {
   const ordersLabel = orders === 1 ? 'заказ' : orders < 5 ? 'заказа' : 'заказов';
+  const earningsLabel = earnings.toLocaleString('ru-RU');
 
   return (
     <View
       style={styles.card}
-      accessibilityLabel={`${title}: ${orders} ${ordersLabel}, ${earnings} сом`}
+      accessibilityLabel={`${title}: ${orders} ${ordersLabel}, ${earningsLabel} сом`}
     >
       <Text style={[Typography.caption, { color: DriverColors.textMuted }]}>{title}</Text>
       <Text style={[Typography.h2, { color: DriverColors.primary, marginTop: 8 }]}>
-        {earnings} сом
+        {earningsLabel} сом
       </Text>
       <Text style={[Typography.body, { color: DriverColors.textSecondary, marginTop: 4 }]}>
         {orders} {ordersLabel}
