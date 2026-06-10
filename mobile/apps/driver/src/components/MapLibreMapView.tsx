@@ -424,7 +424,7 @@ function buildHtml(apiKey: string, styleName: string, center: [number, number], 
       // shimmers on a jittery bearing.
       var FOLLOW_POS_A = 0.10;
       var FOLLOW_BRG_A = 0.12;
-      var FOLLOW_DEAD_DEG = 2; // Kalman heading is already smooth → tiny deadzone
+      var FOLLOW_DEAD_DEG = 4; // ignore sub-4° heading wobble so the map doesn't shimmer on low-speed GPS noise
       var PREDICT_MAX_MS = 1500; // clamp dead-reckoning so a dropped fix can't run away
       var VEL_EMA = 0.4; // legacy fallback only (used when RN sends no velocity)
 

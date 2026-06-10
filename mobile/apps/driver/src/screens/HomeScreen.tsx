@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import {
   View,
   Text,
@@ -21,7 +21,8 @@ import {
   useAuth,
   useLocation,
   useCompassBearing,
-  pickBearing,
+  advanceCourseUp,
+  type CourseUpState,
   DriverColors,
   Typography,
   DEFAULT_MAP_REGION,
@@ -212,8 +213,11 @@ export default function HomeScreen(): React.ReactNode {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [state.phase]);
 
-  // Компас приоритетнее GPS-heading на HomeScreen, потому что водитель
-  // часто стоит на месте и GPS возвращает null/0.
+  // Компас (магнитометр) крутит ТОЛЬКО иконку-стрелку водителя — куда
+  // физически «смотрит» телефон. Камеру карты он больше НЕ трогает: раньше
+  // малейший поворот телефона в руке разворачивал всю карту (магнитометр в
+  // машине шумит — металл, динамики, держатель), и ориентироваться было
+  // невозможно. Курс карты теперь берётся из GPS-движения (advanceCourseUp).
   const compassBearing = useCompassBearing();
 
   // Скругляем до 5 знаков (~1.1м) — отрезает sub-метровый GPS-jitter,
@@ -227,43 +231,47 @@ export default function HomeScreen(): React.ReactNode {
     !driverLocation.loading && !driverLocation.error
       ? Math.round(driverLocation.longitude * 1e5) / 1e5
       : null;
-  const bearing = useMemo(
-    () => pickBearing(compassBearing, driverLocation.heading),
-    [compassBearing, driverLocation.heading],
-  );
 
-  // Маркер водителя — лёгкий CSS-transform внутри WebView, можно
-  // обновлять чаще без боли.
+  // «Course-up» трекер: курс карты считается из реального GPS-движения, а не
+  // из магнитометра. Объявлен до эффектов, которые его читают.
+  const courseRef = useRef<CourseUpState>({
+    anchor: { latitude: 0, longitude: 0 },
+    bearing: 0,
+  });
+  const initialCenteredRef = useRef(false);
+
+  // Иконка водителя показывает направление телефона (компас). Если
+  // магнитометра нет — падаем на текущий курс карты, чтобы стрелка всё
+  // равно смотрела по ходу движения. Лёгкий CSS-transform — можно часто.
   useEffect(() => {
     if (roundedLat === null || roundedLng === null) return;
     mapRef.current?.setDriver({
       latitude: roundedLat,
       longitude: roundedLng,
-      heading: bearing,
+      heading: compassBearing ?? courseRef.current.bearing,
     });
-  }, [roundedLat, roundedLng, bearing]);
+  }, [roundedLat, roundedLng, compassBearing]);
 
-  // Камера — первый раз с zoom/pitch (нужно «защёлкнуть» 3D-вид),
-  // дальше только center+bearing без zoom/pitch. Передача zoom=15
-  // pitch=45 на каждом тике запускала easeTo с интерполяцией
-  // zoom→15 и pitch→45 (идентично текущему значению, но всё равно
-  // CPU-цикл в WebGL). Это и был основной нагрев на HomeScreen.
-  const initialCenteredRef = useRef(false);
+  // Камера «course-up» по GPS: карта повёрнута по ходу движения, но
+  // вращается только когда водитель реально едет (advanceCourseUp гейтит по
+  // пройденному расстоянию и сглаживает курс), а на месте стоит неподвижно.
+  // Поворот телефона в руке карту больше не двигает. Первый тик — с
+  // zoom/pitch (защёлкнуть 3D-вид), дальше только center+bearing: zoom/pitch
+  // на каждом тике зря гоняли easeTo и грели WebGL.
   useEffect(() => {
     if (roundedLat === null || roundedLng === null) return;
+    const fix = { latitude: roundedLat, longitude: roundedLng };
     if (!initialCenteredRef.current) {
       initialCenteredRef.current = true;
-      mapRef.current?.setCenter(
-        { latitude: roundedLat, longitude: roundedLng },
-        { zoom: 15, pitch: 45, bearing },
-      );
+      // Стартуем север-вверх и поворачиваемся только после реального
+      // смещения — не угадываем курс по первому фиксу.
+      courseRef.current = { anchor: fix, bearing: 0 };
+      mapRef.current?.setCenter(fix, { zoom: 15, pitch: 45, bearing: 0 });
       return;
     }
-    mapRef.current?.setCenter(
-      { latitude: roundedLat, longitude: roundedLng },
-      { bearing },
-    );
-  }, [roundedLat, roundedLng, bearing]);
+    courseRef.current = advanceCourseUp(courseRef.current, fix);
+    mapRef.current?.setCenter(fix, { bearing: courseRef.current.bearing });
+  }, [roundedLat, roundedLng]);
 
   const performToggle = async (): Promise<void> => {
     setTogglePending(true);
@@ -355,7 +363,7 @@ export default function HomeScreen(): React.ReactNode {
     mapRef.current?.clearOverride();
     mapRef.current?.setCenter(
       { latitude: driverLocation.latitude, longitude: driverLocation.longitude },
-      { zoom: 16, pitch: 45, bearing },
+      { zoom: 16, pitch: 45, bearing: courseRef.current.bearing },
     );
   };
 

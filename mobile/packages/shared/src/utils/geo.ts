@@ -79,3 +79,51 @@ export function smoothBearing(prev: number, target: number, alpha: number): numb
   const delta = ((target - prev + 540) % 360) - 180;
   return (((prev + alpha * delta) % 360) + 360) % 360;
 }
+
+/**
+ * Rolling state for a "course-up" map camera driven by GPS movement instead
+ * of the magnetometer. `anchor` is the position the current `bearing` was
+ * computed from; `bearing` is the smoothed map heading in degrees [0, 360).
+ */
+export interface CourseUpState {
+  anchor: { latitude: number; longitude: number };
+  bearing: number;
+}
+
+/**
+ * Advance a course-up map bearing from a new GPS fix.
+ *
+ * The heading follows the driver's actual direction of travel — the
+ * great-circle bearing from the anchor to the new fix — low-pass smoothed,
+ * and ONLY once they've moved at least `minMoveMeters` (real motion, not GPS
+ * jitter). Below that threshold the previous bearing and anchor are returned
+ * unchanged, so a parked or merely re-oriented phone never rotates the map.
+ *
+ * This is the deliberate alternative to a magnetometer-driven camera: turning
+ * the device in your hand changes the compass but not your GPS track, so the
+ * map stays put until you actually drive somewhere.
+ *
+ * @param state Previous `{ anchor, bearing }`.
+ * @param fix   Latest GPS position.
+ * @param opts  `minMoveMeters` (default 12) gates motion vs. jitter; `alpha`
+ *              (default 0.2) is the low-pass factor (0 = frozen, 1 = snap).
+ * @returns The next state — a new object when it advanced, or the SAME
+ *          `state` reference when the move was below threshold (lets callers
+ *          cheaply detect "no change").
+ */
+export function advanceCourseUp(
+  state: CourseUpState,
+  fix: { latitude: number; longitude: number },
+  opts?: { minMoveMeters?: number; alpha?: number },
+): CourseUpState {
+  const minMoveMeters = opts?.minMoveMeters ?? 12;
+  const alpha = opts?.alpha ?? 0.2;
+  if (haversineMeters(state.anchor, fix) < minMoveMeters) {
+    return state;
+  }
+  const course = bearingBetween(state.anchor, fix);
+  return {
+    anchor: { latitude: fix.latitude, longitude: fix.longitude },
+    bearing: smoothBearing(state.bearing, course, alpha),
+  };
+}

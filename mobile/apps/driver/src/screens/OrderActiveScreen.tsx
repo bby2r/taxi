@@ -651,7 +651,11 @@ export default function OrderActiveScreen(): React.ReactNode {
       if (!following) return; // user panned — WebView keeps their view (override lock)
 
       if (!kalmanRef.current) {
-        kalmanRef.current = new GeoKalmanFilter();
+        // minBearingSpeed 2.5 m/s (~9 km/h): below this the filter returns no
+        // heading and we hold the last one. Default 2.0 let the map still
+        // swing while crawling/turning slowly on village streets (velocity
+        // direction is noise-dominated at low speed) — раздражало водителя.
+        kalmanRef.current = new GeoKalmanFilter({ minBearingSpeed: 2.5 });
       }
       // Feed each fix to the filter exactly once. The effect can re-run on
       // unrelated deps (route refetch, sheet state) with no new fix — skip
