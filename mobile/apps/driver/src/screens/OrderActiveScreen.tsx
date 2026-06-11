@@ -22,6 +22,7 @@ import {
   useLocation,
   useRoute as useNavigationRoute,
   haversineMeters,
+  snapToPolyline,
   GeoKalmanFilter,
 } from '@taxi/shared';
 import type { Order, DriverCancellationReason, Route } from '@taxi/shared';
@@ -44,6 +45,20 @@ const ARRIVED_THRESHOLD_METERS = 150;
 // dead-reckons between fixes and eases toward the target — so turns don't lag
 // and the world doesn't spin around the car. When the car is nearly stopped
 // the filter returns no heading and we hold the last one (no red-light spin).
+//
+// Snap-to-route: after Kalman, the position is projected onto the routed
+// polyline (snapToPolyline). Kalman removes high-frequency jitter, but it
+// can't correct the SYSTEMATIC GPS bias that puts the fix 10-20m off the real
+// street in dense blocks. Snap pins the marker to the route line so it
+// actually drives down the street instead of along the sidewalk. Snap is
+// rejected past SNAP_REJECT_METERS — that's a real divergence (wrong turn,
+// stale route), keep the raw filtered position and let the backend reroute.
+
+// Перпендикулярный порог принятия snap'а. Под порогом — водителя считаем «на
+// маршруте» и привязываем точку к polyline (убирает GPS-смещение тротуар/двор
+// в плотной застройке). Над порогом — настоящее отклонение, оставляем
+// Kalman-позицию как есть, до следующего перерасчёта маршрута бэкендом.
+const SNAP_REJECT_METERS = 25;
 
 type NavigationProp = NativeStackNavigationProp<DriverStackParamList, 'OrderActive'>;
 
@@ -680,16 +695,39 @@ export default function OrderActiveScreen(): React.ReactNode {
         targetBearingRef.current = filtered.bearing;
       }
 
+      // Snap-to-route: pin position to the routed polyline when we're close
+      // enough to it. Kalman already smoothed GPS noise; this corrects the
+      // systematic offset that GPS gives in dense blocks (signal bouncing
+      // off buildings). Velocity (velLng/velLat) is intentionally NOT snapped
+      // — it drives the WebView's between-fix dead-reckoning, and over-
+      // correcting it would chase the polyline instead of the real motion.
+      let posLat = filtered.latitude;
+      let posLng = filtered.longitude;
+      if (trimmedCoordinates.length >= 2) {
+        const snap = snapToPolyline(
+          { latitude: filtered.latitude, longitude: filtered.longitude },
+          trimmedCoordinates,
+        );
+        if (snap && snap.perpMeters <= SNAP_REJECT_METERS) {
+          posLat = snap.latitude;
+          posLng = snap.longitude;
+        }
+      }
+
       // Hand the WebView a smooth position + velocity; its 60fps loop
       // dead-reckons between fixes and eases the camera + marker toward it.
+      // pitch 50° (а не 55°): на 55° горизонт почти уходит к верху экрана,
+      // ближняя дорога сильно растягивается и метки улиц становятся плоскими.
+      // 50° — как в Яндекс.Навигаторе: ощущение 3D остаётся, но дорога вдаль
+      // читается без искажения.
       mapRef.current?.setFollowTarget({
-        latitude: filtered.latitude,
-        longitude: filtered.longitude,
+        latitude: posLat,
+        longitude: posLng,
         bearing: targetBearingRef.current ?? undefined,
         velLng: filtered.velLngPerMs,
         velLat: filtered.velLatPerMs,
         zoom: 17,
-        pitch: 55,
+        pitch: 50,
       });
       return;
     }

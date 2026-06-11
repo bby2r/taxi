@@ -127,3 +127,84 @@ export function advanceCourseUp(
     bearing: smoothBearing(state.bearing, course, alpha),
   };
 }
+
+export interface SnapResult {
+  latitude: number;
+  longitude: number;
+  perpMeters: number;
+  segmentIndex: number;
+}
+
+/**
+ * Project a point onto the nearest segment of a polyline (route line) and
+ * return the snapped position + perpendicular distance from the input point.
+ *
+ * This is the "snap to road" step that keeps the driver pin on the route
+ * polyline instead of drifting onto the pavement when GPS error pushes the
+ * raw fix 10-20m off the actual street — common in dense city blocks. The
+ * heading is left alone; callers should keep their Kalman/velocity bearing.
+ *
+ * Equirectangular local projection with cos(lat) scaling — sub-meter
+ * accurate over the ~100m segments of a routed polyline, vastly cheaper
+ * than per-segment haversine when iterating 200+ points.
+ *
+ * Caller decides whether to USE the snap: if `perpMeters` is large the
+ * driver has likely diverged from the route (wrong turn, missing segment)
+ * and the raw fix should be kept until the backend reroutes.
+ *
+ * Returns `null` for routes with < 2 points (nothing to project onto).
+ */
+export function snapToPolyline(
+  point: { latitude: number; longitude: number },
+  polyline: ReadonlyArray<{ latitude: number; longitude: number }>,
+): SnapResult | null {
+  if (polyline.length < 2) return null;
+
+  const M_PER_DEG_LAT = 111_320;
+  const cosLat = Math.cos((point.latitude * Math.PI) / 180);
+  const mPerDegLng = M_PER_DEG_LAT * cosLat;
+
+  const px = point.longitude * mPerDegLng;
+  const py = point.latitude * M_PER_DEG_LAT;
+
+  let bestDist = Infinity;
+  let bestLat = polyline[0].latitude;
+  let bestLng = polyline[0].longitude;
+  let bestIdx = 0;
+
+  for (let i = 0; i < polyline.length - 1; i++) {
+    const a = polyline[i];
+    const b = polyline[i + 1];
+    const ax = a.longitude * mPerDegLng;
+    const ay = a.latitude * M_PER_DEG_LAT;
+    const bx = b.longitude * mPerDegLng;
+    const by = b.latitude * M_PER_DEG_LAT;
+    const dx = bx - ax;
+    const dy = by - ay;
+    const lenSq = dx * dx + dy * dy;
+    let t = 0;
+    if (lenSq > 0) {
+      t = ((px - ax) * dx + (py - ay) * dy) / lenSq;
+      if (t < 0) t = 0;
+      else if (t > 1) t = 1;
+    }
+    const sx = ax + t * dx;
+    const sy = ay + t * dy;
+    const ex = px - sx;
+    const ey = py - sy;
+    const distSq = ex * ex + ey * ey;
+    if (distSq < bestDist) {
+      bestDist = distSq;
+      bestLat = sy / M_PER_DEG_LAT;
+      bestLng = sx / mPerDegLng;
+      bestIdx = i;
+    }
+  }
+
+  return {
+    latitude: bestLat,
+    longitude: bestLng,
+    perpMeters: Math.sqrt(bestDist),
+    segmentIndex: bestIdx,
+  };
+}

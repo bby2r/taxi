@@ -202,19 +202,26 @@ function buildHtml(apiKey: string, styleName: string, center: [number, number], 
       }
 
       function makeDriverEl(heading) {
-        // 3D-индикатор направления, поворот через CSS transform на
-        // этом div'е (MapLibre Marker ставит translate на свой wrapper).
+        // Яндекс-style стрелка: яркий синий конус с белой обводкой
+        // (читается на любой подложке), мягкая тень-эллипс под ним
+        // имитирует поднятие над картой. Поворот — CSS transform на
+        // div'е (MapLibre ставит translate на wrapper Marker'а).
         var rot = (heading == null || isNaN(heading)) ? 0 : heading;
         var el = document.createElement('div');
         el.className = 'driver-pin';
         el.style.transform = 'rotate(' + rot + 'deg)';
         el.innerHTML =
           '<svg viewBox="0 0 48 48" xmlns="http://www.w3.org/2000/svg">' +
-            '<ellipse cx="24" cy="34" rx="16" ry="4" fill="#3B82F6" opacity="0.18"/>' +
-            '<path d="M24 6 L36 34 L24 28 Z" fill="#1D4ED8"/>' +
-            '<path d="M24 6 L12 34 L24 28 Z" fill="#3B82F6"/>' +
-            '<path d="M24 6 L24 28" stroke="#fff" stroke-width="1.2" opacity="0.85"/>' +
-            '<circle cx="24" cy="6" r="2.2" fill="#fff"/>' +
+            // Контактная тень-эллипс — отрывает стрелку от карты
+            '<ellipse cx="24" cy="36" rx="12" ry="3" fill="#000" opacity="0.22"/>' +
+            // Белая обводка конуса (рисуется чуть шире контура)
+            '<path d="M24 4 L37 34 L24 28 L11 34 Z" fill="#fff"/>' +
+            // Правая грань — затемнённая, даёт объём
+            '<path d="M24 7 L35 33 L24 28 Z" fill="#1E40AF"/>' +
+            // Левая грань — основной синий
+            '<path d="M24 7 L13 33 L24 28 Z" fill="#3B82F6"/>' +
+            // Световой блик по килю — добавляет «3D»
+            '<path d="M24 7 L24 28" stroke="#fff" stroke-width="1.2" opacity="0.6"/>' +
           '</svg>';
         return el;
       }
@@ -319,20 +326,31 @@ function buildHtml(apiKey: string, styleName: string, center: [number, number], 
       }
 
       function ensureRouteLayer() {
-        // Источник и слой добавляются один раз после style.load. До
-        // этого setRoute складывает данные в pending, и они применяются
-        // как только стиль загрузился.
+        // Источник и два слоя — casing (тёмная обводка) + main (яркая
+        // середина). Двухслойная линия = «трамвайный путь» как в Яндекс/
+        // 2GIS: дорога читается на любом фоне и при любом наклоне камеры,
+        // потому что край и середина контрастируют независимо от подложки.
+        // Слои добавляются один раз после style.load. До этого setRoute
+        // складывает данные в __pendingRoute и применяет их когда стиль
+        // загрузится.
         if (!__map || !__styleLoaded || __map.getSource('route')) return;
         __map.addSource('route', {
           type: 'geojson',
           data: { type: 'Feature', properties: {}, geometry: { type: 'LineString', coordinates: [] } },
         });
         __map.addLayer({
+          id: 'route-casing',
+          type: 'line',
+          source: 'route',
+          layout: { 'line-cap': 'round', 'line-join': 'round' },
+          paint: { 'line-color': '#0B3B82', 'line-width': 12, 'line-opacity': 0.9 },
+        });
+        __map.addLayer({
           id: 'route',
           type: 'line',
           source: 'route',
           layout: { 'line-cap': 'round', 'line-join': 'round' },
-          paint: { 'line-color': '${DriverColors.primary}', 'line-width': 9 },
+          paint: { 'line-color': '${DriverColors.primary}', 'line-width': 7 },
         });
       }
 
