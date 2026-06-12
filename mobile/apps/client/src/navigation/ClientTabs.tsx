@@ -15,18 +15,30 @@ export default function ClientTabs(): React.ReactNode {
     <Tab.Navigator
       screenOptions={{
         headerShown: false,
+        // Активный — brand teal; неактивный — textSecondary (#475569,
+        // контраст ~8:1) вместо textMuted (#6B7A8F, ~5.6:1). Muted на
+        // тёплой белой подложке визуально «уплывал», тонкие outline-
+        // иконки и 12px-лейблы было трудно различить.
         tabBarActiveTintColor: ClientColors.primary,
-        tabBarInactiveTintColor: ClientColors.textMuted,
+        tabBarInactiveTintColor: ClientColors.textSecondary,
         tabBarStyle: {
           backgroundColor: ClientColors.white,
           borderTopColor: ClientColors.border,
-          height: 80,
-          paddingBottom: 20,
-          paddingTop: 8,
+          borderTopWidth: 1,
+          height: 84,
+          paddingBottom: 22,
+          paddingTop: 10,
+          shadowColor: '#000',
+          shadowOpacity: 0.08,
+          shadowRadius: 12,
+          shadowOffset: { width: 0, height: -2 },
+          elevation: 12,
         },
         tabBarLabelStyle: {
           ...Typography.caption,
           fontSize: 12,
+          fontWeight: '600',
+          marginTop: 2,
         },
       }}
     >

@@ -17,18 +17,30 @@ export default function DriverTabs(): React.ReactNode {
     <Tab.Navigator
       screenOptions={{
         headerShown: false,
+        // Активный — яркий brand-золотой; неактивный — светло-серый
+        // textSecondary (#D1D5DB) вместо textMuted (#9CA3AF) — на тёмном
+        // фоне таб-бара #1F2937 muted давал ~3.5:1 контраст, лейблы
+        // буквально сливались. Secondary даёт ~10:1 — читается как надо.
         tabBarActiveTintColor: DriverColors.primary,
-        tabBarInactiveTintColor: DriverColors.textMuted,
+        tabBarInactiveTintColor: DriverColors.textSecondary,
         tabBarStyle: {
           backgroundColor: DriverColors.background,
           borderTopColor: DriverColors.border,
-          height: 80,
-          paddingBottom: 20,
-          paddingTop: 8,
+          borderTopWidth: 1,
+          height: 84,
+          paddingBottom: 22,
+          paddingTop: 10,
+          shadowColor: '#000',
+          shadowOpacity: 0.35,
+          shadowRadius: 12,
+          shadowOffset: { width: 0, height: -2 },
+          elevation: 12,
         },
         tabBarLabelStyle: {
           ...Typography.caption,
           fontSize: 12,
+          fontWeight: '600',
+          marginTop: 2,
         },
       }}
     >

@@ -401,30 +401,21 @@ export default function HomeScreen(): React.ReactNode {
         <View style={styles.topActions}>
           <TouchableOpacity
             onPress={handleRecenter}
-            activeOpacity={0.7}
+            activeOpacity={0.75}
             style={styles.iconButton}
             accessibilityRole="button"
             accessibilityLabel="Центрировать на мне"
           >
-            <Feather name="crosshair" size={20} color={DriverColors.textPrimary} />
+            <Feather name="crosshair" size={20} color={DriverColors.primary} />
           </TouchableOpacity>
           <TouchableOpacity
             onPress={() => navigation.navigate('Stats')}
-            activeOpacity={0.7}
+            activeOpacity={0.75}
             style={styles.iconButton}
             accessibilityRole="button"
             accessibilityLabel="Статистика"
           >
-            <Feather name="bar-chart-2" size={20} color={DriverColors.textPrimary} />
-          </TouchableOpacity>
-          <TouchableOpacity
-            onPress={auth.logout}
-            activeOpacity={0.7}
-            style={styles.iconButton}
-            accessibilityRole="button"
-            accessibilityLabel="Выйти"
-          >
-            <Feather name="log-out" size={20} color={DriverColors.textPrimary} />
+            <Feather name="bar-chart-2" size={20} color={DriverColors.primary} />
           </TouchableOpacity>
         </View>
       </View>
@@ -716,30 +707,34 @@ const styles = StyleSheet.create({
   topPill: {
     backgroundColor: DriverColors.cardBackground,
     paddingHorizontal: 14,
-    paddingVertical: 8,
-    borderRadius: 18,
+    paddingVertical: 9,
+    borderRadius: 20,
+    borderWidth: 1,
+    borderColor: DriverColors.border,
     shadowColor: '#000',
-    shadowOpacity: 0.25,
-    shadowRadius: 6,
-    shadowOffset: { width: 0, height: 2 },
-    elevation: 3,
+    shadowOpacity: 0.28,
+    shadowRadius: 10,
+    shadowOffset: { width: 0, height: 3 },
+    elevation: 4,
   },
   topActions: {
     flexDirection: 'row',
-    gap: 8,
+    gap: 10,
   },
   iconButton: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
+    width: 46,
+    height: 46,
+    borderRadius: 23,
     backgroundColor: DriverColors.cardBackground,
+    borderWidth: 1,
+    borderColor: DriverColors.border,
     justifyContent: 'center',
     alignItems: 'center',
     shadowColor: '#000',
-    shadowOpacity: 0.25,
-    shadowRadius: 6,
-    shadowOffset: { width: 0, height: 2 },
-    elevation: 3,
+    shadowOpacity: 0.32,
+    shadowRadius: 10,
+    shadowOffset: { width: 0, height: 3 },
+    elevation: 4,
   },
   bannerTitleRow: {
     flexDirection: 'row',
