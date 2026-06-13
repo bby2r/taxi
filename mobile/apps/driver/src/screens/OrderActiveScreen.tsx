@@ -859,6 +859,16 @@ export default function OrderActiveScreen(): React.ReactNode {
             mapRef.current?.stopFollow();
             mapRef.current?.clearOverride();
             if (driverPoint) {
+              // setCenter с duration:0 = жёсткий jumpTo на driverPoint.
+              // Дублирует то, что должен сделать init-ветка setFollowTarget,
+              // но явно — и НЕ зависит от __follow-стейта в WebView. Так
+              // мы 100% гарантируем что камера встала где надо, и только
+              // потом setFollowTarget разворачивает follow loop с этого
+              // же места.
+              mapRef.current?.setCenter(
+                { latitude: driverPoint.latitude, longitude: driverPoint.longitude },
+                { zoom: 17, pitch: 50, duration: 0 },
+              );
               mapRef.current?.setFollowTarget({
                 latitude: driverPoint.latitude,
                 longitude: driverPoint.longitude,
