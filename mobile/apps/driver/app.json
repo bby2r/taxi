@@ -87,6 +87,15 @@
         {
           "RNMapboxMapsImpl": "mapbox"
         }
+      ],
+      [
+        "expo-font",
+        {
+          "fonts": [
+            "../../node_modules/@expo/vector-icons/build/vendor/react-native-vector-icons/Fonts/Feather.ttf",
+            "../../node_modules/@expo/vector-icons/build/vendor/react-native-vector-icons/Fonts/Ionicons.ttf"
+          ]
+        }
       ]
     ],
     "extra": {
