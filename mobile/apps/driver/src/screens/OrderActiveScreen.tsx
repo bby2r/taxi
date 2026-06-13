@@ -849,27 +849,15 @@ export default function OrderActiveScreen(): React.ReactNode {
         <TouchableOpacity
           style={styles.recenterButton}
           onPress={() => {
-            // Жёсткая последовательность: stopFollow обнуляет __follow в
-            // WebView (был оставленный target ещё с момента override —
-            // полагаясь на effect+next-GPS-fix получали jump в угол карты).
-            // clearOverride снимает override-флаг (программные setCenter
-            // снова разрешены). Сразу же синхронно даём НОВЫЙ setFollowTarget
-            // с текущей позицией водителя — через init-ветку это jumpTo
-            // ровно на driverPoint, не дожидаясь следующего GPS (1 сек).
-            mapRef.current?.stopFollow();
-            mapRef.current?.clearOverride();
+            // Атомарный recenter: один injectJavaScript в WebView,
+            // всё внутри одной синхронной функции — сброс override,
+            // обнуление follow, прямой jumpTo, перезапуск loop.
+            // Прошлый подход (4 отдельных dispatch'а) мог проигрывать
+            // race condition: между clearOverride и setCenter случайный
+            // touch-event снова поднимал __userOverride=true, setCenter
+            // блокировался guard'ом, камера зависала в углу.
             if (driverPoint) {
-              // setCenter с duration:0 = жёсткий jumpTo на driverPoint.
-              // Дублирует то, что должен сделать init-ветка setFollowTarget,
-              // но явно — и НЕ зависит от __follow-стейта в WebView. Так
-              // мы 100% гарантируем что камера встала где надо, и только
-              // потом setFollowTarget разворачивает follow loop с этого
-              // же места.
-              mapRef.current?.setCenter(
-                { latitude: driverPoint.latitude, longitude: driverPoint.longitude },
-                { zoom: 17, pitch: 50, duration: 0 },
-              );
-              mapRef.current?.setFollowTarget({
+              mapRef.current?.recenterTo({
                 latitude: driverPoint.latitude,
                 longitude: driverPoint.longitude,
                 zoom: 17,

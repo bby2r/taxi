@@ -59,6 +59,20 @@ export type MapLibreMapHandle = {
   // активен, setCenter/setPitch/fitBounds — no-op'ы. Вызывается RN
   // при тапе «Вернуться к маршруту», чтобы камера снова следовала.
   clearOverride: () => void;
+  // Атомарный recenter — один диспатч, который внутри WebView
+  // в одной синхронной операции: сбрасывает __userOverride и __follow,
+  // делает jumpTo + placeDriver на цель, переинициализирует follow loop.
+  // Чтобы избежать race condition: между отдельными командами
+  // (stopFollow + clearOverride + setCenter + setFollowTarget) случайный
+  // touch-event мог снова поднять __userOverride=true, блокируя setCenter
+  // и оставляя камеру висеть в углу. Здесь это невозможно.
+  recenterTo: (
+    target: LatLng & {
+      bearing?: number;
+      zoom?: number;
+      pitch?: number;
+    },
+  ) => void;
 };
 
 type Props = {
@@ -543,6 +557,35 @@ function buildHtml(apiKey: string, styleName: string, center: [number, number], 
         __follow = null;
       }
 
+      // Атомарный recenter: всё в одной синхронной функции.
+      // 1) Снимает override (даже если только что был set'ом случайным
+      //    тачем — потому что мы здесь явно по нажатию «Вернуться»),
+      // 2) Останавливает текущий follow loop и обнуляет __follow,
+      // 3) Делает прямой jumpTo и placeDriver на target — БЕЗ guard'ов,
+      // 4) Через setFollowTarget перезапускает loop со свежим состоянием.
+      function recenterTo(cmd) {
+        if (!__map) return;
+        __userOverride = false;
+        if (__followRaf) cancelAnimationFrame(__followRaf);
+        __followRaf = null;
+        __follow = null;
+        if (__driverTweenRaf) { cancelAnimationFrame(__driverTweenRaf); __driverTweenRaf = null; }
+        var lng = cmd.longitude;
+        var lat = cmd.latitude;
+        var bearing = (typeof cmd.bearing === 'number') ? cmd.bearing : __map.getBearing();
+        var zoom = (typeof cmd.zoom === 'number') ? cmd.zoom : 17;
+        var pitch = (typeof cmd.pitch === 'number') ? cmd.pitch : 50;
+        __map.jumpTo({ center: [lng, lat], bearing: bearing, zoom: zoom, pitch: pitch });
+        placeDriver(lng, lat, bearing);
+        // Запустим follow loop с этой же точки — поведение продолжится
+        // как раньше, но с гарантированно правильным начальным __follow.
+        setFollowTarget({
+          longitude: lng, latitude: lat,
+          bearing: bearing, zoom: zoom, pitch: pitch,
+        });
+        post({ type: 'log', message: 'recenterTo lng=' + lng.toFixed(6) + ' lat=' + lat.toFixed(6) + ' brg=' + bearing.toFixed(1) });
+      }
+
       window.applyCommand = function (cmd) {
         try {
           switch (cmd.type) {
@@ -552,6 +595,7 @@ function buildHtml(apiKey: string, styleName: string, center: [number, number], 
             case 'setCenter': setCenter(cmd, cmd.opts); break;
             case 'setFollowTarget': setFollowTarget(cmd); break;
             case 'stopFollow': stopFollow(); break;
+            case 'recenterTo': recenterTo(cmd); break;
             case 'setPitch':
               if (__userOverride) break;
               if (__map && typeof cmd.pitch === 'number') __map.setPitch(cmd.pitch);
@@ -768,6 +812,7 @@ const MapLibreMapView = forwardRef<MapLibreMapHandle, Props>(function MapLibreMa
       setPitch: (pitch) => dispatch({ type: 'setPitch', pitch }),
       fitBounds: (coordinates, padding) => dispatch({ type: 'fitBounds', coordinates, padding }),
       clearOverride: () => dispatch({ type: 'clearOverride' }),
+      recenterTo: (target) => dispatch({ type: 'recenterTo', ...target }),
     }),
     [dispatch],
   );
