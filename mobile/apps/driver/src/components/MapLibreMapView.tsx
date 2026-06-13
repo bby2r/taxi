@@ -562,12 +562,11 @@ function buildHtml(apiKey: string, styleName: string, center: [number, number], 
         __follow = null;
       }
 
-      // Атомарный recenter: всё в одной синхронной функции.
-      // 1) Снимает override (даже если только что был set'ом случайным
-      //    тачем — потому что мы здесь явно по нажатию «Вернуться»),
-      // 2) Останавливает текущий follow loop и обнуляет __follow,
-      // 3) Делает прямой jumpTo и placeDriver на target — БЕЗ guard'ов,
-      // 4) Через setFollowTarget перезапускает loop со свежим состоянием.
+      // Атомарный recenter — один JS call. Сбрасывает override и follow,
+      // дальше setFollowTarget идёт через init-ветку и сам делает jumpTo +
+      // placeDriver. Без этой атомарности 4 отдельных диспатча проигрывали
+      // race condition: между clearOverride и setCenter случайный touch-event
+      // снова поднимал __userOverride=true, guard'ы блокировали камеру.
       function recenterTo(cmd) {
         if (!__map) return;
         __userOverride = false;
@@ -575,20 +574,7 @@ function buildHtml(apiKey: string, styleName: string, center: [number, number], 
         __followRaf = null;
         __follow = null;
         if (__driverTweenRaf) { cancelAnimationFrame(__driverTweenRaf); __driverTweenRaf = null; }
-        var lng = cmd.longitude;
-        var lat = cmd.latitude;
-        var bearing = (typeof cmd.bearing === 'number') ? cmd.bearing : __map.getBearing();
-        var zoom = (typeof cmd.zoom === 'number') ? cmd.zoom : 17;
-        var pitch = (typeof cmd.pitch === 'number') ? cmd.pitch : 50;
-        __map.jumpTo({ center: [lng, lat], bearing: bearing, zoom: zoom, pitch: pitch, padding: NAV_PADDING });
-        placeDriver(lng, lat, bearing);
-        // Запустим follow loop с этой же точки — поведение продолжится
-        // как раньше, но с гарантированно правильным начальным __follow.
-        setFollowTarget({
-          longitude: lng, latitude: lat,
-          bearing: bearing, zoom: zoom, pitch: pitch,
-        });
-        post({ type: 'log', message: 'recenterTo lng=' + lng.toFixed(6) + ' lat=' + lat.toFixed(6) + ' brg=' + bearing.toFixed(1) });
+        setFollowTarget(cmd);
       }
 
       window.applyCommand = function (cmd) {
@@ -847,9 +833,6 @@ const MapLibreMapView = forwardRef<MapLibreMapHandle, Props>(function MapLibreMa
           // eslint-disable-next-line no-console
           console.warn('[MapLibreMapView] map error:', data.message);
           setInitError(data.message ?? 'Не удалось загрузить карту');
-        } else if (data.type === 'log') {
-          // eslint-disable-next-line no-console
-          console.log('[MapLibreMapView]', data.message);
         }
       } catch {
         // Malformed message — ignore.

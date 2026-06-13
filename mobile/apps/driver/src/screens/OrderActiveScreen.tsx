@@ -696,23 +696,21 @@ export default function OrderActiveScreen(): React.ReactNode {
       }
 
       // Snap-to-route: pin position to the routed polyline when we're close
-      // enough to it. Kalman already smoothed GPS noise; this corrects the
-      // systematic offset that GPS gives in dense blocks (signal bouncing
-      // off buildings). Velocity (velLng/velLat) is intentionally NOT snapped
-      // — it drives the WebView's between-fix dead-reckoning, and over-
-      // correcting it would chase the polyline instead of the real motion.
-      let posLat = filtered.latitude;
-      let posLng = filtered.longitude;
-      if (trimmedCoordinates.length >= 2) {
-        const snap = snapToPolyline(
-          { latitude: filtered.latitude, longitude: filtered.longitude },
-          trimmedCoordinates,
-        );
-        if (snap && snap.perpMeters <= SNAP_REJECT_METERS) {
-          posLat = snap.latitude;
-          posLng = snap.longitude;
-        }
-      }
+      // enough to it. Kalman уже сгладил GPS noise; snap корректирует
+      // СИСТЕМНОЕ смещение, которое GPS даёт в плотной застройке (отражения
+      // от зданий). Velocity намеренно НЕ снапается — она кормит WebView
+      // dead-reckoning между фиксами; снап velocity заставил бы карту
+      // двигаться вдоль polyline, а не вдоль реального движения.
+      const snap =
+        trimmedCoordinates.length >= 2
+          ? snapToPolyline(
+              { latitude: filtered.latitude, longitude: filtered.longitude },
+              trimmedCoordinates,
+            )
+          : null;
+      const useSnap = snap !== null && snap.perpMeters <= SNAP_REJECT_METERS;
+      const posLat = useSnap ? snap.latitude : filtered.latitude;
+      const posLng = useSnap ? snap.longitude : filtered.longitude;
 
       // Hand the WebView a smooth position + velocity; its 60fps loop
       // dead-reckons between fixes and eases the camera + marker toward it.
@@ -849,13 +847,6 @@ export default function OrderActiveScreen(): React.ReactNode {
         <TouchableOpacity
           style={styles.recenterButton}
           onPress={() => {
-            // Атомарный recenter: один injectJavaScript в WebView,
-            // всё внутри одной синхронной функции — сброс override,
-            // обнуление follow, прямой jumpTo, перезапуск loop.
-            // Прошлый подход (4 отдельных dispatch'а) мог проигрывать
-            // race condition: между clearOverride и setCenter случайный
-            // touch-event снова поднимал __userOverride=true, setCenter
-            // блокировался guard'ом, камера зависала в углу.
             if (driverPoint) {
               mapRef.current?.recenterTo({
                 latitude: driverPoint.latitude,
