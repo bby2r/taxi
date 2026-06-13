@@ -6,10 +6,7 @@ import { AuthProvider, useIconFonts } from '@taxi/shared';
 import RootNavigator from './src/navigation/RootNavigator';
 
 export default function App(): React.ReactNode {
-  const fontsReady = useIconFonts({
-    feather: require('./assets/fonts/Feather.ttf'),
-    ionicons: require('./assets/fonts/Ionicons.ttf'),
-  });
+  const fontsReady = useIconFonts();
   if (!fontsReady) {
     return null;
   }

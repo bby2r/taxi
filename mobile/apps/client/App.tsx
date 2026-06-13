@@ -14,10 +14,7 @@ SplashScreen.preventAutoHideAsync().catch(() => {});
 
 export default function App(): React.ReactNode {
   const [introVisible, setIntroVisible] = useState(true);
-  const fontsReady = useIconFonts({
-    feather: require('./assets/fonts/Feather.ttf'),
-    ionicons: require('./assets/fonts/Ionicons.ttf'),
-  });
+  const fontsReady = useIconFonts();
 
   useEffect(() => {
     if (fontsReady) {

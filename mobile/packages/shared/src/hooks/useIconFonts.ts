@@ -1,27 +1,28 @@
 import { useEffect, useState } from 'react';
 import * as Font from 'expo-font';
+import { Feather, Ionicons } from '@expo/vector-icons';
 
 /**
- * Регистрирует шрифты иконок (vector-icons) через ReactFontManager.
+ * Загружает шрифты vector-icons.
  *
- * С New Architecture автоматический lookup `assets/fonts/` через
- * Typeface.createFromAsset перестал работать — шрифты копируются в
- * APK (через expo-font config plugin), но `<Text fontFamily="feather">`
- * остаётся unmatched, иконки рендерятся пустыми. `Font.loadAsync` явно
- * регистрирует family в ReactFontManager.
+ * `@expo/vector-icons` Icon-компонент сам проверяет `Font.isLoaded(fontName)`
+ * в state и держит пустой `<Text/>` пока не загружен. Если просто
+ * Font.loadAsync с НАШИМ require'ом — Icon-компонент не знает что шрифт
+ * это его шрифт, и продолжает рендерить пусто (или race'ит со своим
+ * componentDidMount await Font.loadAsync которое promise-rejects в
+ * release без правильно настроенного asset path'а).
  *
- * Имя family должно совпадать с тем, что использует @expo/vector-icons
- * внутри `createIconSet` — это СТРОЧНОЕ (`'feather'`, `'ionicons'`),
- * Android case-sensitive.
- *
- * Возвращает `true` когда шрифты загружены ИЛИ загрузка упала — апп
- * никогда не блокируется навсегда из-за шрифтов.
+ * Используем `Feather.loadFont()` / `Ionicons.loadFont()` — это статические
+ * методы которые внутри делают `Font.loadAsync({feather: <их-asset-id>})`.
+ * Это гарантированно использует expoAssetId который зашит при сборке
+ * библиотеки, и Icon-компонент будет в синхронизированном `fontIsLoaded`
+ * state на первом рендере.
  */
-export function useIconFonts(fontMap: Record<string, number>): boolean {
+export function useIconFonts(): boolean {
   const [ready, setReady] = useState(false);
   useEffect(() => {
-    Font.loadAsync(fontMap)
-      .catch((e) => console.warn('[useIconFonts] load failed:', e))
+    Promise.all([Feather.loadFont(), Ionicons.loadFont()])
+      .catch((e) => console.warn('[useIconFonts] loadFont failed:', e))
       .finally(() => setReady(true));
   }, []);
   return ready;
