@@ -849,16 +849,23 @@ export default function OrderActiveScreen(): React.ReactNode {
         <TouchableOpacity
           style={styles.recenterButton}
           onPress={() => {
-            // stopFollow ПЕРЕД clearOverride: первый сбрасывает __follow в
-            // WebView (cur camera/target/velocity), второй снимает
-            // override-флаг. Без stopFollow re-seed внутри clearOverride
-            // оставлял старую cur/target из момента когда водитель отпанил
-            // карту — за время override он успевал уехать, и dead-reckoning
-            // loop тащил камеру через большую дельту, выглядело как прыжок
-            // в случайный угол. Сейчас следующий setFollowTarget пройдёт
-            // через init-ветку и сделает точный jumpTo на текущую позицию.
+            // Жёсткая последовательность: stopFollow обнуляет __follow в
+            // WebView (был оставленный target ещё с момента override —
+            // полагаясь на effect+next-GPS-fix получали jump в угол карты).
+            // clearOverride снимает override-флаг (программные setCenter
+            // снова разрешены). Сразу же синхронно даём НОВЫЙ setFollowTarget
+            // с текущей позицией водителя — через init-ветку это jumpTo
+            // ровно на driverPoint, не дожидаясь следующего GPS (1 сек).
             mapRef.current?.stopFollow();
             mapRef.current?.clearOverride();
+            if (driverPoint) {
+              mapRef.current?.setFollowTarget({
+                latitude: driverPoint.latitude,
+                longitude: driverPoint.longitude,
+                zoom: 17,
+                pitch: 50,
+              });
+            }
             kalmanRef.current = null;
             lastFedTsRef.current = null;
             targetBearingRef.current = null;
