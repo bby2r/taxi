@@ -1,7 +1,6 @@
 import React from 'react';
-import { Ionicons } from '@expo/vector-icons';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
-import { ClientColors, Typography } from '@taxi/shared';
+import { ClientColors, Typography, Icon } from '@taxi/shared';
 import HomeScreen from '../screens/HomeScreen';
 import IntercityScreen from '../screens/IntercityScreen';
 import HistoryScreen from '../screens/HistoryScreen';
@@ -47,7 +46,7 @@ export default function ClientTabs(): React.ReactNode {
         component={HomeScreen}
         options={{
           tabBarLabel: 'Главная',
-          tabBarIcon: ({ color }) => <Ionicons name="home-outline" size={24} color={color} />,
+          tabBarIcon: ({ color }) => <Icon name="home-outline" size={24} color={color} />,
         }}
       />
       <Tab.Screen
@@ -55,7 +54,7 @@ export default function ClientTabs(): React.ReactNode {
         component={IntercityScreen}
         options={{
           tabBarLabel: 'Межгород',
-          tabBarIcon: ({ color }) => <Ionicons name="bus-outline" size={24} color={color} />,
+          tabBarIcon: ({ color }) => <Icon name="bus-outline" size={24} color={color} />,
         }}
       />
       <Tab.Screen
@@ -63,7 +62,7 @@ export default function ClientTabs(): React.ReactNode {
         component={HistoryScreen}
         options={{
           tabBarLabel: 'История',
-          tabBarIcon: ({ color }) => <Ionicons name="time-outline" size={24} color={color} />,
+          tabBarIcon: ({ color }) => <Icon name="time-outline" size={24} color={color} />,
         }}
       />
       <Tab.Screen
@@ -71,7 +70,7 @@ export default function ClientTabs(): React.ReactNode {
         component={ProfileScreen}
         options={{
           tabBarLabel: 'Профиль',
-          tabBarIcon: ({ color }) => <Ionicons name="person-outline" size={24} color={color} />,
+          tabBarIcon: ({ color }) => <Icon name="person-outline" size={24} color={color} />,
         }}
       />
     </Tab.Navigator>

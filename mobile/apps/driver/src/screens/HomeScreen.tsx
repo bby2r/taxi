@@ -11,7 +11,7 @@ import {
   ActivityIndicator,
   Linking,
 } from 'react-native';
-import { Feather } from '@expo/vector-icons';
+import { Icon } from '@taxi/shared';
 import * as Location from 'expo-location';
 import { useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
@@ -406,7 +406,7 @@ export default function HomeScreen(): React.ReactNode {
             accessibilityRole="button"
             accessibilityLabel="Центрировать на мне"
           >
-            <Feather name="crosshair" size={20} color={DriverColors.primary} />
+            <Icon name="crosshair" size={20} color={DriverColors.primary} />
           </TouchableOpacity>
           <TouchableOpacity
             onPress={() => navigation.navigate('Stats')}
@@ -415,7 +415,7 @@ export default function HomeScreen(): React.ReactNode {
             accessibilityRole="button"
             accessibilityLabel="Статистика"
           >
-            <Feather name="bar-chart-2" size={20} color={DriverColors.primary} />
+            <Icon name="bar-chart-2" size={20} color={DriverColors.primary} />
           </TouchableOpacity>
         </View>
       </View>
@@ -431,7 +431,7 @@ export default function HomeScreen(): React.ReactNode {
       {pushStatus.kind !== 'success' && pushStatus.kind !== 'starting' && (
         <View style={styles.pushBanner}>
           <View style={styles.bannerTitleRow}>
-            <Feather name="alert-triangle" size={16} color={DriverColors.danger} />
+            <Icon name="alert-triangle" size={16} color={DriverColors.danger} />
             <Text style={[Typography.bodyBold, styles.bannerTitleText]}>
               Push-уведомления не настроены
             </Text>
@@ -490,7 +490,7 @@ export default function HomeScreen(): React.ReactNode {
           testID="fsi-banner"
         >
           <View style={styles.bannerTitleRow}>
-            <Feather name="alert-triangle" size={16} color={DriverColors.danger} />
+            <Icon name="alert-triangle" size={16} color={DriverColors.danger} />
             <Text style={[Typography.bodyBold, styles.bannerTitleText]}>
               Заказ не открывается на экране
             </Text>
@@ -515,7 +515,7 @@ export default function HomeScreen(): React.ReactNode {
           testID="overlay-banner"
         >
           <View style={styles.bannerTitleRow}>
-            <Feather name="alert-triangle" size={16} color={DriverColors.danger} />
+            <Icon name="alert-triangle" size={16} color={DriverColors.danger} />
             <Text style={[Typography.bodyBold, styles.bannerTitleText]}>
               Поверх других приложений выключено
             </Text>
@@ -544,7 +544,7 @@ export default function HomeScreen(): React.ReactNode {
           testID="battery-banner"
         >
           <View style={styles.bannerTitleRow}>
-            <Feather name="alert-triangle" size={16} color={DriverColors.danger} />
+            <Icon name="alert-triangle" size={16} color={DriverColors.danger} />
             <Text style={[Typography.bodyBold, styles.bannerTitleText]}>
               Приложение может вылетать в фоне
             </Text>

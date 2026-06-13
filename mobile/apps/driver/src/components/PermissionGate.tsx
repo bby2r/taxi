@@ -7,8 +7,7 @@ import {
   TouchableOpacity,
   View,
 } from 'react-native';
-import { Feather } from '@expo/vector-icons';
-import { ActionButton, DriverColors, Typography } from '@taxi/shared';
+import { ActionButton, DriverColors, Typography, Icon } from '@taxi/shared';
 import {
   hasOverlayPermission,
   isIgnoringBatteryOptimizations,
@@ -191,7 +190,7 @@ function PermissionRow({ label, description, granted, onFix }: PermissionRowProp
   return (
     <View style={styles.row}>
       <View style={[styles.statusBadge, granted ? styles.statusBadgeOk : styles.statusBadgeWarn]}>
-        <Feather
+        <Icon
           name={granted ? 'check' : 'alert-triangle'}
           size={15}
           color={granted ? DriverColors.success : DriverColors.danger}

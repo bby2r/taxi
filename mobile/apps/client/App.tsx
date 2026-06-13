@@ -2,7 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { StatusBar } from 'expo-status-bar';
 import { StyleSheet, View } from 'react-native';
 import * as SplashScreen from 'expo-splash-screen';
-import { AuthProvider, ClientColors, useIconFonts } from '@taxi/shared';
+import { AuthProvider, ClientColors } from '@taxi/shared';
 import RootNavigator from './src/navigation/RootNavigator';
 import BrandIntro from './src/components/BrandIntro';
 
@@ -14,17 +14,10 @@ SplashScreen.preventAutoHideAsync().catch(() => {});
 
 export default function App(): React.ReactNode {
   const [introVisible, setIntroVisible] = useState(true);
-  const fontsReady = useIconFonts();
 
   useEffect(() => {
-    if (fontsReady) {
-      SplashScreen.hideAsync().catch(() => {});
-    }
-  }, [fontsReady]);
-
-  if (!fontsReady) {
-    return null;
-  }
+    SplashScreen.hideAsync().catch(() => {});
+  }, []);
 
   return (
     <View style={styles.root}>

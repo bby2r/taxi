@@ -11,6 +11,8 @@ export { default as ActionButton } from './components/ActionButton';
 export { default as ConfirmModal } from './components/ConfirmModal';
 export { default as EmptyState } from './components/EmptyState';
 export { default as ErrorPill } from './components/ErrorPill';
+export { default as Icon } from './components/Icon';
+export type { IconName } from './components/Icon';
 export { default as OtpInput } from './components/OtpInput';
 export { default as Skeleton } from './components/Skeleton';
 
@@ -19,7 +21,6 @@ export { AuthProvider, useAuth } from './context/AuthContext';
 
 // Hooks
 export * from './hooks/useCompassBearing';
-export * from './hooks/useIconFonts';
 export * from './hooks/useLocation';
 export * from './hooks/useNavigationStep';
 export * from './hooks/usePusher';

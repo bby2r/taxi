@@ -12,7 +12,7 @@ import {
   TouchableOpacity,
   View,
 } from 'react-native';
-import { Feather } from '@expo/vector-icons';
+import { Icon } from '@taxi/shared';
 import {
   DriverColors,
   Typography,
@@ -214,7 +214,7 @@ export default function IntercityScreen(): React.ReactNode {
       >
         {error && (
           <View style={styles.errorPill}>
-            <Feather name="alert-triangle" size={14} color={DriverColors.danger} />
+            <Icon name="alert-triangle" size={14} color={DriverColors.danger} />
             <Text style={[Typography.caption, styles.errorText]}>{error}</Text>
           </View>
         )}
@@ -231,7 +231,7 @@ export default function IntercityScreen(): React.ReactNode {
 
         {!activeTrip && slots.length === 0 && (
           <View style={styles.emptyBlock}>
-            <Feather name="truck" size={40} color={DriverColors.textMuted} style={styles.emptyIcon} />
+            <Icon name="truck" size={40} color={DriverColors.textMuted} style={styles.emptyIcon} />
             <Text style={styles.emptyTitle}>Открытых рейсов сейчас нет</Text>
             <Text style={styles.emptyText}>
               Утренний cron создаёт slot'ы по активным расписаниям. Список обновляется каждые 15 сек.
@@ -363,7 +363,7 @@ function ActiveTripCard({
             </Text>
             {p.pickup_address && (
               <View style={styles.addressRow}>
-                <Feather name="map-pin" size={11} color={DriverColors.textSecondary} />
+                <Icon name="map-pin" size={11} color={DriverColors.textSecondary} />
                 <Text style={styles.passengerAddress}>{p.pickup_address}</Text>
               </View>
             )}
@@ -376,7 +376,7 @@ function ActiveTripCard({
               accessibilityRole="button"
               accessibilityLabel="Позвонить пассажиру"
             >
-              <Feather name="phone" size={18} color={DriverColors.background} />
+              <Icon name="phone" size={18} color={DriverColors.background} />
             </TouchableOpacity>
           )}
           {(isClaimed || isReady) && (
@@ -388,7 +388,7 @@ function ActiveTripCard({
               accessibilityRole="button"
               accessibilityLabel="Отметить, что пассажир не пришёл"
             >
-              <Feather name="x" size={16} color={DriverColors.danger} />
+              <Icon name="x" size={16} color={DriverColors.danger} />
             </TouchableOpacity>
           )}
         </View>

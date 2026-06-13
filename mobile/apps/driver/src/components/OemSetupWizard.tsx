@@ -8,7 +8,7 @@ import {
   TouchableOpacity,
   View,
 } from 'react-native';
-import { Feather } from '@expo/vector-icons';
+import { Icon } from '@taxi/shared';
 import { ActionButton, DriverColors, Typography } from '@taxi/shared';
 import {
   openOemPowerSettings,
@@ -177,7 +177,7 @@ export default function OemSetupWizard({
             accessibilityRole="button"
             accessibilityLabel="Закрыть"
           >
-            <Feather name="x" size={22} color={DriverColors.textMuted} />
+            <Icon name="x" size={22} color={DriverColors.textMuted} />
           </TouchableOpacity>
           <Text style={[Typography.h2, styles.title]}>Чтобы не пропускать заказы</Text>
           <Text style={[Typography.body, styles.subtitle]}>

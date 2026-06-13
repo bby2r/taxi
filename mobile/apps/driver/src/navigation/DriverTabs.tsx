@@ -1,7 +1,6 @@
 import React from 'react';
-import { Ionicons } from '@expo/vector-icons';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
-import { DriverColors, Typography, useAuth } from '@taxi/shared';
+import { DriverColors, Typography, useAuth, Icon } from '@taxi/shared';
 import HomeScreen from '../screens/HomeScreen';
 import IntercityScreen from '../screens/IntercityScreen';
 import ProfileScreen from '../screens/ProfileScreen';
@@ -49,7 +48,7 @@ export default function DriverTabs(): React.ReactNode {
         component={HomeScreen}
         options={{
           tabBarLabel: 'Главная',
-          tabBarIcon: ({ color }) => <Ionicons name="home-outline" size={24} color={color} />,
+          tabBarIcon: ({ color }) => <Icon name="home-outline" size={24} color={color} />,
         }}
       />
       {showIntercity && (
@@ -58,7 +57,7 @@ export default function DriverTabs(): React.ReactNode {
           component={IntercityScreen}
           options={{
             tabBarLabel: 'Межгород',
-            tabBarIcon: ({ color }) => <Ionicons name="bus-outline" size={24} color={color} />,
+            tabBarIcon: ({ color }) => <Icon name="bus-outline" size={24} color={color} />,
           }}
         />
       )}
@@ -67,7 +66,7 @@ export default function DriverTabs(): React.ReactNode {
         component={ProfileScreen}
         options={{
           tabBarLabel: 'Профиль',
-          tabBarIcon: ({ color }) => <Ionicons name="person-outline" size={24} color={color} />,
+          tabBarIcon: ({ color }) => <Icon name="person-outline" size={24} color={color} />,
         }}
       />
     </Tab.Navigator>

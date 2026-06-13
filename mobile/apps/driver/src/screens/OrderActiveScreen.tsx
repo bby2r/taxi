@@ -11,7 +11,7 @@ import {
   Modal,
 } from 'react-native';
 import BottomSheet, { BottomSheetView } from '@gorhom/bottom-sheet';
-import { Feather } from '@expo/vector-icons';
+import { Icon } from '@taxi/shared';
 import { useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import {
@@ -118,7 +118,7 @@ function ClientContact({ order }: { order: Order }): React.ReactNode {
         </Text>
       </View>
       <View style={styles.callButton}>
-        <Feather name="phone" size={18} color={DriverColors.white} />
+        <Icon name="phone" size={18} color={DriverColors.white} />
       </View>
     </TouchableOpacity>
   );
@@ -306,7 +306,7 @@ function ArrivedCard({
   return (
     <View style={styles.cardContent}>
       <View style={styles.statusTitleRow}>
-        <Feather name="check-circle" size={18} color={DriverColors.success} />
+        <Icon name="check-circle" size={18} color={DriverColors.success} />
         <Text style={[Typography.h3, { color: DriverColors.success }]}>Вы на месте</Text>
       </View>
       <Text
@@ -424,7 +424,7 @@ function CompletedCard({
 }): React.ReactNode {
   return (
     <View style={[styles.cardContent, { alignItems: 'center', justifyContent: 'center' }]}>
-      <Feather name="check-circle" size={48} color={DriverColors.success} />
+      <Icon name="check-circle" size={48} color={DriverColors.success} />
       <Text
         style={[Typography.h2, { color: DriverColors.textPrimary, marginTop: 12 }]}
       >
@@ -862,7 +862,7 @@ export default function OrderActiveScreen(): React.ReactNode {
           }}
           activeOpacity={0.85}
         >
-          <Feather name="navigation" size={16} color={DriverColors.primary} />
+          <Icon name="navigation" size={16} color={DriverColors.primary} />
           <Text style={styles.recenterText}>Вернуться к маршруту</Text>
         </TouchableOpacity>
       )}

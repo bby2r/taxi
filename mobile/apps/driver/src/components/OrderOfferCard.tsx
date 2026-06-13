@@ -9,7 +9,7 @@ import {
   StyleSheet,
   AppState,
 } from 'react-native';
-import { Feather } from '@expo/vector-icons';
+import { Icon } from '@taxi/shared';
 import { Order, DeclineReason, DriverColors, Typography } from '@taxi/shared';
 
 // Lazy-required so iOS / older builds without these modules still render.
@@ -229,7 +229,7 @@ export default function OrderOfferCard({
 
       {order.client_comment && (
         <View style={styles.commentBox}>
-          <Feather name="message-circle" size={16} color={DriverColors.textMuted} style={styles.commentEmoji} />
+          <Icon name="message-circle" size={16} color={DriverColors.textMuted} style={styles.commentEmoji} />
           <Text style={[Typography.body, styles.commentText]}>
             {order.client_comment}
           </Text>
