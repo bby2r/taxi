@@ -459,6 +459,11 @@ function buildHtml(apiKey: string, styleName: string, center: [number, number], 
       var FOLLOW_DEAD_DEG = 4; // ignore sub-4° heading wobble so the map doesn't shimmer on low-speed GPS noise
       var PREDICT_MAX_MS = 1500; // clamp dead-reckoning so a dropped fix can't run away
       var VEL_EMA = 0.4; // legacy fallback only (used when RN sends no velocity)
+      // Padding смещает логический центр камеры вверх, чтобы driver-маркер
+      // оказывался НАД bottom sheet'ом (~48% экрана). Без padding center
+      // оказывается ровно посреди экрана — под sheet'ом, маркер не виден
+      // и визуально кажется, что он «пропал в угол».
+      var NAV_PADDING = { top: 80, bottom: 380, left: 0, right: 0 };
 
       function perfNow() {
         return (window.performance && performance.now) ? performance.now() : Date.now();
@@ -485,7 +490,7 @@ function buildHtml(apiKey: string, styleName: string, center: [number, number], 
             f.cb = ((f.cb + d * FOLLOW_BRG_A) % 360 + 360) % 360;
           }
         }
-        __map.jumpTo({ center: [f.cc[0], f.cc[1]], bearing: f.cb, zoom: f.zoom, pitch: f.pitch });
+        __map.jumpTo({ center: [f.cc[0], f.cc[1]], bearing: f.cb, zoom: f.zoom, pitch: f.pitch, padding: NAV_PADDING });
         placeDriver(f.cc[0], f.cc[1], f.cb);
         // Keep the 60fps loop alive while moving (velocity) or not yet
         // converged; idle out only when genuinely stopped + settled.
@@ -516,7 +521,7 @@ function buildHtml(apiKey: string, styleName: string, center: [number, number], 
             zoom: zoom, pitch: pitch,
           };
           if (!__userOverride) {
-            __map.jumpTo({ center: [tc[0], tc[1]], bearing: __follow.cb, zoom: zoom, pitch: pitch });
+            __map.jumpTo({ center: [tc[0], tc[1]], bearing: __follow.cb, zoom: zoom, pitch: pitch, padding: NAV_PADDING });
             placeDriver(tc[0], tc[1], __follow.cb);
           }
         } else {
@@ -575,7 +580,7 @@ function buildHtml(apiKey: string, styleName: string, center: [number, number], 
         var bearing = (typeof cmd.bearing === 'number') ? cmd.bearing : __map.getBearing();
         var zoom = (typeof cmd.zoom === 'number') ? cmd.zoom : 17;
         var pitch = (typeof cmd.pitch === 'number') ? cmd.pitch : 50;
-        __map.jumpTo({ center: [lng, lat], bearing: bearing, zoom: zoom, pitch: pitch });
+        __map.jumpTo({ center: [lng, lat], bearing: bearing, zoom: zoom, pitch: pitch, padding: NAV_PADDING });
         placeDriver(lng, lat, bearing);
         // Запустим follow loop с этой же точки — поведение продолжится
         // как раньше, но с гарантированно правильным начальным __follow.
