@@ -21,9 +21,12 @@ export default function App(): React.ReactNode {
   const [fontsReady, setFontsReady] = useState(false);
 
   useEffect(() => {
+    // @expo/vector-icons использует СТРОЧНЫЕ имена family ('feather',
+    // 'ionicons') — `createIconSet(glyphMap, 'feather', font)`. Регистрируем
+    // под этим же именем, иначе Android case-sensitive lookup промахивается.
     Font.loadAsync({
-      Feather: require('./assets/fonts/Feather.ttf'),
-      Ionicons: require('./assets/fonts/Ionicons.ttf'),
+      feather: require('./assets/fonts/Feather.ttf'),
+      ionicons: require('./assets/fonts/Ionicons.ttf'),
     })
       .catch((e) => console.warn('[App] font load failed:', e))
       .finally(() => setFontsReady(true));
