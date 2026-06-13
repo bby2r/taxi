@@ -842,6 +842,9 @@ const MapLibreMapView = forwardRef<MapLibreMapHandle, Props>(function MapLibreMa
           // eslint-disable-next-line no-console
           console.warn('[MapLibreMapView] map error:', data.message);
           setInitError(data.message ?? 'Не удалось загрузить карту');
+        } else if (data.type === 'log') {
+          // eslint-disable-next-line no-console
+          console.log('[MapLibreMapView]', data.message);
         }
       } catch {
         // Malformed message — ignore.
