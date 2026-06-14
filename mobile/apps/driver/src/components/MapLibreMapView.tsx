@@ -117,12 +117,20 @@ function buildHtml(apiKey: string, styleName: string, center: [number, number], 
       .maplibregl-ctrl-top-left, .maplibregl-ctrl-top-right { display: none !important; }
       .driver-pin {
         width: 40px; height: 40px;
+        filter: drop-shadow(0 2px 4px rgba(0,0,0,0.5));
+      }
+      /* Rotation сидит на ВНУТРЕННЕМ div'е, а не на .driver-pin —
+         MapLibre владеет CSS transform внешнего элемента (translate
+         для позиционирования). Если писать rotate на внешний,
+         каждый кадр followStep'а наш rotate стирает translate, и
+         маркер мигает в угол map-контейнера. */
+      .driver-pin-rot {
+        width: 100%; height: 100%;
         display: flex; align-items: center; justify-content: center;
         transform-origin: center;
         will-change: transform;
-        filter: drop-shadow(0 2px 4px rgba(0,0,0,0.5));
       }
-      .driver-pin svg { width: 100%; height: 100%; }
+      .driver-pin-rot svg { width: 100%; height: 100%; }
       .pickup-pin {
         width: 36px; height: 36px;
         filter: drop-shadow(0 2px 4px rgba(0,0,0,0.5));
@@ -234,13 +242,16 @@ function buildHtml(apiKey: string, styleName: string, center: [number, number], 
       function makeDriverEl(heading) {
         // Яндекс-style стрелка: яркий синий конус с белой обводкой
         // (читается на любой подложке), мягкая тень-эллипс под ним
-        // имитирует поднятие над картой. Поворот — CSS transform на
-        // div'е (MapLibre ставит translate на wrapper Marker'а).
+        // имитирует поднятие над картой. Поворот — на ВНУТРЕННЕМ div'е
+        // (.driver-pin-rot), MapLibre занимает CSS transform внешнего
+        // (translate для позиционирования).
         var rot = (heading == null || isNaN(heading)) ? 0 : heading;
-        var el = document.createElement('div');
-        el.className = 'driver-pin';
-        el.style.transform = 'rotate(' + rot + 'deg)';
-        el.innerHTML =
+        var outer = document.createElement('div');
+        outer.className = 'driver-pin';
+        var inner = document.createElement('div');
+        inner.className = 'driver-pin-rot';
+        inner.style.transform = 'rotate(' + rot + 'deg)';
+        inner.innerHTML =
           '<svg viewBox="0 0 48 48" xmlns="http://www.w3.org/2000/svg">' +
             // Контактная тень-эллипс — отрывает стрелку от карты
             '<ellipse cx="24" cy="36" rx="12" ry="3" fill="#000" opacity="0.22"/>' +
@@ -253,7 +264,14 @@ function buildHtml(apiKey: string, styleName: string, center: [number, number], 
             // Световой блик по килю — добавляет «3D»
             '<path d="M24 7 L24 28" stroke="#fff" stroke-width="1.2" opacity="0.6"/>' +
           '</svg>';
-        return el;
+        outer.appendChild(inner);
+        return outer;
+      }
+
+      function setDriverRotation(rot) {
+        if (!__driverMarker) return;
+        var inner = __driverMarker.getElement().querySelector('.driver-pin-rot');
+        if (inner) inner.style.transform = 'rotate(' + rot + 'deg)';
       }
 
       function makePickupEl() {
@@ -293,7 +311,7 @@ function buildHtml(apiKey: string, styleName: string, center: [number, number], 
         }
         // Поворот применяем сразу (CSS-трансформ дешёвый) — глаз ловит
         // изменение курса быстрее, чем сдвиг точки.
-        __driverMarker.getElement().style.transform = 'rotate(' + rot + 'deg)';
+        setDriverRotation(rot);
         // Плавный tween к новой точке вместо телепорта. Без него на
         // скорости 60 км/ч маркер прыгал на ~17м каждый GPS-тик
         // (1с при BestForNavigation) и поездка ощущалась рваной.
@@ -458,7 +476,7 @@ function buildHtml(apiKey: string, styleName: string, center: [number, number], 
           return;
         }
         __driverMarker.setLngLat([lng, lat]);
-        __driverMarker.getElement().style.transform = 'rotate(' + rot + 'deg)';
+        setDriverRotation(rot);
       }
 
       // Per-frame lerp factors. POS is deliberately gentle: the camera never
