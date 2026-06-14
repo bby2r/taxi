@@ -2,12 +2,13 @@ import React from 'react';
 import { View, Text, StyleSheet } from 'react-native';
 import dayjs from 'dayjs';
 import 'dayjs/locale/ru';
-import { Order, OrderStatus, ClientColors, Radius, Spacing, Typography } from '@taxi/shared';
+import { Order, OrderStatus, ClientColors, FadeInView, Radius, Spacing, Typography } from '@taxi/shared';
 
 dayjs.locale('ru');
 
 interface OrderHistoryItemProps {
   order: Order;
+  index?: number;
 }
 
 interface StatusBadgeConfig {
@@ -27,13 +28,14 @@ function getStatusBadge(status: OrderStatus): StatusBadgeConfig {
   }
 }
 
-export default function OrderHistoryItem({ order }: OrderHistoryItemProps): React.ReactNode {
+export default function OrderHistoryItem({ order, index = 0 }: OrderHistoryItemProps): React.ReactNode {
   const formattedDate = dayjs(order.created_at).format('D MMM YYYY, HH:mm');
   const badge = getStatusBadge(order.status);
   const address = order.pickup_address || 'Без адреса';
 
   return (
-    <View
+    <FadeInView
+      delay={Math.min(index, 7) * 55}
       style={styles.container}
       accessibilityLabel={`${formattedDate}, ${address}, ${order.price} сом, ${badge.label}`}
     >
@@ -58,7 +60,7 @@ export default function OrderHistoryItem({ order }: OrderHistoryItemProps): Reac
           {order.price} сом
         </Text>
       </View>
-    </View>
+    </FadeInView>
   );
 }
 

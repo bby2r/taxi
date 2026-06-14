@@ -109,7 +109,7 @@ export default function HistoryScreen(): React.ReactNode {
       <Text style={styles.header}>История поездок</Text>
       <FlatList
         data={orders}
-        renderItem={({ item }) => <OrderHistoryItem order={item} />}
+        renderItem={({ item, index }) => <OrderHistoryItem order={item} index={index} />}
         keyExtractor={(item) => item.id.toString()}
         onRefresh={handleRefresh}
         refreshing={refreshing}

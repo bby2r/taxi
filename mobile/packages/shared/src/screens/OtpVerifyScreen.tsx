@@ -14,6 +14,7 @@ import OtpInput from '../components/OtpInput';
 import { useAuth } from '../context/AuthContext';
 import { sendOtp, verifyOtp } from '../api/auth';
 import { OTP_RESEND_DELAY_SECONDS } from '../utils/constants';
+import { Haptics } from '../utils/haptics';
 
 type OtpVerifyParamList = {
   OtpVerify: { phone: string };
@@ -47,8 +48,10 @@ export default function OtpVerifyScreen({ navigation, route }: Props): React.Rea
 
       try {
         const response = await verifyOtp(phone, code);
+        Haptics.success();
         await login(response.token, response.user);
       } catch (err: unknown) {
+        Haptics.error();
         setError(true);
         const message =
           err instanceof Error ? err.message : 'Неверный код';

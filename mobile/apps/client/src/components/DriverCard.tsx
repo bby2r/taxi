@@ -1,6 +1,6 @@
 import React from 'react';
 import { View, Text, TouchableOpacity, StyleSheet, Linking } from 'react-native';
-import { Driver, ClientColors, Radius, Spacing } from '@taxi/shared';
+import { Driver, ClientColors, FadeInView, Radius, Spacing, Haptics } from '@taxi/shared';
 import Icon, { IconName } from './Icon';
 
 interface DriverCardProps {
@@ -44,17 +44,23 @@ export default function DriverCard({ driver, status }: DriverCardProps): React.R
   const initial = driver.name.charAt(0).toUpperCase();
 
   const handleCall = (): void => {
+    Haptics.light();
     Linking.openURL(`tel:${driver.phone}`);
   };
 
   return (
-    <View style={styles.container}>
-      <View style={[styles.statusPill, { backgroundColor: statusInfo.bg }]}>
+    <FadeInView style={styles.container}>
+      <FadeInView
+        key={status}
+        translateY={6}
+        duration={280}
+        style={[styles.statusPill, { backgroundColor: statusInfo.bg }]}
+      >
         <Icon name={statusInfo.icon} size={14} color={statusInfo.color} strokeWidth={2.4} />
         <Text style={[styles.statusLabel, { color: statusInfo.color }]}>
           {statusInfo.label}
         </Text>
-      </View>
+      </FadeInView>
 
       <View style={styles.row}>
         <View style={styles.avatar}>
@@ -62,8 +68,8 @@ export default function DriverCard({ driver, status }: DriverCardProps): React.R
         </View>
 
         <View style={styles.info}>
-          <Text style={styles.name}>{driver.name}</Text>
-          <Text style={styles.car}>
+          <Text style={styles.name} numberOfLines={1}>{driver.name}</Text>
+          <Text style={styles.car} numberOfLines={1}>
             {driver.car_model} · {driver.car_number}
           </Text>
         </View>
@@ -72,13 +78,14 @@ export default function DriverCard({ driver, status }: DriverCardProps): React.R
           onPress={handleCall}
           style={styles.phoneButton}
           accessibilityRole="button"
-          accessibilityLabel="Позвонить водителю"
-          activeOpacity={0.8}
+          accessibilityLabel={`Позвонить водителю ${driver.name}`}
+          activeOpacity={0.85}
+          hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
         >
           <Icon name="phone" size={22} color={ClientColors.white} strokeWidth={2.2} />
         </TouchableOpacity>
       </View>
-    </View>
+    </FadeInView>
   );
 }
 

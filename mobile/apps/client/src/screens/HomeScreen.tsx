@@ -30,7 +30,7 @@ const PEEK_HEIGHT = 90;
 const EXPANDED_HEIGHT = Math.min(SCREEN_HEIGHT * 0.52, 425);
 const COLLAPSE_OFFSET = EXPANDED_HEIGHT - PEEK_HEIGHT;
 
-import { useLocation, ActionButton, ClientColors, ErrorPill, Radius, Spacing, Typography, reverseGeocode, Region } from '@taxi/shared';
+import { useLocation, ActionButton, ClientColors, ErrorPill, FadeInView, PopInView, Radius, Spacing, Typography, reverseGeocode, Region } from '@taxi/shared';
 import { useOrder } from '../hooks/useOrder';
 import DriverCard from '../components/DriverCard';
 import Icon from '../components/Icon';
@@ -435,14 +435,14 @@ export default function HomeScreen(): React.ReactNode {
       )}
 
       {state.phase === 'cancelled' && (
-        <View style={styles.cancelledToast}>
+        <FadeInView translateY={-12} duration={300} style={styles.cancelledToast}>
           <Icon name="ban" size={20} color={ClientColors.white} strokeWidth={2.2} />
           <Text style={[Typography.bodyBold, styles.cancelledToastText]}>
             {state.reason === 'no_drivers'
               ? 'Свободных водителей сейчас нет'
               : 'Заказ отменён'}
           </Text>
-        </View>
+        </FadeInView>
       )}
 
       <Animated.View
@@ -457,6 +457,8 @@ export default function HomeScreen(): React.ReactNode {
           activeOpacity={0.85}
           onPress={togglePeek}
           style={styles.peekHeader}
+          accessibilityRole="button"
+          accessibilityLabel="Развернуть или свернуть панель заказа"
         >
           <View style={styles.handle} />
           {renderPeekContent()}
@@ -531,6 +533,10 @@ export default function HomeScreen(): React.ReactNode {
                   style={[styles.roundTripRow, isRoundTrip && styles.roundTripRowActive]}
                   onPress={() => setIsRoundTrip((v) => !v)}
                   activeOpacity={0.7}
+                  accessibilityRole="checkbox"
+                  accessibilityState={{ checked: isRoundTrip }}
+                  accessibilityLabel={`Туда и обратно, наценка ${roundTripPct} процентов`}
+                  hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
                 >
                   <View style={[styles.checkbox, isRoundTrip && styles.checkboxActive]}>
                     {isRoundTrip && (
@@ -553,6 +559,9 @@ export default function HomeScreen(): React.ReactNode {
                   onPress={handleInVillageCallTaxi}
                   disabled={loading || inVillageTariffMissing}
                   activeOpacity={0.9}
+                  accessibilityRole="button"
+                  accessibilityLabel={`Заказать такси внутри села, ${displayedPrice} сом`}
+                  accessibilityState={{ disabled: loading || inVillageTariffMissing, busy: loading }}
                 >
                   {loading ? (
                     <ActivityIndicator color={ClientColors.white} />
@@ -569,6 +578,9 @@ export default function HomeScreen(): React.ReactNode {
                   onPress={() => setIntervillageOpen(true)}
                   activeOpacity={0.7}
                   disabled={loading}
+                  accessibilityRole="button"
+                  accessibilityLabel="Заказать такси между сёлами"
+                  hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
                 >
                   <Icon name="route" size={18} color={ClientColors.primaryDark} strokeWidth={2.2} />
                   <Text style={styles.intervillageButtonText}>Межсёлами</Text>
@@ -629,7 +641,7 @@ export default function HomeScreen(): React.ReactNode {
 
       <Modal visible={state.phase === 'completed'} transparent animationType="fade">
         <View style={styles.modalOverlay}>
-          <View style={styles.modalContent}>
+          <PopInView style={styles.modalContent}>
             <View style={styles.completedBadge}>
               <Icon name="check" size={40} color={ClientColors.white} strokeWidth={2.5} />
             </View>
@@ -647,10 +659,11 @@ export default function HomeScreen(): React.ReactNode {
               style={styles.modalButton}
               onPress={dismissCompleted}
               activeOpacity={0.9}
+              accessibilityRole="button"
             >
               <Text style={styles.modalButtonText}>Готово</Text>
             </TouchableOpacity>
-          </View>
+          </PopInView>
         </View>
       </Modal>
     </View>

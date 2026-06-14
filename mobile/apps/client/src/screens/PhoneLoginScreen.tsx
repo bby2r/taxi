@@ -21,7 +21,7 @@ import Svg, {
   RadialGradient,
   Stop,
 } from 'react-native-svg';
-import { ClientColors, Radius, Spacing, sendOtp, formatPhoneDigits, extractDigits } from '@taxi/shared';
+import { ClientColors, Radius, Spacing, sendOtp, formatPhoneDigits, extractDigits, Haptics } from '@taxi/shared';
 import { AuthStackParamList } from '../navigation/types';
 
 type Props = NativeStackScreenProps<AuthStackParamList, 'PhoneLogin'>;
@@ -62,11 +62,13 @@ export default function PhoneLoginScreen({ navigation }: Props): React.ReactNode
     const fullPhone = '+996' + phone;
     try {
       await sendOtp(fullPhone);
+      Haptics.light();
       navigation.navigate('OtpVerify', { phone: fullPhone });
     } catch (err: unknown) {
       const message =
         err instanceof Error ? err.message : 'Не удалось отправить код';
       setError(message);
+      Haptics.error();
       Alert.alert('Ошибка', message);
     } finally {
       setLoading(false);

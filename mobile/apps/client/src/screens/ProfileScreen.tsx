@@ -131,6 +131,9 @@ export default function ProfileScreen(): React.ReactNode {
             style={[styles.primaryButton, savingName && styles.buttonDisabled]}
             onPress={handleSaveName}
             disabled={savingName}
+            accessibilityRole="button"
+            accessibilityLabel="Сохранить имя"
+            accessibilityState={{ disabled: savingName, busy: savingName }}
           >
             {savingName ? (
               <ActivityIndicator color={ClientColors.dark} />
@@ -155,6 +158,9 @@ export default function ProfileScreen(): React.ReactNode {
               style={styles.changePhoneButton}
               onPress={() => setShowPhoneFlow(true)}
               activeOpacity={0.7}
+              accessibilityRole="button"
+              accessibilityLabel="Изменить номер телефона"
+              hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
             >
               <Text style={styles.changePhoneButtonText}>Изменить номер телефона</Text>
             </TouchableOpacity>
@@ -228,6 +234,8 @@ export default function ProfileScreen(): React.ReactNode {
               )
             }
             activeOpacity={0.7}
+            accessibilityRole="link"
+            accessibilityLabel="Открыть поддержку в WhatsApp, плюс 996 509 397 226"
           >
             <View style={[styles.menuIconBox, { backgroundColor: ClientColors.primaryTint }]}>
               <Icon name="message" size={20} color={ClientColors.primaryDark} strokeWidth={2.2} />
@@ -245,6 +253,8 @@ export default function ProfileScreen(): React.ReactNode {
             style={styles.menuRow}
             onPress={() => Linking.openURL('https://taxi-api-cy7a.onrender.com/privacy')}
             activeOpacity={0.7}
+            accessibilityRole="link"
+            accessibilityLabel="Открыть политику конфиденциальности"
           >
             <View style={[styles.menuIconBox, { backgroundColor: ClientColors.surfaceMuted }]}>
               <Icon name="shield" size={20} color={ClientColors.darkSecondary} strokeWidth={2.2} />
@@ -257,7 +267,13 @@ export default function ProfileScreen(): React.ReactNode {
         </View>
 
         {/* Logout — destructive action set apart visually */}
-        <TouchableOpacity style={styles.logoutButton} onPress={handleLogout} activeOpacity={0.85}>
+        <TouchableOpacity
+          style={styles.logoutButton}
+          onPress={handleLogout}
+          activeOpacity={0.85}
+          accessibilityRole="button"
+          accessibilityLabel="Выйти из аккаунта"
+        >
           <Icon name="logout" size={18} color={ClientColors.danger} strokeWidth={2.2} />
           <Text style={styles.logoutButtonText}>Выйти из аккаунта</Text>
         </TouchableOpacity>

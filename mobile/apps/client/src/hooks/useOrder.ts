@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { Platform, Vibration } from 'react-native';
-import { Order, OrderStatus, usePusher, useAuth } from '@taxi/shared';
+import { Order, OrderStatus, usePusher, useAuth, Haptics } from '@taxi/shared';
 import * as ordersApi from '../api/orders';
 
 // Lazy-required so a build without expo-speech still works (it just
@@ -123,6 +123,7 @@ export function useOrder(): UseOrderReturn {
         car_number?: string;
       };
       if (orderRef.current && typeof payload.latitude === 'number' && typeof payload.longitude === 'number') {
+        Haptics.success();
         const prevDriver = orderRef.current.driver;
         const optimistic: Order = {
           ...orderRef.current,
@@ -189,6 +190,7 @@ export function useOrder(): UseOrderReturn {
   }, [refreshAndSetPhase]);
 
   const handleOrderCompleted = useCallback(() => {
+    Haptics.success();
     refreshAndSetPhase('completed');
   }, [refreshAndSetPhase]);
 
@@ -229,6 +231,7 @@ export function useOrder(): UseOrderReturn {
   }, []);
 
   const handleOrderCancelled = useCallback(async () => {
+    Haptics.warning();
     let reason: 'no_drivers' | 'other' = 'other';
     const orderId = orderRef.current?.id;
     if (orderId) {
@@ -313,6 +316,7 @@ export function useOrder(): UseOrderReturn {
           comment,
           isRoundTrip,
         );
+        Haptics.medium();
         orderRef.current = order;
         setState({ phase: 'searching', order });
       } catch (e: unknown) {
