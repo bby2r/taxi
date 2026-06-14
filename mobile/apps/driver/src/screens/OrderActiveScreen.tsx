@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   Alert,
   View,
@@ -469,6 +469,20 @@ export default function OrderActiveScreen(): React.ReactNode {
   const kalmanRef = useRef<GeoKalmanFilter | null>(null);
   const lastFedTsRef = useRef<number | null>(null);
   const targetBearingRef = useRef<number | null>(null);
+  // Последняя позиция+курс, отданные follow-петле. Нужны, чтобы восстановить
+  // самолётик-иконку и камеру после ремаунта WebView (MIUI/Doze убивают
+  // render-процесс, когда водитель свернул приложение / погас экран по дороге
+  // к клиенту → новая страница, __driverMarker и __follow = null). Эффекты при
+  // этом не перевызываются (у стоящего на светофоре фикс не меняется), и без
+  // восстановления иконка пропадала до следующего GPS-тика — а на месте его
+  // может не быть. Это и есть «иконка исчезает по пути к клиенту».
+  const lastNavRef = useRef<{ latitude: number; longitude: number; heading: number } | null>(null);
+  // Зеркало following для handleMapReady (стабильный useCallback не читает
+  // свежий state напрямую).
+  const followingRef = useRef(true);
+  // Счётчик 'ready' карты: 1 = первая загрузка (плейсмент делают эффекты),
+  // 2+ = ремаунт → восстанавливаем иконку+камеру из lastNavRef.
+  const readyCountRef = useRef(0);
   const bottomSheetRef = useRef<BottomSheet>(null);
   // Three positions like Yandex Taxi driver: barely visible (just handle
   // + ETA peek), default (all key info + main action), expanded (full
@@ -650,6 +664,8 @@ export default function OrderActiveScreen(): React.ReactNode {
   // when the "Вернуться к маршруту" button appears so they can opt back
   // in. Same pattern Yandex uses: never fight the user's gesture.
   const [following, setFollowing] = useState(true);
+  // Держим ref в синхроне для стабильного handleMapReady (см. ниже).
+  followingRef.current = following;
 
   // Re-enable follow whenever the screen transitions into a new phase
   // (newly accepted, freshly in-progress). Driver expects auto-follow
@@ -718,6 +734,12 @@ export default function OrderActiveScreen(): React.ReactNode {
       // ближняя дорога сильно растягивается и метки улиц становятся плоскими.
       // 50° — как в Яндекс.Навигаторе: ощущение 3D остаётся, но дорога вдаль
       // читается без искажения.
+      // Запоминаем точку, чтобы восстановить иконку+камеру после ремаунта.
+      lastNavRef.current = {
+        latitude: posLat,
+        longitude: posLng,
+        heading: targetBearingRef.current ?? 0,
+      };
       mapRef.current?.setFollowTarget({
         latitude: posLat,
         longitude: posLng,
@@ -738,6 +760,10 @@ export default function OrderActiveScreen(): React.ReactNode {
     kalmanRef.current = null;
     lastFedTsRef.current = null;
     targetBearingRef.current = null;
+    // Не навигируем (прибыл / завершён / ещё нет фикса) — гасим точку
+    // восстановления, чтобы ремаунт в этой фазе не зумил камеру на водителя
+    // вместо обзора.
+    lastNavRef.current = null;
     mapRef.current?.setPitch(30);
     const coords: Array<[number, number]> =
       route && route.coordinates.length > 0
@@ -803,6 +829,38 @@ export default function OrderActiveScreen(): React.ReactNode {
     mapRef.current?.setRoute(coords);
   }, [trimmedCoordinates]);
 
+  // Карта шлёт 'ready' на первой загрузке И после каждого ремаунта WebView
+  // (MIUI/Doze). На ремаунте __driverMarker и __follow обнуляются, а GPS-
+  // эффекты у стоящего водителя не перевызываются — поэтому восстанавливаем
+  // иконку и камеру из lastNavRef, чтобы самолётик не пропадал по дороге к
+  // клиенту. Первый 'ready' пропускаем — начальный плейсмент делают эффекты.
+  const handleMapReady = useCallback((): void => {
+    readyCountRef.current += 1;
+    if (readyCountRef.current === 1) {
+      return;
+    }
+    const p = lastNavRef.current;
+    if (!p) {
+      return;
+    }
+    if (followingRef.current) {
+      // Едем по маршруту: атомарно пере-цепляем камеру и пере-создаём иконку.
+      mapRef.current?.recenterTo({
+        latitude: p.latitude,
+        longitude: p.longitude,
+        zoom: 17,
+        pitch: 50,
+      });
+    } else {
+      // Водитель отпанил карту: просто возвращаем иконку на последнюю точку.
+      mapRef.current?.setDriver({
+        latitude: p.latitude,
+        longitude: p.longitude,
+        heading: p.heading,
+      });
+    }
+  }, []);
+
   if (!order) {
     return null;
   }
@@ -830,6 +888,7 @@ export default function OrderActiveScreen(): React.ReactNode {
               : undefined
         }
         initialZoom={14}
+        onReady={handleMapReady}
         onUserGesture={() => {
           // Driver panned/pinched — drop follow so our camera effect
           // stops fighting their view. "Вернуться к маршруту" button
