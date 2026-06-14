@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
   View,
   Text,
@@ -240,16 +240,31 @@ export default function HomeScreen(): React.ReactNode {
     bearing: 0,
   });
   const initialCenteredRef = useRef(false);
+  // Последняя позиция + курс маркера водителя. Нужна, чтобы восстановить
+  // иконку и камеру после ремаунта WebView (MIUI/Doze убивают render-процесс
+  // в фоне → новая страница, __driverMarker = null): эффекты при этом не
+  // перевызываются (у стоящего водителя фикс не менялся), и без восстановления
+  // самолётик-иконка пропадала, а тап «по центру» вёл в пустоту.
+  const lastPlacementRef = useRef<{
+    latitude: number;
+    longitude: number;
+    heading: number;
+  } | null>(null);
+  // Счётчик 'ready' от карты: 1 = первая загрузка (плейсмент делают эффекты
+  // ниже), 2+ = ремаунт → восстанавливаем маркер+камеру из lastPlacementRef.
+  const readyCountRef = useRef(0);
 
   // Иконка водителя показывает направление телефона (компас). Если
   // магнитометра нет — падаем на текущий курс карты, чтобы стрелка всё
   // равно смотрела по ходу движения. Лёгкий CSS-transform — можно часто.
   useEffect(() => {
     if (roundedLat === null || roundedLng === null) return;
+    const heading = compassBearing ?? courseRef.current.bearing;
+    lastPlacementRef.current = { latitude: roundedLat, longitude: roundedLng, heading };
     mapRef.current?.setDriver({
       latitude: roundedLat,
       longitude: roundedLng,
-      heading: compassBearing ?? courseRef.current.bearing,
+      heading,
     });
   }, [roundedLat, roundedLng, compassBearing]);
 
@@ -358,15 +373,41 @@ export default function HomeScreen(): React.ReactNode {
     if (driverLocation.loading || driverLocation.error) {
       return;
     }
-    // clearOverride снимает WebView-side lock который встаёт на любом
-    // тач-жесте — без этого setCenter был бы no-op после того как
-    // водитель сам подвинул карту пальцем.
-    mapRef.current?.clearOverride();
-    mapRef.current?.setCenter(
+    // Атомарный recenter: один диспатч снимает override-lock, СТАВИТ маркер
+    // водителя на текущую точку (placeDriver создаёт его заново, если иконку
+    // снесло ремаунтом WebView) и центрирует камеру. Раньше тут были два
+    // отдельных вызова (clearOverride + setCenter) — они не пересоздавали
+    // маркер, поэтому после ремаунта иконка пропадала и центрирование вело в
+    // пустоту. bearing — курс камеры (course-up), heading — поворот маркера.
+    mapRef.current?.recenterStatic(
       { latitude: driverLocation.latitude, longitude: driverLocation.longitude },
-      { zoom: 16, pitch: 45, bearing: courseRef.current.bearing },
+      {
+        zoom: 16,
+        pitch: 45,
+        bearing: courseRef.current.bearing,
+        heading: compassBearing ?? courseRef.current.bearing,
+      },
     );
   };
+
+  // Карта шлёт 'ready' на первой загрузке И после каждого ремаунта WebView
+  // (MIUI/Doze). На ремаунте маркер и камера теряются, а GPS-эффекты у
+  // стоящего водителя не перевызываются — поэтому восстанавливаем плейсмент
+  // из lastPlacementRef, чтобы самолётик-иконка не оставалась пропавшей.
+  const handleMapReady = useCallback((): void => {
+    readyCountRef.current += 1;
+    if (readyCountRef.current === 1) {
+      return; // первая загрузка — начальный плейсмент делают эффекты выше
+    }
+    const p = lastPlacementRef.current;
+    if (!p) {
+      return;
+    }
+    mapRef.current?.recenterStatic(
+      { latitude: p.latitude, longitude: p.longitude },
+      { zoom: 15, pitch: 45, bearing: courseRef.current.bearing, heading: p.heading, duration: 0 },
+    );
+  }, []);
 
   const driverPoint =
     !driverLocation.loading && !driverLocation.error
@@ -389,6 +430,7 @@ export default function HomeScreen(): React.ReactNode {
         ref={mapRef}
         initialCenter={initialCenter}
         initialZoom={14}
+        onReady={handleMapReady}
         style={StyleSheet.absoluteFill}
       />
 

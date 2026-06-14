@@ -73,6 +73,22 @@ export type MapLibreMapHandle = {
       pitch?: number;
     },
   ) => void;
+  // Атомарный recenter для экрана БЕЗ follow-петли (HomeScreen). Одним
+  // диспатчем: сбрасывает override, СТАВИТ driver-маркер на цель (placeDriver
+  // создаёт его заново, если маркер снесло ремаунтом WebView), и центрирует
+  // камеру. Гарантирует, что иконка водителя всегда на месте после тапа
+  // «по центру». `bearing` — поворот камеры (course-up), `heading` — отдельный
+  // поворот самого маркера (компас); если heading не задан, берётся bearing.
+  recenterStatic: (
+    loc: LatLng,
+    opts?: {
+      zoom?: number;
+      bearing?: number;
+      heading?: number;
+      pitch?: number;
+      duration?: number;
+    },
+  ) => void;
 };
 
 type Props = {
@@ -577,6 +593,30 @@ function buildHtml(apiKey: string, styleName: string, center: [number, number], 
         setFollowTarget(cmd);
       }
 
+      // Атомарный recenter для экрана БЕЗ follow-петли (HomeScreen). В одном
+      // синхронном вызове: снимает override, СТАВИТ driver-маркер на цель и
+      // центрирует камеру. placeDriver создаёт маркер заново, если его снесло
+      // ремаунтом WebView (MIUI/Doze), а стоящий на месте водитель не слал
+      // новых setDriver — без этого тап «по центру» вёл камеру в пустоту, без
+      // иконки. Атомарность убирает race: между clearOverride и setCenter
+      // случайный touch-event снова поднимал __userOverride=true и блокировал
+      // центрирование. cmd.bearing крутит камеру (course-up), cmd.heading —
+      // сам маркер (компас); если heading нет, маркер берёт bearing.
+      function recenterStatic(cmd) {
+        if (!__map) return;
+        __userOverride = false;
+        if (__driverTweenRaf) { cancelAnimationFrame(__driverTweenRaf); __driverTweenRaf = null; }
+        var markerRot = (typeof cmd.heading === 'number') ? cmd.heading
+          : (typeof cmd.bearing === 'number') ? cmd.bearing : 0;
+        placeDriver(cmd.longitude, cmd.latitude, markerRot);
+        var animOpts = { center: [cmd.longitude, cmd.latitude], essential: true };
+        if (typeof cmd.zoom === 'number') animOpts.zoom = cmd.zoom;
+        if (typeof cmd.bearing === 'number') animOpts.bearing = cmd.bearing;
+        if (typeof cmd.pitch === 'number') animOpts.pitch = cmd.pitch;
+        animOpts.duration = (typeof cmd.duration === 'number') ? cmd.duration : 600;
+        __map.easeTo(animOpts);
+      }
+
       window.applyCommand = function (cmd) {
         try {
           switch (cmd.type) {
@@ -587,6 +627,7 @@ function buildHtml(apiKey: string, styleName: string, center: [number, number], 
             case 'setFollowTarget': setFollowTarget(cmd); break;
             case 'stopFollow': stopFollow(); break;
             case 'recenterTo': recenterTo(cmd); break;
+            case 'recenterStatic': recenterStatic(cmd); break;
             case 'setPitch':
               if (__userOverride) break;
               if (__map && typeof cmd.pitch === 'number') __map.setPitch(cmd.pitch);
@@ -804,6 +845,7 @@ const MapLibreMapView = forwardRef<MapLibreMapHandle, Props>(function MapLibreMa
       fitBounds: (coordinates, padding) => dispatch({ type: 'fitBounds', coordinates, padding }),
       clearOverride: () => dispatch({ type: 'clearOverride' }),
       recenterTo: (target) => dispatch({ type: 'recenterTo', ...target }),
+      recenterStatic: (loc, opts) => dispatch({ type: 'recenterStatic', ...loc, ...opts }),
     }),
     [dispatch],
   );
