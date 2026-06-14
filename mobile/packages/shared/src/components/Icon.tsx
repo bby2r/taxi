@@ -42,7 +42,7 @@ interface IconProps {
   style?: StyleProp<ViewStyle>;
 }
 
-export default function Icon({
+function Icon({
   name,
   size = 24,
   color = '#0E1D24',
@@ -172,3 +172,5 @@ export default function Icon({
 
   return null;
 }
+
+export default React.memo(Icon);

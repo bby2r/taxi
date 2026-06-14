@@ -59,13 +59,11 @@ export type MapLibreMapHandle = {
   // активен, setCenter/setPitch/fitBounds — no-op'ы. Вызывается RN
   // при тапе «Вернуться к маршруту», чтобы камера снова следовала.
   clearOverride: () => void;
-  // Атомарный recenter — один диспатч, который внутри WebView
-  // в одной синхронной операции: сбрасывает __userOverride и __follow,
-  // делает jumpTo + placeDriver на цель, переинициализирует follow loop.
-  // Чтобы избежать race condition: между отдельными командами
-  // (stopFollow + clearOverride + setCenter + setFollowTarget) случайный
-  // touch-event мог снова поднять __userOverride=true, блокируя setCenter
-  // и оставляя камеру висеть в углу. Здесь это невозможно.
+  // Атомарный recenter — один диспатч сбрасывает override + follow loop
+  // и переинициализирует follow через setFollowTarget. Заменяет цепочку
+  // stopFollow→clearOverride→setCenter→setFollowTarget: между этими
+  // командами случайный touch-event поднимал __userOverride=true,
+  // блокируя камеру в углу.
   recenterTo: (
     target: LatLng & {
       bearing?: number;
@@ -242,9 +240,7 @@ function buildHtml(apiKey: string, styleName: string, center: [number, number], 
       function makeDriverEl(heading) {
         // Яндекс-style стрелка: яркий синий конус с белой обводкой
         // (читается на любой подложке), мягкая тень-эллипс под ним
-        // имитирует поднятие над картой. Поворот — на ВНУТРЕННЕМ div'е
-        // (.driver-pin-rot), MapLibre занимает CSS transform внешнего
-        // (translate для позиционирования).
+        // имитирует поднятие над картой.
         var rot = (heading == null || isNaN(heading)) ? 0 : heading;
         var outer = document.createElement('div');
         outer.className = 'driver-pin';
@@ -268,10 +264,18 @@ function buildHtml(apiKey: string, styleName: string, center: [number, number], 
         return outer;
       }
 
+      var __driverInner = null;
+      var __driverLastRot = null;
       function setDriverRotation(rot) {
         if (!__driverMarker) return;
-        var inner = __driverMarker.getElement().querySelector('.driver-pin-rot');
-        if (inner) inner.style.transform = 'rotate(' + rot + 'deg)';
+        if (rot === __driverLastRot) return;
+        if (!__driverInner) {
+          __driverInner = __driverMarker.getElement().querySelector('.driver-pin-rot');
+        }
+        if (__driverInner) {
+          __driverInner.style.transform = 'rotate(' + rot + 'deg)';
+          __driverLastRot = rot;
+        }
       }
 
       function makePickupEl() {
@@ -611,15 +615,7 @@ function buildHtml(apiKey: string, styleName: string, center: [number, number], 
         setFollowTarget(cmd);
       }
 
-      // Атомарный recenter для экрана БЕЗ follow-петли (HomeScreen). В одном
-      // синхронном вызове: снимает override, СТАВИТ driver-маркер на цель и
-      // центрирует камеру. placeDriver создаёт маркер заново, если его снесло
-      // ремаунтом WebView (MIUI/Doze), а стоящий на месте водитель не слал
-      // новых setDriver — без этого тап «по центру» вёл камеру в пустоту, без
-      // иконки. Атомарность убирает race: между clearOverride и setCenter
-      // случайный touch-event снова поднимал __userOverride=true и блокировал
-      // центрирование. cmd.bearing крутит камеру (course-up), cmd.heading —
-      // сам маркер (компас); если heading нет, маркер берёт bearing.
+      // См. JSDoc в MapLibreMapHandle.recenterStatic.
       function recenterStatic(cmd) {
         if (!__map) return;
         __userOverride = false;

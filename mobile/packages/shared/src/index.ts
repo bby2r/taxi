@@ -22,6 +22,7 @@ export { AuthProvider, useAuth } from './context/AuthContext';
 // Hooks
 export * from './hooks/useCompassBearing';
 export * from './hooks/useLocation';
+export * from './hooks/useMapRemountRestoration';
 export * from './hooks/useNavigationStep';
 export * from './hooks/usePusher';
 export * from './hooks/useRoute';

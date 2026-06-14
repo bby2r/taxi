@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useRef, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import {
   View,
   Text,
@@ -22,6 +22,7 @@ import {
   useAuth,
   useLocation,
   useCompassBearing,
+  useMapRemountRestoration,
   advanceCourseUp,
   type CourseUpState,
   DriverColors,
@@ -240,19 +241,18 @@ export default function HomeScreen(): React.ReactNode {
     bearing: 0,
   });
   const initialCenteredRef = useRef(false);
-  // Последняя позиция + курс маркера водителя. Нужна, чтобы восстановить
-  // иконку и камеру после ремаунта WebView (MIUI/Doze убивают render-процесс
-  // в фоне → новая страница, __driverMarker = null): эффекты при этом не
-  // перевызываются (у стоящего водителя фикс не менялся), и без восстановления
-  // самолётик-иконка пропадала, а тап «по центру» вёл в пустоту.
-  const lastPlacementRef = useRef<{
-    latitude: number;
-    longitude: number;
-    heading: number;
-  } | null>(null);
-  // Счётчик 'ready' от карты: 1 = первая загрузка (плейсмент делают эффекты
-  // ниже), 2+ = ремаунт → восстанавливаем маркер+камеру из lastPlacementRef.
-  const readyCountRef = useRef(0);
+  const { lastRef: lastPlacementRef, handleMapReady } = useMapRemountRestoration((p) => {
+    mapRef.current?.recenterStatic(
+      { latitude: p.latitude, longitude: p.longitude },
+      {
+        zoom: 15,
+        pitch: 45,
+        bearing: courseRef.current.bearing,
+        heading: p.heading,
+        duration: 0,
+      },
+    );
+  });
 
   // Иконка водителя показывает направление телефона (компас). Если
   // магнитометра нет — падаем на текущий курс карты, чтобы стрелка всё
@@ -389,25 +389,6 @@ export default function HomeScreen(): React.ReactNode {
       },
     );
   };
-
-  // Карта шлёт 'ready' на первой загрузке И после каждого ремаунта WebView
-  // (MIUI/Doze). На ремаунте маркер и камера теряются, а GPS-эффекты у
-  // стоящего водителя не перевызываются — поэтому восстанавливаем плейсмент
-  // из lastPlacementRef, чтобы самолётик-иконка не оставалась пропавшей.
-  const handleMapReady = useCallback((): void => {
-    readyCountRef.current += 1;
-    if (readyCountRef.current === 1) {
-      return; // первая загрузка — начальный плейсмент делают эффекты выше
-    }
-    const p = lastPlacementRef.current;
-    if (!p) {
-      return;
-    }
-    mapRef.current?.recenterStatic(
-      { latitude: p.latitude, longitude: p.longitude },
-      { zoom: 15, pitch: 45, bearing: courseRef.current.bearing, heading: p.heading, duration: 0 },
-    );
-  }, []);
 
   const driverPoint =
     !driverLocation.loading && !driverLocation.error

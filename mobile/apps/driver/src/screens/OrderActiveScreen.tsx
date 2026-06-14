@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
   Alert,
   View,
@@ -20,6 +20,7 @@ import {
   ActionButton,
   ConfirmModal,
   useLocation,
+  useMapRemountRestoration,
   useRoute as useNavigationRoute,
   haversineMeters,
   snapToPolyline,
@@ -469,20 +470,25 @@ export default function OrderActiveScreen(): React.ReactNode {
   const kalmanRef = useRef<GeoKalmanFilter | null>(null);
   const lastFedTsRef = useRef<number | null>(null);
   const targetBearingRef = useRef<number | null>(null);
-  // Последняя позиция+курс, отданные follow-петле. Нужны, чтобы восстановить
-  // самолётик-иконку и камеру после ремаунта WebView (MIUI/Doze убивают
-  // render-процесс, когда водитель свернул приложение / погас экран по дороге
-  // к клиенту → новая страница, __driverMarker и __follow = null). Эффекты при
-  // этом не перевызываются (у стоящего на светофоре фикс не меняется), и без
-  // восстановления иконка пропадала до следующего GPS-тика — а на месте его
-  // может не быть. Это и есть «иконка исчезает по пути к клиенту».
-  const lastNavRef = useRef<{ latitude: number; longitude: number; heading: number } | null>(null);
   // Зеркало following для handleMapReady (стабильный useCallback не читает
   // свежий state напрямую).
   const followingRef = useRef(true);
-  // Счётчик 'ready' карты: 1 = первая загрузка (плейсмент делают эффекты),
-  // 2+ = ремаунт → восстанавливаем иконку+камеру из lastNavRef.
-  const readyCountRef = useRef(0);
+  const { lastRef: lastNavRef, handleMapReady } = useMapRemountRestoration((p) => {
+    if (followingRef.current) {
+      mapRef.current?.recenterTo({
+        latitude: p.latitude,
+        longitude: p.longitude,
+        zoom: 17,
+        pitch: 50,
+      });
+    } else {
+      mapRef.current?.setDriver({
+        latitude: p.latitude,
+        longitude: p.longitude,
+        heading: p.heading,
+      });
+    }
+  });
   const bottomSheetRef = useRef<BottomSheet>(null);
   // Three positions like Yandex Taxi driver: barely visible (just handle
   // + ETA peek), default (all key info + main action), expanded (full
@@ -828,38 +834,6 @@ export default function OrderActiveScreen(): React.ReactNode {
     ]);
     mapRef.current?.setRoute(coords);
   }, [trimmedCoordinates]);
-
-  // Карта шлёт 'ready' на первой загрузке И после каждого ремаунта WebView
-  // (MIUI/Doze). На ремаунте __driverMarker и __follow обнуляются, а GPS-
-  // эффекты у стоящего водителя не перевызываются — поэтому восстанавливаем
-  // иконку и камеру из lastNavRef, чтобы самолётик не пропадал по дороге к
-  // клиенту. Первый 'ready' пропускаем — начальный плейсмент делают эффекты.
-  const handleMapReady = useCallback((): void => {
-    readyCountRef.current += 1;
-    if (readyCountRef.current === 1) {
-      return;
-    }
-    const p = lastNavRef.current;
-    if (!p) {
-      return;
-    }
-    if (followingRef.current) {
-      // Едем по маршруту: атомарно пере-цепляем камеру и пере-создаём иконку.
-      mapRef.current?.recenterTo({
-        latitude: p.latitude,
-        longitude: p.longitude,
-        zoom: 17,
-        pitch: 50,
-      });
-    } else {
-      // Водитель отпанил карту: просто возвращаем иконку на последнюю точку.
-      mapRef.current?.setDriver({
-        latitude: p.latitude,
-        longitude: p.longitude,
-        heading: p.heading,
-      });
-    }
-  }, []);
 
   if (!order) {
     return null;
