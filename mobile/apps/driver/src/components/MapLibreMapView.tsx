@@ -578,11 +578,13 @@ function buildHtml(apiKey: string, styleName: string, center: [number, number], 
         __follow = null;
       }
 
-      // Атомарный recenter — один JS call. Сбрасывает override и follow,
-      // дальше setFollowTarget идёт через init-ветку и сам делает jumpTo +
-      // placeDriver. Без этой атомарности 4 отдельных диспатча проигрывали
-      // race condition: между clearOverride и setCenter случайный touch-event
-      // снова поднимал __userOverride=true, guard'ы блокировали камеру.
+      // Атомарный recenter — один JS call. Делает явно:
+      // 1) сбрасывает override и follow loop / tween,
+      // 2) jumpTo + placeDriver на target ЯВНО (не через setFollowTarget),
+      //    чтобы маркер гарантированно был на экране даже если на нём
+      //    есть оторванный orphan из прошлой жизни,
+      // 3) setFollowTarget просто посеять __follow для последующих GPS-
+      //    тиков (init-ветка повторит jumpTo+placeDriver — идемпотентно).
       function recenterTo(cmd) {
         if (!__map) return;
         __userOverride = false;
@@ -590,6 +592,13 @@ function buildHtml(apiKey: string, styleName: string, center: [number, number], 
         __followRaf = null;
         __follow = null;
         if (__driverTweenRaf) { cancelAnimationFrame(__driverTweenRaf); __driverTweenRaf = null; }
+        var lng = cmd.longitude;
+        var lat = cmd.latitude;
+        var bearing = (typeof cmd.bearing === 'number') ? cmd.bearing : __map.getBearing();
+        var zoom = (typeof cmd.zoom === 'number') ? cmd.zoom : 17;
+        var pitch = (typeof cmd.pitch === 'number') ? cmd.pitch : 50;
+        __map.jumpTo({ center: [lng, lat], bearing: bearing, zoom: zoom, pitch: pitch, padding: NAV_PADDING });
+        placeDriver(lng, lat, bearing);
         setFollowTarget(cmd);
       }
 
