@@ -1,6 +1,6 @@
 import React from 'react';
 import { View, Text, TouchableOpacity, StyleSheet, Linking } from 'react-native';
-import { Driver, ClientColors, FadeInView, Radius, Spacing, Haptics } from '@taxi/shared';
+import { Driver, ClientColors, FadeInView, Radius, RatingBadge, Spacing, Haptics } from '@taxi/shared';
 import Icon, { IconName } from './Icon';
 
 interface DriverCardProps {
@@ -68,7 +68,17 @@ export default function DriverCard({ driver, status }: DriverCardProps): React.R
         </View>
 
         <View style={styles.info}>
-          <Text style={styles.name} numberOfLines={1}>{driver.name}</Text>
+          <View style={styles.nameRow}>
+            <Text style={styles.name} numberOfLines={1}>{driver.name}</Text>
+            <RatingBadge
+              avg={driver.rating_avg ?? null}
+              count={driver.rating_count ?? 0}
+              size="compact"
+              pillBackground={ClientColors.surfaceMuted}
+              textColor={ClientColors.dark}
+              emptyLabel="Новый"
+            />
+          </View>
           <Text style={styles.car} numberOfLines={1}>
             {driver.car_model} · {driver.car_number}
           </Text>
@@ -128,10 +138,17 @@ const styles = StyleSheet.create({
   info: {
     flex: 1,
   },
+  nameRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    flexWrap: 'wrap',
+  },
   name: {
     fontSize: 17,
     fontWeight: '700' as const,
     color: ClientColors.dark,
+    flexShrink: 1,
   },
   car: {
     fontSize: 13,

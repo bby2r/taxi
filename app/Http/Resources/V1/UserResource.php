@@ -14,6 +14,13 @@ class UserResource extends JsonResource
      */
     public function toArray(Request $request): array
     {
+        // Rating-aggregate стоит одного запроса — считаем один раз и переиспользуем
+        // на верхнем уровне (видит и сам водитель в профиле, и фронт водительского
+        // приложения как агрегат), и в driver_profile блоке.
+        $ratingStats = $this->isDriver()
+            ? $this->driverRatingStats()
+            : ['avg' => null, 'count' => 0];
+
         return [
             'id' => $this->id,
             'name' => $this->name,
@@ -23,6 +30,8 @@ class UserResource extends JsonResource
             // a banner when push hasn't been registered yet without leaking
             // the token to other clients.
             'has_push_token' => ! empty($this->expo_push_token),
+            'rating_avg' => $this->when($this->isDriver(), $ratingStats['avg']),
+            'rating_count' => $this->when($this->isDriver(), $ratingStats['count']),
             'driver_profile' => $this->when($this->isDriver() && $this->relationLoaded('driverProfile'), fn () => [
                 'car_model' => $this->driverProfile->car_model,
                 'car_number' => $this->driverProfile->car_number,
@@ -30,6 +39,8 @@ class UserResource extends JsonResource
                 'status' => $this->driverProfile->computedStatus(),
                 'blocked_until' => $this->driverProfile->blocked_until?->toISOString(),
                 'shift_declines_count' => (int) ($this->driverProfile->shift_declines_count ?? 0),
+                'rating_avg' => $ratingStats['avg'],
+                'rating_count' => $ratingStats['count'],
             ]),
         ];
     }

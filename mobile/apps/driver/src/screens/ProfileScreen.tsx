@@ -22,6 +22,7 @@ import {
   DriverProfile,
   DriverChangeRequest,
   DriverColors,
+  RatingBadge,
   Typography,
   OTP_LENGTH,
 } from '@taxi/shared';
@@ -33,6 +34,14 @@ const FIELD_LABELS: Record<EditableField, string> = {
   car_model: 'Модель авто',
   car_number: 'Гос. номер',
 };
+
+function plural(n: number): string {
+  const mod10 = n % 10;
+  const mod100 = n % 100;
+  if (mod10 === 1 && mod100 !== 11) return 'е';
+  if (mod10 >= 2 && mod10 <= 4 && (mod100 < 10 || mod100 >= 20)) return 'ам';
+  return 'ам';
+}
 
 const STATUS_LABELS: Record<DriverChangeRequest['status'], string> = {
   pending: 'На рассмотрении',
@@ -216,10 +225,25 @@ export default function ProfileScreen(): React.ReactNode {
       >
         <Text style={styles.header}>Профиль</Text>
 
-        {/* Avatar */}
+        {/* Avatar + rating */}
         <View style={styles.avatarContainer}>
           <View style={styles.avatar}>
             <Text style={styles.avatarText}>{initial}</Text>
+          </View>
+          <View style={styles.ratingBlock}>
+            <RatingBadge
+              avg={profile?.rating_avg ?? null}
+              count={profile?.rating_count ?? 0}
+              size="medium"
+              pillBackground={DriverColors.cardBackground}
+              textColor={DriverColors.textPrimary}
+              emptyLabel="Нет оценок"
+            />
+            {(profile?.rating_count ?? 0) > 0 && (
+              <Text style={styles.ratingHelper}>
+                Средняя оценка по {profile?.rating_count} поездк{plural(profile?.rating_count ?? 0)}
+              </Text>
+            )}
           </View>
         </View>
 
@@ -507,10 +531,25 @@ const styles = StyleSheet.create({
     backgroundColor: DriverColors.primary,
     justifyContent: 'center',
     alignItems: 'center',
+    shadowColor: DriverColors.primary,
+    shadowOpacity: 0.3,
+    shadowRadius: 14,
+    shadowOffset: { width: 0, height: 6 },
+    elevation: 6,
   },
   avatarText: {
     ...Typography.h1,
     color: DriverColors.background,
+  },
+  ratingBlock: {
+    marginTop: 14,
+    alignItems: 'center',
+    gap: 4,
+  },
+  ratingHelper: {
+    ...Typography.caption,
+    color: DriverColors.textMuted,
+    fontSize: 12,
   },
   card: {
     backgroundColor: DriverColors.cardBackground,

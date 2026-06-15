@@ -46,19 +46,25 @@ class OrderResource extends JsonResource
                 'name' => $this->client->name,
                 'phone' => $this->client->phone,
             ],
-            'driver' => $this->when($this->driver_id, fn () => [
-                'id' => $this->driver->id,
-                'name' => $this->driver->name,
-                'phone' => $this->driver->phone,
-                'car_model' => $this->driver->driverProfile?->car_model,
-                'car_number' => $this->driver->driverProfile?->car_number,
-                'latitude' => $this->driver->driverProfile?->latitude !== null
-                    ? (float) $this->driver->driverProfile->latitude
-                    : null,
-                'longitude' => $this->driver->driverProfile?->longitude !== null
-                    ? (float) $this->driver->driverProfile->longitude
-                    : null,
-            ]),
+            'driver' => $this->when($this->driver_id, function () {
+                $stats = $this->driver->driverRatingStats();
+
+                return [
+                    'id' => $this->driver->id,
+                    'name' => $this->driver->name,
+                    'phone' => $this->driver->phone,
+                    'car_model' => $this->driver->driverProfile?->car_model,
+                    'car_number' => $this->driver->driverProfile?->car_number,
+                    'latitude' => $this->driver->driverProfile?->latitude !== null
+                        ? (float) $this->driver->driverProfile->latitude
+                        : null,
+                    'longitude' => $this->driver->driverProfile?->longitude !== null
+                        ? (float) $this->driver->driverProfile->longitude
+                        : null,
+                    'rating_avg' => $stats['avg'],
+                    'rating_count' => $stats['count'],
+                ];
+            }),
             'accepted_at' => $this->accepted_at?->toISOString(),
             'arrived_at' => $this->arrived_at?->toISOString(),
             'in_progress_at' => $this->in_progress_at?->toISOString(),

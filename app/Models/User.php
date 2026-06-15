@@ -66,6 +66,30 @@ class User extends Authenticatable
     }
 
     /**
+     * Средний рейтинг водителя и количество оценок, посчитанные одним
+     * запросом по завершённым поездкам с оценкой. Используется в
+     * driver-profile (видит сам водитель) и в OrderResource->driver
+     * (видит клиент в карточке принятого заказа). Не для History —
+     * там был бы N+1.
+     *
+     * @return array{avg: float|null, count: int}
+     */
+    public function driverRatingStats(): array
+    {
+        $row = $this->driverOrders()
+            ->whereNotNull('rating')
+            ->selectRaw('avg(rating) as avg_rating, count(*) as count_rating')
+            ->first();
+
+        $count = (int) ($row->count_rating ?? 0);
+
+        return [
+            'avg' => $count > 0 ? round((float) $row->avg_rating, 1) : null,
+            'count' => $count,
+        ];
+    }
+
+    /**
      * Межгород-трипы где этот пользователь — водитель.
      *
      * @return HasMany<IntercityTrip, $this>

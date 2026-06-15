@@ -17,6 +17,10 @@ export interface Driver {
   // медленно едет). Используется клиентом чтобы развернуть driver-маркер
   // на карте по направлению движения.
   heading: number | null;
+  // Средний рейтинг + кол-во оценок. null пока ни одного отзыва нет —
+  // тогда показываем «Новый водитель» вместо ★ 0.0.
+  rating_avg: number | null;
+  rating_count: number;
 }
 
 export type DeclineReason =
@@ -137,6 +141,8 @@ export interface DriverProfile {
   phone: string;
   car_model: string;
   car_number: string;
+  rating_avg?: number | null;
+  rating_count?: number;
 }
 
 export interface DriverChangeRequest {

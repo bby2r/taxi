@@ -12,6 +12,7 @@ export { default as ConfirmModal } from './components/ConfirmModal';
 export { default as EmptyState } from './components/EmptyState';
 export { default as FadeInView } from './components/FadeInView';
 export { default as PopInView } from './components/PopInView';
+export { default as RatingBadge } from './components/RatingBadge';
 export { default as ErrorPill } from './components/ErrorPill';
 export { default as Icon } from './components/Icon';
 export type { IconName } from './components/Icon';
