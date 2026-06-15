@@ -22,13 +22,8 @@ import MapLibreMapView, { type MapLibreMapHandle } from '../components/MapLibreM
 // на каждый ререндер → видимый дёрг при свайпе.
 const SCREEN_HEIGHT = Dimensions.get('window').height;
 const PEEK_HEIGHT = 90;
-// Высота шторки адаптируется под фазу заказа — иначе на активной фазе
-// (только DriverCard + кнопка «Отменить») остаётся 175px пустого
-// пространства под кнопкой. Базовые значения:
-//   idle:      polный экран заказа (peek + greeting + priceCard +
-//              roundTrip + hero + intervillage)
-//   searching: компактная карточка с пульсирующим индикатором
-//   active:    DriverCard + «Отменить»
+// Высота шторки адаптируется под фазу — фиксированная под idle
+// оставляет пустое пространство под DriverCard в active.
 const HEIGHT_IDLE = Math.min(SCREEN_HEIGHT * 0.52, 425);
 const HEIGHT_SEARCHING = 260;
 const HEIGHT_ACTIVE = 340;

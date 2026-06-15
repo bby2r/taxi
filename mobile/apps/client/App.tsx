@@ -5,7 +5,6 @@ import * as SplashScreen from 'expo-splash-screen';
 import { AuthProvider, ClientColors } from '@taxi/shared';
 import RootNavigator from './src/navigation/RootNavigator';
 import BrandIntro from './src/components/BrandIntro';
-import { usePushNotifications } from './src/hooks/usePushNotifications';
 import { ensureClientChannel, requestNotificationPermission } from './src/lib/notifee';
 
 // Keep the native splash visible until BrandIntro has mounted and
@@ -14,21 +13,11 @@ import { ensureClientChannel, requestNotificationPermission } from './src/lib/no
 // window background (grey/white flash) for ~300ms before RN paints.
 SplashScreen.preventAutoHideAsync().catch(() => {});
 
-function PushGate(): React.ReactNode {
-  // Регистрация push-токена после авторизации. Хук слушает useAuth.user
-  // и при появлении юзера получает Expo push-токен → отправляет на бэк.
-  // Backend уже шлёт «Водитель прибыл» через ExpoPushService.
-  usePushNotifications();
-  return null;
-}
-
 export default function App(): React.ReactNode {
   const [introVisible, setIntroVisible] = useState(true);
 
   useEffect(() => {
     SplashScreen.hideAsync().catch(() => {});
-    // Notifee-канал + permission создаём на маунте до auth — чтобы
-    // local heads-up «Водитель прибыл» сразу работали при первом заказе.
     ensureClientChannel().catch(() => undefined);
     requestNotificationPermission().catch(() => undefined);
   }, []);
@@ -37,7 +26,6 @@ export default function App(): React.ReactNode {
     <View style={styles.root}>
       <AuthProvider requiredRole="client">
         <StatusBar style="dark" />
-        <PushGate />
         <RootNavigator />
         {introVisible && <BrandIntro onFinish={() => setIntroVisible(false)} />}
       </AuthProvider>

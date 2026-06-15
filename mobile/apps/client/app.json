@@ -58,13 +58,6 @@
       ],
       "expo-secure-store",
       [
-        "expo-notifications",
-        {
-          "color": "#14B8A6",
-          "defaultChannel": "order-events"
-        }
-      ],
-      [
         "expo-font",
         {
           "fonts": [

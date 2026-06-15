@@ -6,7 +6,7 @@ import {
   StyleSheet,
   Linking,
 } from 'react-native';
-import { Driver, ClientColors, FadeInView, PopInView, Radius, RatingBadge, Spacing, Haptics } from '@taxi/shared';
+import { Driver, ClientColors, FadeInView, formatPlate, isFullPlate, PopInView, Radius, RatingBadge, Spacing, Haptics } from '@taxi/shared';
 import Icon, { IconName } from './Icon';
 
 interface DriverCardProps {
@@ -48,18 +48,7 @@ function getStatusText(status: DriverCardProps['status']): {
 export default function DriverCard({ driver, status }: DriverCardProps): React.ReactNode {
   const statusInfo = getStatusText(status);
   const initial = driver.name.charAt(0).toUpperCase();
-
-  // Форматируем номер: разделяем цифры/буквы пробелами для читаемости.
-  // Если формат не парсится — оставляем как есть.
-  const formatPlate = (plate: string): string => {
-    const clean = plate.replace(/\s+/g, '').toUpperCase();
-    const m = clean.match(/^(\d{2})([A-ZА-Я]{2})(\d{3})([A-ZА-Я]{2,3})$/);
-    return m ? `${m[1]} ${m[2]} ${m[3]} ${m[4]}` : clean;
-  };
-
-  // Плашка показывается только когда номер похож на полный KG-формат.
-  // Иначе — обычный текст рядом с моделью авто.
-  const hasFullPlate = /^[\dA-ZА-Я]{6,}$/i.test((driver.car_number ?? '').replace(/\s+/g, ''));
+  const hasFullPlate = isFullPlate(driver.car_number);
 
   const handleCall = (): void => {
     Haptics.light();

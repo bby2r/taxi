@@ -1,11 +1,5 @@
 import { Platform } from 'react-native';
 
-// Notifee — нативный нотификационный API, гораздо надёжнее expo-notifications
-// на Android: не зависит от FCM-credentials для локальных уведомлений,
-// поддерживает кастомные каналы с MAX importance/bypassDnd, корректно
-// показывает heads-up даже когда приложение в foreground. Driver-app
-// использует тот же подход — см. ../../driver/src/lib/notifee.ts.
-
 type NotifeeModule = typeof import('@notifee/react-native').default;
 type NotifeeNamespace = typeof import('@notifee/react-native');
 
@@ -57,12 +51,6 @@ export async function requestNotificationPermission(): Promise<void> {
   }
 }
 
-/**
- * Показывает heads-up notification у клиента. Работает мгновенно в
- * foreground / background / recent kill, без серверного FCM. Триггерится
- * из useOrder.ts на Pusher-события (order.accepted / driver_arrived /
- * completed).
- */
 export async function displayClientNotification(opts: {
   id?: string;
   title: string;
@@ -92,6 +80,6 @@ export async function displayClientNotification(opts: {
       },
     });
   } catch {
-    // best-effort — vibration/TTS уже сработали в caller'е
+    // best-effort
   }
 }

@@ -47,6 +47,7 @@ export * from './utils/geo';
 export * from './utils/kalman';
 export * from './utils/geocode';
 export * from './utils/phone';
+export * from './utils/plate';
 export * from './utils/routeTrim';
 export * from './utils/storage';
 export * from './utils/dates';

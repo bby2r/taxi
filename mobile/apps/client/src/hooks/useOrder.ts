@@ -19,9 +19,6 @@ try {
   ExpoAudio = null;
 }
 
-// Локальные heads-up notification через notifee. Driver-app использует
-// тот же подход — нативная либа надёжнее expo-notifications на Android
-// и не требует FCM-credentials для локальных пуш-сообщений.
 import { displayClientNotification } from '../lib/notifee';
 
 function showLocalNotification(title: string, body: string): void {
