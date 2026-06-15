@@ -99,14 +99,13 @@ function buildHtml(apiKey: string, styleName: string, center: [number, number], 
         0% { transform: scale(1); opacity: 0.7; }
         100% { transform: scale(3); opacity: 0; }
       }
-      /* Маркер водителя — стилизованное такси. SVG взят из бывшего
-         AnimatedDriverMarker.tsx, переведён в inline-HTML. Поворот
-         через CSS rotate(deg) у внутреннего div'a. */
+      /* Маркер водителя — премиум-седан top-down. Шире viewBox (72x72)
+         даёт место под мягкие фары-glow и floor shadow. */
       .driver-marker {
-        width: 56px; height: 56px;
-        filter: drop-shadow(0 3px 6px rgba(0,0,0,0.5));
+        width: 64px; height: 64px;
+        filter: drop-shadow(0 6px 10px rgba(0,0,0,0.35)) drop-shadow(0 2px 3px rgba(0,0,0,0.25));
       }
-      .driver-marker svg { width: 100%; height: 100%; }
+      .driver-marker svg { width: 100%; height: 100%; overflow: visible; }
     </style>
     <script>
       // Сетевой перехватчик — диагностика MapTiler / unpkg сбоев,
@@ -192,57 +191,97 @@ function buildHtml(apiKey: string, styleName: string, center: [number, number], 
       }
 
       function makeDriverEl(rotationDeg) {
-        // Top-down sedan SVG. Перед машины — наверх (направление движения).
+        // Top-down premium sedan. Перед машины — наверх (направление движения).
+        // Премиум-палитра: глубокий graphite-корпус с pearl-highlight на капоте,
+        // brand-teal LED по борту, мягкое свечение фар через SVG <filter>.
+        // Viewbox 64x64 — чуть просторней для блюр-glow за пределами кузова.
         var rot = (rotationDeg == null || isNaN(rotationDeg)) ? 0 : rotationDeg;
         var el = document.createElement('div');
         el.className = 'driver-marker';
         el.innerHTML =
-          '<svg viewBox="0 0 56 56" xmlns="http://www.w3.org/2000/svg" style="transform: rotate(' + rot + 'deg)">' +
+          '<svg viewBox="0 0 64 64" xmlns="http://www.w3.org/2000/svg" style="transform: rotate(' + rot + 'deg)">' +
             '<defs>' +
-              '<linearGradient id="bodyG" x1="0.5" y1="0" x2="0.5" y2="1">' +
-                '<stop offset="0" stop-color="#FCD34D"/>' +
-                '<stop offset="0.45" stop-color="#F59E0B"/>' +
-                '<stop offset="1" stop-color="#92400E"/>' +
+              // Глубокий жемчужно-графитовый кузов: светлее по центру (отражение
+              // неба), темнее по бокам — даёт ощущение скруглённого металла.
+              '<linearGradient id="bodyG" x1="0" y1="0.5" x2="1" y2="0.5">' +
+                '<stop offset="0" stop-color="#0B1220"/>' +
+                '<stop offset="0.18" stop-color="#1F2937"/>' +
+                '<stop offset="0.5" stop-color="#3B4658"/>' +
+                '<stop offset="0.82" stop-color="#1F2937"/>' +
+                '<stop offset="1" stop-color="#0B1220"/>' +
               '</linearGradient>' +
+              // Капот highlight — узкая светлая полоса сверху, имитирует
+              // отражение неба на полированной краске.
+              '<linearGradient id="hoodHi" x1="0.5" y1="0" x2="0.5" y2="1">' +
+                '<stop offset="0" stop-color="#ffffff" stop-opacity="0.18"/>' +
+                '<stop offset="1" stop-color="#ffffff" stop-opacity="0"/>' +
+              '</linearGradient>' +
+              // Стёкла — тёмное «синее небо» отражение с лёгким cyan-tint.
               '<linearGradient id="glassG" x1="0.5" y1="0" x2="0.5" y2="1">' +
-                '<stop offset="0" stop-color="#0B1220" stop-opacity="0.95"/>' +
-                '<stop offset="1" stop-color="#1E3A8A" stop-opacity="0.7"/>' +
+                '<stop offset="0" stop-color="#0A1929" stop-opacity="0.96"/>' +
+                '<stop offset="0.6" stop-color="#0F2C4A" stop-opacity="0.88"/>' +
+                '<stop offset="1" stop-color="#1E3A5F" stop-opacity="0.78"/>' +
               '</linearGradient>' +
-              '<linearGradient id="hiG" x1="0" y1="0" x2="1" y2="0">' +
-                '<stop offset="0" stop-color="#fff" stop-opacity="0.0"/>' +
-                '<stop offset="0.5" stop-color="#fff" stop-opacity="0.18"/>' +
-                '<stop offset="1" stop-color="#fff" stop-opacity="0.0"/>' +
+              // Брендовый teal-trim — тонкая полоска по борту.
+              '<linearGradient id="trimG" x1="0" y1="0" x2="0" y2="1">' +
+                '<stop offset="0" stop-color="#14B8A6" stop-opacity="0.0"/>' +
+                '<stop offset="0.5" stop-color="#14B8A6" stop-opacity="0.85"/>' +
+                '<stop offset="1" stop-color="#0F8F80" stop-opacity="0.0"/>' +
               '</linearGradient>' +
+              // Soft bloom для фар — gaussian blur, чтобы LED казались
+              // светящимися в темноте, а не плоскими прямоугольниками.
+              '<filter id="ledGlow" x="-100%" y="-100%" width="300%" height="300%">' +
+                '<feGaussianBlur stdDeviation="0.9"/>' +
+              '</filter>' +
+              '<filter id="brakeGlow" x="-100%" y="-100%" width="300%" height="300%">' +
+                '<feGaussianBlur stdDeviation="0.7"/>' +
+              '</filter>' +
             '</defs>' +
-            // Тень под машиной
-            '<ellipse cx="28" cy="52" rx="16" ry="2.5" fill="#000" opacity="0.32"/>' +
-            // Колёса (чёрные прямоугольники в углах)
-            '<rect x="12" y="11" width="4" height="8" rx="1.2" fill="#0F172A"/>' +
-            '<rect x="40" y="11" width="4" height="8" rx="1.2" fill="#0F172A"/>' +
-            '<rect x="12" y="37" width="4" height="8" rx="1.2" fill="#0F172A"/>' +
-            '<rect x="40" y="37" width="4" height="8" rx="1.2" fill="#0F172A"/>' +
-            // Кузов седана с амбер-градиентом, плавные front/rear обводы
-            '<path d="M17 8 Q17 4 22 4 L34 4 Q39 4 39 8 L40 26 L40 32 L39 48 Q39 52 34 52 L22 52 Q17 52 17 48 L16 32 L16 26 Z" fill="url(#bodyG)" stroke="#451A03" stroke-width="0.8"/>' +
-            // Боковые зеркала — маленькие выступы по бортам
-            '<path d="M15 14 Q12 14 13 17 Q15 17 16 16 Z" fill="#451A03"/>' +
-            '<path d="M41 14 Q44 14 43 17 Q41 17 40 16 Z" fill="#451A03"/>' +
-            // Лобовое стекло (трапеция к капоту)
-            '<path d="M19 10 L37 10 L35 22 L21 22 Z" fill="url(#glassG)" stroke="#0B1220" stroke-width="0.4"/>' +
+            // Floor-shadow под машиной — мягкое размытое пятно
+            '<ellipse cx="32" cy="60" rx="20" ry="3" fill="#000" opacity="0.32"/>' +
+            // Halo фар спереди (под машиной — выглядит как свет на земле)
+            '<ellipse cx="22" cy="5" rx="3.5" ry="2.2" fill="#FFF7B0" opacity="0.55" filter="url(#ledGlow)"/>' +
+            '<ellipse cx="42" cy="5" rx="3.5" ry="2.2" fill="#FFF7B0" opacity="0.55" filter="url(#ledGlow)"/>' +
+            // Колёсные арки — тонкие тёмные полоски, добавляют объём
+            '<rect x="13" y="13" width="6" height="10" rx="2" fill="#000" opacity="0.45"/>' +
+            '<rect x="45" y="13" width="6" height="10" rx="2" fill="#000" opacity="0.45"/>' +
+            '<rect x="13" y="41" width="6" height="10" rx="2" fill="#000" opacity="0.45"/>' +
+            '<rect x="45" y="41" width="6" height="10" rx="2" fill="#000" opacity="0.45"/>' +
+            // Колёса — металлик-обод + черная шина, чуть «выглядывают» из арок
+            '<rect x="14" y="14" width="4" height="8" rx="1.5" fill="#0F172A" stroke="#64748B" stroke-width="0.4"/>' +
+            '<rect x="46" y="14" width="4" height="8" rx="1.5" fill="#0F172A" stroke="#64748B" stroke-width="0.4"/>' +
+            '<rect x="14" y="42" width="4" height="8" rx="1.5" fill="#0F172A" stroke="#64748B" stroke-width="0.4"/>' +
+            '<rect x="46" y="42" width="4" height="8" rx="1.5" fill="#0F172A" stroke="#64748B" stroke-width="0.4"/>' +
+            // Кузов седана — premium graphite с плавными свесами капота/багажника
+            '<path d="M19 10 Q19 5 25 5 L39 5 Q45 5 45 10 L46 30 L46 38 L45 54 Q45 59 39 59 L25 59 Q19 59 19 54 L18 38 L18 30 Z" ' +
+              'fill="url(#bodyG)" stroke="#000" stroke-width="0.6" stroke-opacity="0.6"/>' +
+            // Hood highlight — отражение неба на капоте
+            '<path d="M21 6 Q21 7 22 7 L42 7 Q43 7 43 6 L43 14 L21 14 Z" fill="url(#hoodHi)" opacity="0.8"/>' +
+            // Brand-teal trim по обоим бортам — фирменная подпись
+            '<rect x="17.6" y="20" width="0.8" height="24" fill="url(#trimG)"/>' +
+            '<rect x="45.6" y="20" width="0.8" height="24" fill="url(#trimG)"/>' +
+            // Боковые зеркала
+            '<ellipse cx="17.5" cy="18" rx="1.6" ry="2" fill="#0B1220" stroke="#475569" stroke-width="0.3"/>' +
+            '<ellipse cx="46.5" cy="18" rx="1.6" ry="2" fill="#0B1220" stroke="#475569" stroke-width="0.3"/>' +
+            // Лобовое стекло — трапеция к капоту, премиум-tint
+            '<path d="M22 12 L42 12 L40 25 L24 25 Z" fill="url(#glassG)" stroke="#000" stroke-width="0.4" stroke-opacity="0.5"/>' +
+            // Lens highlight на лобовом — диагональный блик, имитирует
+            // отражение солнца на полированном стекле
+            '<path d="M23 13 L33 13 L30 18 L24 18 Z" fill="#ffffff" opacity="0.12"/>' +
+            // Roof — antracite между стёклами с чуть более светлым центром
+            '<rect x="24" y="25" width="16" height="14" rx="1.5" fill="#2A3441"/>' +
+            '<rect x="25" y="26" width="14" height="2" rx="1" fill="#ffffff" opacity="0.10"/>' +
             // Заднее стекло
-            '<path d="M21 38 L35 38 L37 50 L19 50 Z" fill="url(#glassG)" stroke="#0B1220" stroke-width="0.4" opacity="0.92"/>' +
-            // Roof — тонкая темная панель между стёклами
-            '<rect x="21" y="22" width="14" height="16" rx="1" fill="#92400E" opacity="0.55"/>' +
-            // Reflection highlight на крыше
-            '<rect x="22" y="24" width="12" height="2" rx="1" fill="url(#hiG)"/>' +
-            // Хром-line по борту (тонкий блик)
-            '<rect x="16.5" y="28" width="0.6" height="6" fill="#FEF3C7" opacity="0.7"/>' +
-            '<rect x="38.9" y="28" width="0.6" height="6" fill="#FEF3C7" opacity="0.7"/>' +
-            // LED-фары спереди (тёплый белый, лёгкое свечение через rx)
-            '<rect x="18.5" y="4.5" width="4" height="1.6" rx="0.6" fill="#FEF9C3"/>' +
-            '<rect x="33.5" y="4.5" width="4" height="1.6" rx="0.6" fill="#FEF9C3"/>' +
-            // Стоп-сигналы сзади (красно-оранжевые)
-            '<rect x="18.5" y="50.5" width="4" height="1.4" rx="0.6" fill="#EF4444"/>' +
-            '<rect x="33.5" y="50.5" width="4" height="1.4" rx="0.6" fill="#EF4444"/>' +
+            '<path d="M24 39 L40 39 L42 52 L22 52 Z" fill="url(#glassG)" stroke="#000" stroke-width="0.4" stroke-opacity="0.5" opacity="0.95"/>' +
+            // Front LED-strip — две тонкие полоски, glow filter
+            '<rect x="20.5" y="6" width="6" height="1.6" rx="0.8" fill="#FEF9C3" filter="url(#ledGlow)"/>' +
+            '<rect x="37.5" y="6" width="6" height="1.6" rx="0.8" fill="#FEF9C3" filter="url(#ledGlow)"/>' +
+            // Core фары — острый белый поверх blur
+            '<rect x="21" y="6.4" width="5" height="0.8" rx="0.4" fill="#ffffff"/>' +
+            '<rect x="38" y="6.4" width="5" height="0.8" rx="0.4" fill="#ffffff"/>' +
+            // Стоп-сигналы сзади — красный glow
+            '<rect x="20.5" y="56.4" width="6" height="1.5" rx="0.8" fill="#EF4444" filter="url(#brakeGlow)"/>' +
+            '<rect x="37.5" y="56.4" width="6" height="1.5" rx="0.8" fill="#EF4444" filter="url(#brakeGlow)"/>' +
           '</svg>';
         return el;
       }
