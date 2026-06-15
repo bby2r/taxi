@@ -77,7 +77,7 @@ export default function NameSetupScreen(): React.ReactNode {
               style={styles.input}
               value={name}
               onChangeText={setName}
-              placeholder="Иван"
+              placeholder="Имя..."
               placeholderTextColor={ClientColors.textMuted}
               maxLength={50}
               autoFocus
