@@ -58,6 +58,7 @@ Route::prefix('v1')->middleware('auth:sanctum')->group(function () {
         Route::post('/orders', [ClientOrderController::class, 'store'])->name('api.v1.client.orders.store');
         Route::get('/orders/{order}', [ClientOrderController::class, 'show'])->name('api.v1.client.orders.show');
         Route::post('/orders/{order}/cancel', [ClientOrderController::class, 'cancel'])->name('api.v1.client.orders.cancel');
+        Route::post('/orders/{order}/rating', [ClientOrderController::class, 'rate'])->name('api.v1.client.orders.rate');
         Route::put('/profile', [ClientProfileController::class, 'update'])->name('api.v1.client.profile.update');
         Route::get('/regions', [RegionController::class, 'index'])->name('api.v1.client.regions');
         Route::get('/tariffs', [RegionController::class, 'tariffs'])->name('api.v1.client.tariffs');

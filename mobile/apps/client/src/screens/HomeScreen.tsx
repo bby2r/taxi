@@ -6,7 +6,6 @@ import {
   Text,
   StyleSheet,
   ActivityIndicator,
-  Modal,
   Animated,
   Easing,
   Platform,
@@ -30,11 +29,12 @@ const PEEK_HEIGHT = 90;
 const EXPANDED_HEIGHT = Math.min(SCREEN_HEIGHT * 0.52, 425);
 const COLLAPSE_OFFSET = EXPANDED_HEIGHT - PEEK_HEIGHT;
 
-import { useLocation, ActionButton, ClientColors, ErrorPill, FadeInView, PopInView, Radius, Spacing, Typography, reverseGeocode, Region } from '@taxi/shared';
+import { useLocation, ActionButton, ClientColors, ErrorPill, FadeInView, Haptics, Radius, Spacing, Typography, reverseGeocode, Region } from '@taxi/shared';
 import { useOrder } from '../hooks/useOrder';
 import DriverCard from '../components/DriverCard';
 import Icon from '../components/Icon';
 import IntervillageModal from '../components/IntervillageModal';
+import RatingModal from '../components/RatingModal';
 import { getRegions, getTariffs, priceFor, type TariffRoute } from '../api/regions';
 
 function PulsingDot({ size = 14 }: { size?: number }): React.ReactNode {
@@ -253,6 +253,9 @@ export default function HomeScreen(): React.ReactNode {
 
   const handleInVillageCallTaxi = async (): Promise<void> => {
     if (detectedVillage === null || pickupCoord === null) return;
+    // Тап ощущается СРАЗУ — до сетевого round-trip. Без этого юзер
+    // на 1-2 сек видит просто белую кнопку и не понимает «нажалось ли».
+    Haptics.light();
     if (!(await confirmRoundTripIfNeeded())) return;
     const address = await reverseGeocode(pickupCoord.lat, pickupCoord.lng);
     await callTaxi(
@@ -271,6 +274,7 @@ export default function HomeScreen(): React.ReactNode {
     rt: boolean,
   ): Promise<boolean> => {
     if (pickupCoord === null) return false;
+    Haptics.light();
     const address = await reverseGeocode(pickupCoord.lat, pickupCoord.lng);
     const before = error;
     await callTaxi(pickupCoord.lat, pickupCoord.lng, toId, address, undefined, rt);
@@ -639,33 +643,15 @@ export default function HomeScreen(): React.ReactNode {
         onOrder={handleIntervillageOrder}
       />
 
-      <Modal visible={state.phase === 'completed'} transparent animationType="fade">
-        <View style={styles.modalOverlay}>
-          <PopInView style={styles.modalContent}>
-            <View style={styles.completedBadge}>
-              <Icon name="check" size={40} color={ClientColors.white} strokeWidth={2.5} />
-            </View>
-            <Text style={styles.completedTitle}>Поездка завершена</Text>
-            <Text style={styles.completedSubtitle}>Спасибо, что выбрали Alif Taxi</Text>
-            {state.phase === 'completed' && (
-              <View style={styles.completedPriceBlock}>
-                <Text style={styles.completedPriceLabel}>К оплате водителю</Text>
-                <Text style={styles.completedPriceValue}>
-                  {state.order.price} <Text style={styles.completedPriceCurrency}>сом</Text>
-                </Text>
-              </View>
-            )}
-            <TouchableOpacity
-              style={styles.modalButton}
-              onPress={dismissCompleted}
-              activeOpacity={0.9}
-              accessibilityRole="button"
-            >
-              <Text style={styles.modalButtonText}>Готово</Text>
-            </TouchableOpacity>
-          </PopInView>
-        </View>
-      </Modal>
+      {state.phase === 'completed' && (
+        <RatingModal
+          visible
+          orderId={state.order.id}
+          price={state.order.price}
+          driverName={state.order.driver?.name ?? 'водитель'}
+          onDismiss={dismissCompleted}
+        />
+      )}
     </View>
   );
 }
@@ -930,82 +916,6 @@ const styles = StyleSheet.create({
     shadowRadius: 10,
     shadowOffset: { width: 0, height: 4 },
     elevation: 7,
-  },
-  modalOverlay: {
-    flex: 1,
-    backgroundColor: 'rgba(30, 27, 46, 0.55)',
-    justifyContent: 'center',
-    alignItems: 'center',
-    paddingHorizontal: 28,
-  },
-  modalContent: {
-    backgroundColor: ClientColors.white,
-    borderRadius: Radius.xxxl,
-    paddingHorizontal: 28,
-    paddingTop: 36,
-    paddingBottom: 28,
-    width: '100%',
-    alignItems: 'center',
-  },
-  completedBadge: {
-    width: 84,
-    height: 84,
-    borderRadius: 42,
-    backgroundColor: ClientColors.primary,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginBottom: 22,
-    shadowColor: ClientColors.primary,
-    shadowOpacity: 0.4,
-    shadowRadius: 16,
-    shadowOffset: { width: 0, height: 8 },
-    elevation: 8,
-  },
-  completedTitle: {
-    fontSize: 24,
-    fontWeight: '700' as const,
-    color: ClientColors.dark,
-    textAlign: 'center',
-    letterSpacing: -0.4,
-  },
-  completedSubtitle: {
-    fontSize: 14,
-    color: ClientColors.textSecondary,
-    textAlign: 'center',
-    marginTop: 6,
-    marginBottom: 22,
-  },
-  completedPriceBlock: {
-    alignItems: 'center',
-    marginBottom: 26,
-  },
-  completedPriceLabel: {
-    fontSize: 13,
-    color: ClientColors.textSecondary,
-    marginBottom: 4,
-  },
-  completedPriceValue: {
-    fontSize: 38,
-    fontWeight: '700' as const,
-    color: ClientColors.primaryDark,
-  },
-  completedPriceCurrency: {
-    fontSize: 18,
-    fontWeight: '600' as const,
-  },
-  modalButton: {
-    backgroundColor: ClientColors.primary,
-    borderRadius: Radius.xxl,
-    paddingHorizontal: Spacing.huge,
-    height: 52,
-    justifyContent: 'center',
-    alignItems: 'center',
-    width: '100%',
-  },
-  modalButtonText: {
-    color: ClientColors.white,
-    fontSize: 16,
-    fontWeight: '700' as const,
   },
   cancelledToast: {
     position: 'absolute',

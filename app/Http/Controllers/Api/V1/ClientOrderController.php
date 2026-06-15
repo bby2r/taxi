@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Api\V1;
 
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Api\V1\CreateOrderRequest;
+use App\Http\Requests\Api\V1\RateOrderRequest;
 use App\Http\Resources\V1\OrderResource;
 use App\Models\Order;
 use App\Services\OrderService;
@@ -81,6 +82,37 @@ class ClientOrderController extends Controller
         } catch (\RuntimeException $e) {
             return response()->json(['message' => $e->getMessage()], 422);
         }
+    }
+
+    /**
+     * Оценка водителя после завершённой поездки. Один раз на заказ —
+     * повторная попытка возвращает 422. Только клиент-владелец, только
+     * для completed-заказов с назначенным водителем (отменённые/в
+     * процессе оценивать нельзя).
+     */
+    public function rate(RateOrderRequest $request, Order $order): JsonResponse|OrderResource
+    {
+        if ($order->client_id !== $request->user()->id) {
+            return response()->json(['message' => 'Forbidden.'], 403);
+        }
+
+        if ($order->status->value !== 'completed' || $order->driver_id === null) {
+            return response()->json(['message' => 'Оценить можно только завершённую поездку.'], 422);
+        }
+
+        if ($order->rated_at !== null) {
+            return response()->json(['message' => 'Вы уже оценили эту поездку.'], 422);
+        }
+
+        $order->update([
+            'rating' => (int) $request->validated('rating'),
+            'feedback_tags' => $request->validated('feedback_tags') ?? [],
+            'rated_at' => now(),
+        ]);
+
+        $order->load(['client', 'driver.driverProfile', 'region', 'pickupRegion']);
+
+        return new OrderResource($order);
     }
 
     public function active(Request $request): JsonResponse|OrderResource

@@ -84,6 +84,9 @@ class Order extends Model
         'in_progress_at',
         'completed_at',
         'cancelled_at',
+        'rating',
+        'feedback_tags',
+        'rated_at',
     ];
 
     /**
@@ -112,6 +115,9 @@ class Order extends Model
             'in_progress_at' => 'datetime',
             'completed_at' => 'datetime',
             'cancelled_at' => 'datetime',
+            'rating' => 'integer',
+            'feedback_tags' => 'array',
+            'rated_at' => 'datetime',
         ];
     }
 

@@ -41,6 +41,18 @@ export async function cancelOrder(id: number): Promise<Order> {
   return data.data;
 }
 
+export async function rateOrder(
+  id: number,
+  rating: number,
+  feedbackTags: string[],
+): Promise<Order> {
+  const { data } = await apiClient.post<{ data: Order }>(
+    `/api/v1/client/orders/${id}/rating`,
+    { rating, feedback_tags: feedbackTags },
+  );
+  return data.data;
+}
+
 export async function getOrderHistory(page: number = 1): Promise<PaginatedResponse<Order>> {
   const { data } = await apiClient.get<PaginatedResponse<Order>>('/api/v1/client/orders', {
     params: { page },

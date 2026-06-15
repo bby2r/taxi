@@ -55,6 +55,9 @@ export interface Order {
   created_at: string;
   accepted_at: string | null;
   cancelled_by: string | null;
+  rating: number | null;
+  feedback_tags: string[] | null;
+  rated_at: string | null;
   // Populated only on the freshly-offered order: ISO timestamp when the
   // server set offered_driver_id, ETA in minutes from offered driver to
   // pickup, and the distance used to compute it. Driver app uses these

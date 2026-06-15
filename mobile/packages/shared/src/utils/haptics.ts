@@ -6,11 +6,14 @@ import { Platform, Vibration } from 'react-native';
 // паттернами, поэтому числовые длительности там игнорируются и срабатывает
 // дефолтный «alert» — это ок для тактильного подтверждения.
 
-const ANDROID_LIGHT = 15;
-const ANDROID_MEDIUM = 30;
-const ANDROID_SUCCESS: number[] = [0, 25, 60, 25];
-const ANDROID_WARNING: number[] = [0, 40, 80, 40];
-const ANDROID_ERROR: number[] = [0, 60, 70, 60, 70, 60];
+// Импульсы 15-30ms на дешёвых Android физически не успевают качнуть
+// мотор — юзер вообще ничего не чувствует. Поднимаем пороги до уровня,
+// который реально ощущается, но не дрожит как старый Nokia.
+const ANDROID_LIGHT = 35;
+const ANDROID_MEDIUM = 70;
+const ANDROID_SUCCESS: number[] = [0, 55, 70, 90];
+const ANDROID_WARNING: number[] = [0, 90, 100, 90];
+const ANDROID_ERROR: number[] = [0, 110, 90, 110, 90, 110];
 
 export const Haptics = {
   light(): void {

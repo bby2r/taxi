@@ -3,6 +3,7 @@ import { View, Text, StyleSheet } from 'react-native';
 import dayjs from 'dayjs';
 import 'dayjs/locale/ru';
 import { Order, OrderStatus, ClientColors, FadeInView, Radius, Spacing, Typography } from '@taxi/shared';
+import Icon from './Icon';
 
 dayjs.locale('ru');
 
@@ -60,6 +61,22 @@ export default function OrderHistoryItem({ order, index = 0 }: OrderHistoryItemP
           {order.price} сом
         </Text>
       </View>
+      {order.rating !== null && (
+        <View style={styles.ratingRow}>
+          <View style={styles.ratingStars}>
+            {[1, 2, 3, 4, 5].map((n) => (
+              <Icon
+                key={n}
+                name={n <= (order.rating ?? 0) ? 'star-filled' : 'star'}
+                size={12}
+                color={n <= (order.rating ?? 0) ? '#F5B400' : ClientColors.border}
+                strokeWidth={1.8}
+              />
+            ))}
+          </View>
+          <Text style={styles.ratingLabel}>Ваша оценка</Text>
+        </View>
+      )}
     </FadeInView>
   );
 }
@@ -88,6 +105,26 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
+  },
+  ratingRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginTop: 8,
+    paddingTop: 8,
+    borderTopWidth: 1,
+    borderTopColor: ClientColors.border,
+    opacity: 0.85,
+  },
+  ratingStars: {
+    flexDirection: 'row',
+    gap: 2,
+  },
+  ratingLabel: {
+    fontSize: 11,
+    fontWeight: '600' as const,
+    color: ClientColors.textMuted,
+    letterSpacing: 0.2,
   },
   badge: {
     borderRadius: Radius.sm,

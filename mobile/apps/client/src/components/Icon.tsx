@@ -27,6 +27,8 @@ export type IconName =
   | 'chevron-up'    // Peek-bar expand hint
   | 'clock'         // History
   | 'route'         // Trip / inter-village
+  | 'star'          // Rating outline
+  | 'star-filled'   // Rating active
   | 'spark';        // Brand mark
 
 interface IconProps {
@@ -179,6 +181,18 @@ export default function Icon({
           <Circle cx="6" cy="6" r="2.5" />
           <Circle cx="18" cy="18" r="2.5" />
           <Path d="M8.5 6h6a3.5 3.5 0 0 1 0 7H9.5a3.5 3.5 0 0 0 0 7H15.5" />
+        </Svg>
+      );
+    case 'star':
+      return (
+        <Svg {...props}>
+          <Path d="M12 3l2.7 5.8 6.3.9-4.6 4.4 1.1 6.3L12 17.5 6.5 20.4l1.1-6.3L3 9.7l6.3-.9L12 3z" />
+        </Svg>
+      );
+    case 'star-filled':
+      return (
+        <Svg {...props} fill={stroke}>
+          <Path d="M12 3l2.7 5.8 6.3.9-4.6 4.4 1.1 6.3L12 17.5 6.5 20.4l1.1-6.3L3 9.7l6.3-.9L12 3z" />
         </Svg>
       );
     case 'spark':

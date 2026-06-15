@@ -64,6 +64,9 @@ class OrderResource extends JsonResource
             'in_progress_at' => $this->in_progress_at?->toISOString(),
             'completed_at' => $this->completed_at?->toISOString(),
             'cancelled_at' => $this->cancelled_at?->toISOString(),
+            'rating' => $this->rating,
+            'feedback_tags' => $this->feedback_tags,
+            'rated_at' => $this->rated_at?->toISOString(),
             'created_at' => $this->created_at->toISOString(),
             // Only meaningful while the order is being offered — driver
             // app uses this to sync its countdown with the server-side
