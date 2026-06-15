@@ -31,20 +31,19 @@ try {
 
 function showLocalNotification(title: string, body: string): void {
   if (!ExpoNotifications) return;
+  // На Android канал передаётся НЕ через content (как раньше в SDK 47-),
+  // а через trigger.channelId. trigger: null = immediate в default-канале.
+  // Default-канал переопределён в usePushNotifications с importance MAX,
+  // поэтому notification пробивает шторку без явного channelId.
   ExpoNotifications.scheduleNotificationAsync({
     content: {
       title,
       body,
       sound: 'default',
       priority: ExpoNotifications.AndroidNotificationPriority.MAX,
-      // Канал создан в usePushNotifications — берём оттуда, не падает
-      // если ещё не создан, fallback на default.
-      ...(Platform.OS === 'android' ? { channelId: 'order-events' } : {}),
     },
     trigger: null,
-  }).catch(() => {
-    // not critical — vibration/TTS alert уже сработали
-  });
+  }).catch(() => undefined);
 }
 
 type ClientOrderState =
