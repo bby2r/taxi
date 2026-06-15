@@ -19,6 +19,34 @@ try {
   ExpoAudio = null;
 }
 
+// Local notification — показываем в системной шторке когда приходит
+// Pusher-событие. FCM server-push не работает без Firebase setup, но
+// локальное notification работает мгновенно пока процесс жив.
+let ExpoNotifications: typeof import('expo-notifications') | null = null;
+try {
+  ExpoNotifications = require('expo-notifications');
+} catch {
+  ExpoNotifications = null;
+}
+
+function showLocalNotification(title: string, body: string): void {
+  if (!ExpoNotifications) return;
+  ExpoNotifications.scheduleNotificationAsync({
+    content: {
+      title,
+      body,
+      sound: 'default',
+      priority: ExpoNotifications.AndroidNotificationPriority.MAX,
+      // Канал создан в usePushNotifications — берём оттуда, не падает
+      // если ещё не создан, fallback на default.
+      ...(Platform.OS === 'android' ? { channelId: 'order-events' } : {}),
+    },
+    trigger: null,
+  }).catch(() => {
+    // not critical — vibration/TTS alert уже сработали
+  });
+}
+
 type ClientOrderState =
   | { phase: 'idle' }
   | { phase: 'searching'; order: Order }
@@ -124,6 +152,12 @@ export function useOrder(): UseOrderReturn {
       };
       if (orderRef.current && typeof payload.latitude === 'number' && typeof payload.longitude === 'number') {
         Haptics.success();
+        showLocalNotification(
+          'Водитель найден',
+          payload.driver_name
+            ? `${payload.driver_name} едет к вам`
+            : 'Ваш водитель в пути',
+        );
         const prevDriver = orderRef.current.driver;
         const optimistic: Order = {
           ...orderRef.current,
@@ -163,6 +197,12 @@ export function useOrder(): UseOrderReturn {
     //   3. TTS itself — Russian if available, fallback to default voice.
     Vibration.vibrate([0, 400, 200, 400, 200, 400]);
 
+    const driverName = orderRef.current?.driver?.name;
+    showLocalNotification(
+      'Водитель ожидает вас',
+      driverName ? `${driverName} прибыл в точку подачи` : 'Водитель прибыл',
+    );
+
     (async () => {
       try {
         await ExpoAudio?.setAudioModeAsync({
@@ -195,6 +235,7 @@ export function useOrder(): UseOrderReturn {
 
   const handleOrderCompleted = useCallback(() => {
     Haptics.success();
+    showLocalNotification('Поездка завершена', 'Спасибо, что выбрали Alif Taxi');
     refreshAndSetPhase('completed');
   }, [refreshAndSetPhase]);
 

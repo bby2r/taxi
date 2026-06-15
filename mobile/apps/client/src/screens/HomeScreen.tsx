@@ -30,8 +30,8 @@ const PEEK_HEIGHT = 90;
 //   searching: компактная карточка с пульсирующим индикатором
 //   active:    DriverCard + «Отменить»
 const HEIGHT_IDLE = Math.min(SCREEN_HEIGHT * 0.52, 425);
-const HEIGHT_SEARCHING = 200;
-const HEIGHT_ACTIVE = 290;
+const HEIGHT_SEARCHING = 260;
+const HEIGHT_ACTIVE = 340;
 
 import { useLocation, ActionButton, ClientColors, ErrorPill, FadeInView, Haptics, Radius, Spacing, Typography, reverseGeocode, Region } from '@taxi/shared';
 import { useOrder } from '../hooks/useOrder';
