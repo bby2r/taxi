@@ -22,12 +22,16 @@ import MapLibreMapView, { type MapLibreMapHandle } from '../components/MapLibreM
 // на каждый ререндер → видимый дёрг при свайпе.
 const SCREEN_HEIGHT = Dimensions.get('window').height;
 const PEEK_HEIGHT = 90;
-// EXPANDED_HEIGHT под реальный контент idle-фазы + небольшой запас:
-// peek header (63) + greeting (38) + priceCard (78) + roundTrip (54) +
-// hero button (60) + межсёлами (62) + paddingBottom (24) ≈ 380px +
-// ~45px воздуха снизу чтобы кнопки не упирались в край шторки.
-const EXPANDED_HEIGHT = Math.min(SCREEN_HEIGHT * 0.52, 425);
-const COLLAPSE_OFFSET = EXPANDED_HEIGHT - PEEK_HEIGHT;
+// Высота шторки адаптируется под фазу заказа — иначе на активной фазе
+// (только DriverCard + кнопка «Отменить») остаётся 175px пустого
+// пространства под кнопкой. Базовые значения:
+//   idle:      polный экран заказа (peek + greeting + priceCard +
+//              roundTrip + hero + intervillage)
+//   searching: компактная карточка с пульсирующим индикатором
+//   active:    DriverCard + «Отменить»
+const HEIGHT_IDLE = Math.min(SCREEN_HEIGHT * 0.52, 425);
+const HEIGHT_SEARCHING = 200;
+const HEIGHT_ACTIVE = 290;
 
 import { useLocation, ActionButton, ClientColors, ErrorPill, FadeInView, Haptics, Radius, Spacing, Typography, reverseGeocode, Region } from '@taxi/shared';
 import { useOrder } from '../hooks/useOrder';
@@ -143,21 +147,32 @@ export default function HomeScreen(): React.ReactNode {
     }
   }, [location.hasRealFix, location.latitude, location.longitude]);
 
-  const translateY = useRef(new Animated.Value(COLLAPSE_OFFSET)).current;
+  // Высота шторки + offset для snap-к-peek — пересчитываются при
+  // смене фазы. translateY анимируется через useEffect ниже.
+  const expandedHeight = useMemo(() => {
+    if (state.phase === 'searching') return HEIGHT_SEARCHING;
+    if (state.phase === 'accepted' || state.phase === 'arrived' || state.phase === 'in_progress') {
+      return HEIGHT_ACTIVE;
+    }
+    return HEIGHT_IDLE;
+  }, [state.phase]);
+  const collapseOffset = expandedHeight - PEEK_HEIGHT;
+
+  const translateY = useRef(new Animated.Value(collapseOffset)).current;
   const lastSnapRef = useRef<'peek' | 'expanded'>('peek');
 
   const snapTo = useCallback(
     (target: 'peek' | 'expanded') => {
       lastSnapRef.current = target;
       Animated.spring(translateY, {
-        toValue: target === 'peek' ? COLLAPSE_OFFSET : 0,
+        toValue: target === 'peek' ? collapseOffset : 0,
         useNativeDriver: true,
         damping: 22,
         stiffness: 200,
         mass: 0.9,
       }).start();
     },
-    [translateY],
+    [translateY, collapseOffset],
   );
 
   const togglePeek = useCallback(() => {
@@ -178,7 +193,7 @@ export default function HomeScreen(): React.ReactNode {
         },
         onPanResponderMove: (_, g) => {
           const offset = (translateY as Animated.Value & { _offset?: number })._offset ?? 0;
-          const target = Math.max(-offset, Math.min(COLLAPSE_OFFSET - offset, g.dy));
+          const target = Math.max(-offset, Math.min(collapseOffset - offset, g.dy));
           translateY.setValue(target);
         },
         onPanResponderRelease: (_, g) => {
@@ -188,7 +203,7 @@ export default function HomeScreen(): React.ReactNode {
           if (Math.abs(g.vy) > 0.5) {
             target = g.vy > 0 ? 'peek' : 'expanded';
           } else {
-            target = current > COLLAPSE_OFFSET / 2 ? 'peek' : 'expanded';
+            target = current > collapseOffset / 2 ? 'peek' : 'expanded';
           }
           snapTo(target);
         },
@@ -197,7 +212,7 @@ export default function HomeScreen(): React.ReactNode {
           snapTo(lastSnapRef.current);
         },
       }),
-    [translateY, snapTo],
+    [translateY, snapTo, collapseOffset],
   );
 
   // Тарифы + определение района по pickupCoord (а не location).
@@ -423,7 +438,7 @@ export default function HomeScreen(): React.ReactNode {
           pointerEvents="box-none"
           style={[
             styles.myLocationFab,
-            { bottom: EXPANDED_HEIGHT + 16, transform: [{ translateY }] },
+            { bottom: expandedHeight + 16, transform: [{ translateY }] },
           ]}
         >
           <TouchableOpacity
@@ -452,7 +467,7 @@ export default function HomeScreen(): React.ReactNode {
       <Animated.View
         style={[
           styles.bottomCard,
-          { height: EXPANDED_HEIGHT, transform: [{ translateY }] },
+          { height: expandedHeight, transform: [{ translateY }] },
         ]}
         {...panResponder.panHandlers}
       >
