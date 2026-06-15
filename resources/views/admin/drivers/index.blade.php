@@ -42,6 +42,7 @@
                         <th class="px-6 py-3">Телефон</th>
                         <th class="px-6 py-3">Авто</th>
                         <th class="px-6 py-3">Номер авто</th>
+                        <th class="px-6 py-3">Рейтинг</th>
                         <th class="px-6 py-3">Статус</th>
                         <th class="px-6 py-3">Дата регистрации</th>
                         <th class="px-6 py-3">Действия</th>
@@ -54,6 +55,24 @@
                             <td class="whitespace-nowrap px-6 py-4 text-gray-700">{{ $driver->phone }}</td>
                             <td class="whitespace-nowrap px-6 py-4 text-gray-700">{{ $driver->driverProfile?->car_model ?? '—' }}</td>
                             <td class="whitespace-nowrap px-6 py-4 text-gray-700">{{ $driver->driverProfile?->car_number ?? '—' }}</td>
+                            <td class="whitespace-nowrap px-6 py-4">
+                                @if ($driver->rating_count > 0)
+                                    <span class="inline-flex items-center gap-1.5 rounded-full bg-amber-50 px-2.5 py-1 text-xs font-semibold text-amber-700" title="Средняя оценка по {{ $driver->rating_count }} поездкам">
+                                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="h-3.5 w-3.5 text-amber-500">
+                                            <path fill-rule="evenodd" d="M10.868 2.884c-.321-.772-1.415-.772-1.736 0l-1.83 4.401-4.753.381c-.833.067-1.171 1.107-.536 1.651l3.62 3.102-1.106 4.637c-.194.813.691 1.456 1.405 1.02L10 15.591l4.069 2.485c.713.436 1.598-.207 1.404-1.02l-1.106-4.637 3.62-3.102c.635-.544.297-1.584-.536-1.65l-4.752-.382-1.83-4.401Z" clip-rule="evenodd" />
+                                        </svg>
+                                        {{ number_format((float) $driver->rating_avg, 1) }}
+                                        <span class="font-normal text-amber-600/70">({{ $driver->rating_count }})</span>
+                                    </span>
+                                @else
+                                    <span class="inline-flex items-center gap-1.5 rounded-full bg-gray-100 px-2.5 py-1 text-xs font-medium text-gray-500" title="Ещё нет оценок">
+                                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="h-3.5 w-3.5 text-gray-300">
+                                            <path fill-rule="evenodd" d="M10.868 2.884c-.321-.772-1.415-.772-1.736 0l-1.83 4.401-4.753.381c-.833.067-1.171 1.107-.536 1.651l3.62 3.102-1.106 4.637c-.194.813.691 1.456 1.405 1.02L10 15.591l4.069 2.485c.713.436 1.598-.207 1.404-1.02l-1.106-4.637 3.62-3.102c.635-.544.297-1.584-.536-1.65l-4.752-.382-1.83-4.401Z" clip-rule="evenodd" />
+                                        </svg>
+                                        Нет оценок
+                                    </span>
+                                @endif
+                            </td>
                             <td class="whitespace-nowrap px-6 py-4">
                                 @php
                                     $profile = $driver->driverProfile;
@@ -104,7 +123,7 @@
                         </tr>
                     @empty
                         <tr>
-                            <td colspan="7" class="px-6 py-8 text-center text-gray-500">Водителей нет.</td>
+                            <td colspan="8" class="px-6 py-8 text-center text-gray-500">Водителей нет.</td>
                         </tr>
                     @endforelse
                 </tbody>

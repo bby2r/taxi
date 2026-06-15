@@ -22,8 +22,15 @@ class DriverController extends Controller
      */
     public function index(): View
     {
+        // Рейтинг считается двумя subselect-полями: меньше затраты чем
+        // withCount/withAvg на отдельные запросы, и работает с paginate.
         $drivers = User::drivers()
             ->with('driverProfile')
+            ->selectRaw(
+                'users.*, '.
+                    '(select round(avg(rating)::numeric, 1) from orders where orders.driver_id = users.id and orders.rating is not null) as rating_avg, '.
+                    '(select count(*) from orders where orders.driver_id = users.id and orders.rating is not null) as rating_count'
+            )
             ->latest()
             ->paginate(15);
 

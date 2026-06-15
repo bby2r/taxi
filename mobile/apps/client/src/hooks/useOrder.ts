@@ -19,31 +19,13 @@ try {
   ExpoAudio = null;
 }
 
-// Local notification — показываем в системной шторке когда приходит
-// Pusher-событие. FCM server-push не работает без Firebase setup, но
-// локальное notification работает мгновенно пока процесс жив.
-let ExpoNotifications: typeof import('expo-notifications') | null = null;
-try {
-  ExpoNotifications = require('expo-notifications');
-} catch {
-  ExpoNotifications = null;
-}
+// Локальные heads-up notification через notifee. Driver-app использует
+// тот же подход — нативная либа надёжнее expo-notifications на Android
+// и не требует FCM-credentials для локальных пуш-сообщений.
+import { displayClientNotification } from '../lib/notifee';
 
 function showLocalNotification(title: string, body: string): void {
-  if (!ExpoNotifications) return;
-  // На Android канал передаётся НЕ через content (как раньше в SDK 47-),
-  // а через trigger.channelId. trigger: null = immediate в default-канале.
-  // Default-канал переопределён в usePushNotifications с importance MAX,
-  // поэтому notification пробивает шторку без явного channelId.
-  ExpoNotifications.scheduleNotificationAsync({
-    content: {
-      title,
-      body,
-      sound: 'default',
-      priority: ExpoNotifications.AndroidNotificationPriority.MAX,
-    },
-    trigger: null,
-  }).catch(() => undefined);
+  displayClientNotification({ title, body });
 }
 
 type ClientOrderState =

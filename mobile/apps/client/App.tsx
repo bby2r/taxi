@@ -6,6 +6,7 @@ import { AuthProvider, ClientColors } from '@taxi/shared';
 import RootNavigator from './src/navigation/RootNavigator';
 import BrandIntro from './src/components/BrandIntro';
 import { usePushNotifications } from './src/hooks/usePushNotifications';
+import { ensureClientChannel, requestNotificationPermission } from './src/lib/notifee';
 
 // Keep the native splash visible until BrandIntro has mounted and
 // rendered at least one frame. Otherwise Expo auto-hides the splash
@@ -26,6 +27,10 @@ export default function App(): React.ReactNode {
 
   useEffect(() => {
     SplashScreen.hideAsync().catch(() => {});
+    // Notifee-канал + permission создаём на маунте до auth — чтобы
+    // local heads-up «Водитель прибыл» сразу работали при первом заказе.
+    ensureClientChannel().catch(() => undefined);
+    requestNotificationPermission().catch(() => undefined);
   }, []);
 
   return (
