@@ -1,12 +1,10 @@
-import React, { useEffect, useRef } from 'react';
+import React from 'react';
 import {
   View,
   Text,
   TouchableOpacity,
   StyleSheet,
   Linking,
-  Animated,
-  Easing,
 } from 'react-native';
 import { Driver, ClientColors, FadeInView, PopInView, Radius, RatingBadge, Spacing, Haptics } from '@taxi/shared';
 import Icon, { IconName } from './Icon';
@@ -47,52 +45,21 @@ function getStatusText(status: DriverCardProps['status']): {
   }
 }
 
-// Декоративная машина справа — медленный slide-in справа-налево.
-// useNativeDriver на translateX даёт плавность даже на дешёвых Android.
-function CarIllustration(): React.ReactNode {
-  const tx = useRef(new Animated.Value(40)).current;
-  const opacity = useRef(new Animated.Value(0)).current;
-
-  useEffect(() => {
-    Animated.parallel([
-      Animated.timing(tx, {
-        toValue: 0,
-        duration: 620,
-        delay: 120,
-        easing: Easing.bezier(0.16, 1, 0.3, 1),
-        useNativeDriver: true,
-      }),
-      Animated.timing(opacity, {
-        toValue: 1,
-        duration: 480,
-        delay: 120,
-        easing: Easing.out(Easing.cubic),
-        useNativeDriver: true,
-      }),
-    ]).start();
-  }, [tx, opacity]);
-
-  return (
-    <Animated.View
-      pointerEvents="none"
-      style={[styles.carIllustration, { opacity, transform: [{ translateX: tx }] }]}
-    >
-      <Icon name="car-side" size={130} color={ClientColors.primary} />
-    </Animated.View>
-  );
-}
-
 export default function DriverCard({ driver, status }: DriverCardProps): React.ReactNode {
   const statusInfo = getStatusText(status);
   const initial = driver.name.charAt(0).toUpperCase();
 
-  // Форматируем номер в группы как на реальном номерном знаке: «01KG123ABC»
-  // → «01 KG 123 ABC». Если формат не парсится — оставляем как есть.
+  // Форматируем номер: разделяем цифры/буквы пробелами для читаемости.
+  // Если формат не парсится — оставляем как есть.
   const formatPlate = (plate: string): string => {
     const clean = plate.replace(/\s+/g, '').toUpperCase();
     const m = clean.match(/^(\d{2})([A-ZА-Я]{2})(\d{3})([A-ZА-Я]{2,3})$/);
-    return m ? `${m[1]} ${m[2]} ${m[3]} ${m[4]}` : plate;
+    return m ? `${m[1]} ${m[2]} ${m[3]} ${m[4]}` : clean;
   };
+
+  // Плашка показывается только когда номер похож на полный KG-формат.
+  // Иначе — обычный текст рядом с моделью авто.
+  const hasFullPlate = /^[\dA-ZА-Я]{6,}$/i.test((driver.car_number ?? '').replace(/\s+/g, ''));
 
   const handleCall = (): void => {
     Haptics.light();
@@ -102,8 +69,6 @@ export default function DriverCard({ driver, status }: DriverCardProps): React.R
   return (
     <FadeInView style={styles.outer}>
       <View style={styles.card}>
-        <CarIllustration />
-
         <FadeInView
           key={status}
           translateY={6}
@@ -126,11 +91,10 @@ export default function DriverCard({ driver, status }: DriverCardProps): React.R
           </PopInView>
 
           <View style={styles.info}>
-            <Text style={styles.name} numberOfLines={1}>
-              {driver.name}
-            </Text>
-
-            <View style={styles.metaRow}>
+            <View style={styles.nameRow}>
+              <Text style={styles.name} numberOfLines={1}>
+                {driver.name}
+              </Text>
               <RatingBadge
                 avg={driver.rating_avg ?? null}
                 count={driver.rating_count ?? 0}
@@ -141,34 +105,45 @@ export default function DriverCard({ driver, status }: DriverCardProps): React.R
               />
             </View>
 
-            <Text style={styles.carModel} numberOfLines={1}>
-              {driver.car_model}
-            </Text>
-
-            <FadeInView translateY={4} duration={280} delay={100}>
-              <View style={styles.plate}>
-                <View style={styles.plateFlag}>
-                  <View style={styles.plateFlagBar} />
-                  <Text style={styles.plateFlagText}>KG</Text>
-                </View>
-                <Text style={styles.plateNumber} numberOfLines={1}>
-                  {formatPlate(driver.car_number)}
-                </Text>
+            <View style={styles.carRow}>
+              <View style={styles.carIconWrap}>
+                <Icon name="car-side" size={18} color={ClientColors.primary} />
               </View>
-            </FadeInView>
-          </View>
-        </View>
+              <Text style={styles.carModel} numberOfLines={1}>
+                {driver.car_model}
+              </Text>
+            </View>
 
-        <TouchableOpacity
-          onPress={handleCall}
-          style={styles.phoneButton}
-          accessibilityRole="button"
-          accessibilityLabel={`Позвонить водителю ${driver.name}`}
-          activeOpacity={0.88}
-          hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
-        >
-          <Icon name="phone" size={22} color={ClientColors.white} strokeWidth={2.2} />
-        </TouchableOpacity>
+            {hasFullPlate ? (
+              <FadeInView translateY={4} duration={280} delay={100} style={styles.plateWrap}>
+                <View style={styles.plate}>
+                  <View style={styles.plateFlag}>
+                    <View style={styles.plateFlagBar} />
+                    <Text style={styles.plateFlagText}>KG</Text>
+                  </View>
+                  <Text style={styles.plateNumber} numberOfLines={1}>
+                    {formatPlate(driver.car_number)}
+                  </Text>
+                </View>
+              </FadeInView>
+            ) : (
+              <Text style={styles.plateFallback} numberOfLines={1}>
+                {driver.car_number}
+              </Text>
+            )}
+          </View>
+
+          <TouchableOpacity
+            onPress={handleCall}
+            style={styles.phoneButton}
+            accessibilityRole="button"
+            accessibilityLabel={`Позвонить водителю ${driver.name}`}
+            activeOpacity={0.88}
+            hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+          >
+            <Icon name="phone" size={22} color={ClientColors.white} strokeWidth={2.2} />
+          </TouchableOpacity>
+        </View>
       </View>
     </FadeInView>
   );
@@ -191,13 +166,6 @@ const styles = StyleSheet.create({
     shadowRadius: 18,
     shadowOffset: { width: 0, height: 8 },
     elevation: 6,
-    overflow: 'hidden',
-  },
-  carIllustration: {
-    position: 'absolute',
-    right: -18,
-    bottom: -10,
-    opacity: 0.12,
   },
   statusPill: {
     alignSelf: 'flex-start',
@@ -216,7 +184,7 @@ const styles = StyleSheet.create({
   },
   row: {
     flexDirection: 'row',
-    alignItems: 'flex-start',
+    alignItems: 'center',
     gap: 14,
   },
   avatarRing: {
@@ -251,31 +219,46 @@ const styles = StyleSheet.create({
     flex: 1,
     minWidth: 0,
   },
+  nameRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    flexWrap: 'wrap',
+  },
   name: {
-    fontSize: 19,
+    fontSize: 18,
     fontWeight: '700' as const,
     color: ClientColors.dark,
     letterSpacing: -0.3,
+    flexShrink: 1,
   },
-  metaRow: {
+  carRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginTop: 4,
+    gap: 6,
+    marginTop: 6,
+  },
+  carIconWrap: {
+    width: 24,
+    height: 18,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   carModel: {
     fontSize: 13,
     fontWeight: '600' as const,
     color: ClientColors.textSecondary,
-    marginTop: 8,
+    flexShrink: 1,
+  },
+  plateWrap: {
+    marginTop: 6,
   },
   // Лицензионная плашка — белый фон, тонкая чёрная рамка, синий
-  // KG-флаг слева как на реальных KG-номерах, моноширинный look
-  // через letterSpacing + tabular-feel.
+  // KG-флаг слева как на реальных KG-номерах.
   plate: {
     alignSelf: 'flex-start',
     flexDirection: 'row',
     alignItems: 'stretch',
-    marginTop: 6,
     borderRadius: 8,
     borderWidth: 1.5,
     borderColor: '#1a1a1a',
@@ -317,13 +300,19 @@ const styles = StyleSheet.create({
     color: '#1a1a1a',
     letterSpacing: 1.2,
   },
+  // Когда номер не парсится как полный KG-формат — показываем без
+  // рамки, чтобы не выглядело как «обрезанный» номерной знак.
+  plateFallback: {
+    marginTop: 6,
+    fontSize: 13,
+    fontWeight: '700' as const,
+    color: ClientColors.dark,
+    letterSpacing: 0.5,
+  },
   phoneButton: {
-    position: 'absolute',
-    right: 14,
-    bottom: 14,
-    width: 54,
-    height: 54,
-    borderRadius: 27,
+    width: 56,
+    height: 56,
+    borderRadius: 28,
     backgroundColor: ClientColors.success,
     alignItems: 'center',
     justifyContent: 'center',
