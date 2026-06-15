@@ -29,6 +29,7 @@ export type IconName =
   | 'route'         // Trip / inter-village
   | 'star'          // Rating outline
   | 'star-filled'   // Rating active
+  | 'car-side'      // Driver card illustration
   | 'spark';        // Brand mark
 
 interface IconProps {
@@ -193,6 +194,22 @@ export default function Icon({
       return (
         <Svg {...props} fill={stroke}>
           <Path d="M12 3l2.7 5.8 6.3.9-4.6 4.4 1.1 6.3L12 17.5 6.5 20.4l1.1-6.3L3 9.7l6.3-.9L12 3z" />
+        </Svg>
+      );
+    case 'car-side':
+      // Стилизованный седан в профиль: плавный roofline, чёткие колёсные
+      // арки, окно с поясной линией. Без лишних деталей — silhouette,
+      // которая читается даже на ~40px размере.
+      return (
+        <Svg {...props} viewBox="0 0 64 32">
+          <Path d="M4 22h56v3a1 1 0 0 1-1 1h-3a4 4 0 0 0-8 0H20a4 4 0 0 0-8 0H6a2 2 0 0 1-2-2v-2z" fill={stroke} stroke="none" />
+          <Path d="M6 22l3-9a4 4 0 0 1 3.8-2.8h21l11 5.5 9.2 1.5a3 3 0 0 1 2.5 3V22" fill={stroke} stroke="none" />
+          <Path d="M14 13l2-3h12l2 3v3H14z" fill="#ffffff" opacity="0.95" stroke="none" />
+          <Path d="M33 11l8 4h-8z" fill="#ffffff" opacity="0.95" stroke="none" />
+          <Circle cx="16" cy="26" r="4" fill="#1a1a1a" stroke="none" />
+          <Circle cx="16" cy="26" r="1.6" fill={stroke} stroke="none" />
+          <Circle cx="48" cy="26" r="4" fill="#1a1a1a" stroke="none" />
+          <Circle cx="48" cy="26" r="1.6" fill={stroke} stroke="none" />
         </Svg>
       );
     case 'spark':
