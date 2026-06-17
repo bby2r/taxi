@@ -161,9 +161,10 @@ export default function DriverNavigationBar({
   const primaryDisabled = phase === 'active' && !canArrive;
 
   const subtitle =
-    phase === 'active' ? (order.pickup_address ?? 'Точка подачи')
-      : phase === 'arrived' ? 'Клиент уведомлён'
-        : phase === 'in_progress' ? (order.dropoff_address ?? 'В пути')
+    phase === 'active'
+      ? (canArrive ? order.client.name : `${Math.round((distanceToPickupMeters ?? 0))} м до клиента`)
+      : phase === 'arrived' ? 'Клиент ждёт'
+        : phase === 'in_progress' ? (order.dropoff_address ?? `${order.price} сом`)
           : `${order.price} сом`;
 
   const showCallButton = phase === 'active' || phase === 'arrived';
@@ -217,7 +218,7 @@ export default function DriverNavigationBar({
             </Text>
           )}
           <Text style={styles.subtitle} numberOfLines={1}>
-            {phase === 'active' ? (order.client.name ?? 'Клиент') : subtitle}
+            {subtitle}
           </Text>
         </View>
       </TouchableOpacity>
@@ -237,14 +238,6 @@ export default function DriverNavigationBar({
         loading={loading}
         onPress={onPrimary}
       />
-
-      {phase === 'active' && distanceToPickupMeters !== null && distanceToPickupMeters !== undefined && !canArrive && (
-        <View style={styles.distanceTooltip} pointerEvents="none">
-          <Text style={styles.distanceTooltipText}>
-            {Math.round(distanceToPickupMeters)} м до клиента
-          </Text>
-        </View>
-      )}
     </View>
   );
 }

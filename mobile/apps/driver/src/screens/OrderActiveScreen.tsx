@@ -170,79 +170,24 @@ function CancelSheet({
 
 function EnRouteCard({
   order,
-  onMarkArrived,
-  loading,
-  route,
-  routeLoading,
-  routeError,
-  locationError,
-  distanceToPickup,
 }: {
   order: Order;
-  onMarkArrived: () => void;
-  loading: boolean;
-  route: Route | null;
-  routeLoading: boolean;
-  routeError: string | null;
-  locationError: string | null;
-  distanceToPickup: number | null;
 }): React.ReactNode {
-  const canArrive =
-    distanceToPickup !== null && distanceToPickup <= ARRIVED_THRESHOLD_METERS;
   return (
     <View style={styles.cardContent}>
-      {route && (
-        <View style={styles.etaRow}>
-          <Text
-            style={[Typography.h2, { color: DriverColors.primary }]}
-            testID="route-eta"
-          >
-            {formatDuration(route.durationSeconds)}
-          </Text>
-          <Text
-            style={[Typography.body, { color: DriverColors.textMuted, marginLeft: 12 }]}
-            testID="route-distance"
-          >
-            {formatDistance(route.distanceMeters)}
-          </Text>
-        </View>
-      )}
-      {!route && routeLoading && (
-        <Text
-          style={[Typography.caption, { color: DriverColors.textMuted }]}
-          testID="route-loading"
-        >
-          Строим маршрут...
-        </Text>
-      )}
-      {!route && !routeLoading && (routeError || locationError) && (
-        <Text
-          style={[Typography.caption, { color: DriverColors.danger }]}
-          testID="route-error"
-        >
-          {locationError
-            ? 'Включите геолокацию для маршрута'
-            : 'Маршрут недоступен'}
-        </Text>
-      )}
-
-      <Text
-        style={[Typography.caption, { color: DriverColors.textMuted, marginTop: 8 }]}
-      >
+      <Text style={[Typography.caption, { color: DriverColors.textMuted }]}>
         Адрес подачи
       </Text>
       <Text
         style={[Typography.bodyBold, { color: DriverColors.textPrimary, marginTop: 4 }]}
-        numberOfLines={2}
+        numberOfLines={3}
       >
         {order.pickup_address || 'Геолокация клиента'}
       </Text>
 
       {order.is_inter_district && (
         <>
-          <Text
-            style={[Typography.caption, { color: DriverColors.textMuted, marginTop: 12 }]}
-          >
+          <Text style={[Typography.caption, { color: DriverColors.textMuted, marginTop: 16 }]}>
             Куда
           </Text>
           <Text
@@ -254,8 +199,6 @@ function EnRouteCard({
         </>
       )}
 
-      <ClientContact order={order} />
-
       <TouchableOpacity
         onPress={() => openNavigation(order.pickup_latitude, order.pickup_longitude)}
         style={styles.navigationLink}
@@ -266,77 +209,29 @@ function EnRouteCard({
           Открыть в Картах →
         </Text>
       </TouchableOpacity>
-
-      <View style={styles.spacer} />
-
-      {!canArrive && distanceToPickup !== null && (
-        <Text
-          style={[Typography.caption, styles.distanceHint]}
-          testID="distance-to-pickup"
-        >
-          До клиента: {Math.round(distanceToPickup)} м · кнопка станет
-          активной в радиусе {ARRIVED_THRESHOLD_METERS} м
-        </Text>
-      )}
-      {!canArrive && distanceToPickup === null && (
-        <Text style={[Typography.caption, styles.distanceHint]}>
-          Ждём геолокацию...
-        </Text>
-      )}
-      <ActionButton
-        title="Прибыл к клиенту"
-        onPress={onMarkArrived}
-        loading={loading}
-        disabled={!canArrive}
-        style={styles.actionButton}
-      />
     </View>
   );
 }
 
 function ArrivedCard({
   order,
-  onMarkStarted,
   onCancelRequest,
-  loading,
 }: {
   order: Order;
-  onMarkStarted: () => void;
   onCancelRequest: () => void;
-  loading: boolean;
 }): React.ReactNode {
   return (
     <View style={styles.cardContent}>
-      <View style={styles.statusTitleRow}>
-        <Icon name="check-circle" size={18} color={DriverColors.success} />
-        <Text style={[Typography.h3, { color: DriverColors.success }]}>Вы на месте</Text>
-      </View>
-      <Text
-        style={[Typography.caption, { color: DriverColors.textMuted, marginTop: 4 }]}
-      >
-        Клиент уведомлён
+      <Text style={[Typography.caption, { color: DriverColors.textMuted }]}>
+        Адрес подачи
       </Text>
-
       <Text
-        style={[
-          Typography.body,
-          { color: DriverColors.textSecondary, marginTop: 16 },
-        ]}
-        numberOfLines={2}
+        style={[Typography.bodyBold, { color: DriverColors.textPrimary, marginTop: 4 }]}
+        numberOfLines={3}
       >
         {order.pickup_address || 'Геолокация клиента'}
       </Text>
 
-      <ClientContact order={order} />
-
-      <View style={styles.spacer} />
-
-      <ActionButton
-        title="Начать поездку"
-        onPress={onMarkStarted}
-        loading={loading}
-        style={styles.actionButton}
-      />
       <TouchableOpacity
         onPress={onCancelRequest}
         style={styles.cancelLink}
@@ -353,66 +248,28 @@ function ArrivedCard({
 
 function InProgressCard({
   order,
-  onMarkCompleted,
-  loading,
-  route,
-  routeLoading,
-  routeError,
 }: {
   order: Order;
-  onMarkCompleted: () => void;
-  loading: boolean;
-  route: Route | null;
-  routeLoading: boolean;
-  routeError: string | null;
 }): React.ReactNode {
   return (
     <View style={styles.cardContent}>
-      <Text style={[Typography.h3, { color: DriverColors.primary }]}>В поездке</Text>
-
-      {route && (
-        <View style={[styles.etaRow, { marginTop: 8 }]}>
-          <Text style={[Typography.h2, { color: DriverColors.primary }]}>
-            {formatDuration(route.durationSeconds)}
-          </Text>
-          <Text style={[Typography.body, { color: DriverColors.textMuted, marginLeft: 12 }]}>
-            {formatDistance(route.distanceMeters)}
-          </Text>
-        </View>
-      )}
-      {!route && routeLoading && (
-        <Text style={[Typography.caption, { color: DriverColors.textMuted, marginTop: 8 }]}>
-          Строим маршрут...
-        </Text>
-      )}
-      {!route && !routeLoading && routeError && (
-        <Text style={[Typography.caption, { color: DriverColors.danger, marginTop: 8 }]}>
-          Маршрут недоступен
-        </Text>
-      )}
-
-      {order.is_inter_district && (
+      {order.is_inter_district ? (
         <>
-          <Text style={[Typography.caption, { color: DriverColors.textMuted, marginTop: 12 }]}>
+          <Text style={[Typography.caption, { color: DriverColors.textMuted }]}>
             Куда
           </Text>
           <Text
             style={[Typography.bodyBold, { color: DriverColors.textPrimary, marginTop: 4 }]}
-            numberOfLines={2}
+            numberOfLines={3}
           >
             {order.dropoff_address || order.region?.name || '—'}
           </Text>
         </>
+      ) : (
+        <Text style={[Typography.caption, { color: DriverColors.textMuted }]}>
+          Поездка идёт. Сумма: {order.price} сом
+        </Text>
       )}
-
-      <View style={styles.spacer} />
-
-      <ActionButton
-        title="Завершить поездку"
-        onPress={onMarkCompleted}
-        loading={loading}
-        style={styles.actionButton}
-      />
     </View>
   );
 }
@@ -943,40 +800,14 @@ export default function OrderActiveScreen(): React.ReactNode {
             />
           )}
 
-          {state.phase === 'active' && (
-            <EnRouteCard
-              order={order}
-              onMarkArrived={requestArrived}
-              loading={loading}
-              route={route}
-              routeLoading={routeLoading}
-              routeError={routeError}
-              locationError={driverLocation.error}
-              distanceToPickup={
-                driverPoint && pickupPoint
-                  ? haversineMeters(driverPoint, pickupPoint)
-                  : null
-              }
-            />
-          )}
+          {state.phase === 'active' && <EnRouteCard order={order} />}
           {state.phase === 'arrived' && (
             <ArrivedCard
               order={order}
-              onMarkStarted={requestStart}
               onCancelRequest={() => setCancelSheetOpen(true)}
-              loading={loading}
             />
           )}
-          {state.phase === 'in_progress' && (
-            <InProgressCard
-              order={order}
-              onMarkCompleted={requestComplete}
-              loading={loading}
-              route={route}
-              routeLoading={routeLoading}
-              routeError={routeError}
-            />
-          )}
+          {state.phase === 'in_progress' && <InProgressCard order={order} />}
           {state.phase === 'completed' && (
             <CompletedCard order={order} onDismiss={handleDismiss} />
           )}
