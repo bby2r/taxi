@@ -497,11 +497,20 @@ function buildHtml(apiKey: string, styleName: string, center: [number, number], 
       var FOLLOW_DEAD_DEG = 4; // ignore sub-4° heading wobble so the map doesn't shimmer on low-speed GPS noise
       var PREDICT_MAX_MS = 1500; // clamp dead-reckoning so a dropped fix can't run away
       var VEL_EMA = 0.4; // legacy fallback only (used when RN sends no velocity)
-      // padding.top большой + padding.bottom маленький → логический центр
-      // карты смещается ВНИЗ, стрелка водителя ставится в нижнюю треть
-      // экрана. Сверху остаётся большая «обзорная» область с маршрутом
-      // впереди (как в Яндекс.Навигатор / 2GIS).
-      var NAV_PADDING = { top: 600, bottom: 120, left: 0, right: 0 };
+      // Padding пропорционально высоте viewport — раньше были захардкожены
+      // top:600/bottom:120, на экранах ниже 720px usable-area уходила
+      // в ноль и MapLibre переставал рисовать driver-marker (водитель
+      // «терял себя на карте» в навигации). Пропорции 55% сверху / 18%
+      // снизу дают стрелку на ~63% высоты — нижняя треть как в Я.Навигатор.
+      function getNavPadding() {
+        var h = (__map && __map._container) ? __map._container.clientHeight : 800;
+        return {
+          top: Math.max(80, Math.round(h * 0.55)),
+          bottom: Math.max(80, Math.round(h * 0.18)),
+          left: 0,
+          right: 0,
+        };
+      }
 
       function perfNow() {
         return (window.performance && performance.now) ? performance.now() : Date.now();
@@ -528,7 +537,7 @@ function buildHtml(apiKey: string, styleName: string, center: [number, number], 
             f.cb = ((f.cb + d * FOLLOW_BRG_A) % 360 + 360) % 360;
           }
         }
-        __map.jumpTo({ center: [f.cc[0], f.cc[1]], bearing: f.cb, zoom: f.zoom, pitch: f.pitch, padding: NAV_PADDING });
+        __map.jumpTo({ center: [f.cc[0], f.cc[1]], bearing: f.cb, zoom: f.zoom, pitch: f.pitch, padding: getNavPadding() });
         placeDriver(f.cc[0], f.cc[1], f.cb);
         // Keep the 60fps loop alive while moving (velocity) or not yet
         // converged; idle out only when genuinely stopped + settled.
@@ -559,7 +568,7 @@ function buildHtml(apiKey: string, styleName: string, center: [number, number], 
             zoom: zoom, pitch: pitch,
           };
           if (!__userOverride) {
-            __map.jumpTo({ center: [tc[0], tc[1]], bearing: __follow.cb, zoom: zoom, pitch: pitch, padding: NAV_PADDING });
+            __map.jumpTo({ center: [tc[0], tc[1]], bearing: __follow.cb, zoom: zoom, pitch: pitch, padding: getNavPadding() });
             placeDriver(tc[0], tc[1], __follow.cb);
           }
         } else {
