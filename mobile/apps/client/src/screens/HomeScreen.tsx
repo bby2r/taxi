@@ -22,9 +22,9 @@ import MapLibreMapView, { type MapLibreMapHandle } from '../components/MapLibreM
 // на каждый ререндер → видимый дёрг при свайпе.
 const SCREEN_HEIGHT = Dimensions.get('window').height;
 const PEEK_HEIGHT = 90;
-// Высота шторки адаптируется под фазу — фиксированная под idle
-// оставляет пустое пространство под DriverCard в active.
-const HEIGHT_IDLE = Math.min(SCREEN_HEIGHT * 0.52, 425);
+// Премиум-композиция: компактная нижняя карточка, карта занимает
+// ~70% экрана — как Yandex Go / GreenNow.
+const HEIGHT_IDLE = 340;
 const HEIGHT_SEARCHING = 260;
 const HEIGHT_ACTIVE = 340;
 
@@ -529,41 +529,66 @@ export default function HomeScreen(): React.ReactNode {
               </View>
             )}
 
-            {/* В зоне — основной экран заказа */}
+            {/* В зоне — премиум-композиция в стиле Yandex Go / GreenNow */}
             {pickupCoord && inServiceArea === true && detectedVillage && (
               <>
-                <Text style={styles.greeting}>Куда поедем?</Text>
-
-                <View style={styles.priceCard}>
-                  <Text style={styles.priceCardLabel}>Внутри села</Text>
-                  {inVillageTariffMissing ? (
-                    <Text style={styles.priceCardMissing}>Тариф не настроен</Text>
-                  ) : (
-                    <Text style={styles.priceCardValue}>{displayedPrice} сом</Text>
-                  )}
-                </View>
-
-                <TouchableOpacity
-                  style={[styles.roundTripRow, isRoundTrip && styles.roundTripRowActive]}
-                  onPress={() => setIsRoundTrip((v) => !v)}
-                  activeOpacity={0.7}
-                  accessibilityRole="checkbox"
-                  accessibilityState={{ checked: isRoundTrip }}
-                  accessibilityLabel={`Туда и обратно, наценка ${roundTripPct} процентов`}
-                  hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
-                >
-                  <View style={[styles.checkbox, isRoundTrip && styles.checkboxActive]}>
-                    {isRoundTrip && (
-                      <Icon name="check" size={16} color={ClientColors.white} strokeWidth={3} />
+                <View style={styles.tariffCard}>
+                  <View style={styles.tariffCarBadge}>
+                    <Icon name="car-side" size={28} color={ClientColors.primary} />
+                  </View>
+                  <View style={styles.tariffInfo}>
+                    <Text style={styles.tariffName} numberOfLines={1}>
+                      В {detectedVillage.name}
+                    </Text>
+                    <Text style={styles.tariffMeta} numberOfLines={1}>
+                      {isRoundTrip ? 'Туда и обратно' : 'Эконом · 4 места'}
+                    </Text>
+                  </View>
+                  <View style={styles.tariffPriceBlock}>
+                    {inVillageTariffMissing ? (
+                      <Text style={styles.tariffPriceMissing}>—</Text>
+                    ) : (
+                      <Text style={styles.tariffPrice}>
+                        {displayedPrice} <Text style={styles.tariffCurrency}>сом</Text>
+                      </Text>
                     )}
                   </View>
-                  <Text style={styles.roundTripLabel}>Туда и обратно</Text>
-                  {isRoundTrip && (
-                    <View style={styles.roundTripBadge}>
-                      <Text style={styles.roundTripBadgeText}>+{roundTripPct}%</Text>
-                    </View>
-                  )}
-                </TouchableOpacity>
+                </View>
+
+                <View style={styles.inlineRow}>
+                  <TouchableOpacity
+                    style={[styles.chip, isRoundTrip && styles.chipActive]}
+                    onPress={() => setIsRoundTrip((v) => !v)}
+                    activeOpacity={0.75}
+                    accessibilityRole="checkbox"
+                    accessibilityState={{ checked: isRoundTrip }}
+                    accessibilityLabel={`Туда и обратно, наценка ${roundTripPct} процентов`}
+                    hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
+                  >
+                    <Icon
+                      name="route"
+                      size={14}
+                      color={isRoundTrip ? ClientColors.white : ClientColors.primaryDark}
+                      strokeWidth={2.4}
+                    />
+                    <Text style={[styles.chipText, isRoundTrip && styles.chipTextActive]}>
+                      Туда-обратно{isRoundTrip ? ` +${roundTripPct}%` : ''}
+                    </Text>
+                  </TouchableOpacity>
+
+                  <TouchableOpacity
+                    style={styles.chip}
+                    onPress={() => setIntervillageOpen(true)}
+                    activeOpacity={0.75}
+                    disabled={loading}
+                    accessibilityRole="button"
+                    accessibilityLabel="Заказать такси между сёлами"
+                    hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
+                  >
+                    <Icon name="pin" size={14} color={ClientColors.primaryDark} strokeWidth={2.4} />
+                    <Text style={styles.chipText}>Межсёлами</Text>
+                  </TouchableOpacity>
+                </View>
 
                 <TouchableOpacity
                   style={[
@@ -574,36 +599,14 @@ export default function HomeScreen(): React.ReactNode {
                   disabled={loading || inVillageTariffMissing}
                   activeOpacity={0.9}
                   accessibilityRole="button"
-                  accessibilityLabel={`Заказать такси внутри села, ${displayedPrice} сом`}
+                  accessibilityLabel={`Заказать такси, ${displayedPrice} сом`}
                   accessibilityState={{ disabled: loading || inVillageTariffMissing, busy: loading }}
                 >
                   {loading ? (
                     <ActivityIndicator color={ClientColors.white} />
                   ) : (
-                    <>
-                      <Icon name="car" size={22} color={ClientColors.white} strokeWidth={2} />
-                      <Text style={styles.heroButtonText}>Заказ внутри села</Text>
-                    </>
+                    <Text style={styles.heroButtonText}>Заказать такси</Text>
                   )}
-                </TouchableOpacity>
-
-                <TouchableOpacity
-                  style={styles.intervillageButton}
-                  onPress={() => setIntervillageOpen(true)}
-                  activeOpacity={0.7}
-                  disabled={loading}
-                  accessibilityRole="button"
-                  accessibilityLabel="Заказать такси между сёлами"
-                  hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-                >
-                  <Icon name="route" size={18} color={ClientColors.primaryDark} strokeWidth={2.2} />
-                  <Text style={styles.intervillageButtonText}>Межсёлами</Text>
-                  <Icon
-                    name="arrow-right"
-                    size={16}
-                    color={ClientColors.primaryDark}
-                    strokeWidth={2.2}
-                  />
                 </TouchableOpacity>
               </>
             )}
@@ -788,125 +791,122 @@ const styles = StyleSheet.create({
     fontWeight: '700' as const,
     color: ClientColors.primary,
   },
-  greeting: {
-    fontSize: 22,
-    fontWeight: '600' as const,
-    color: ClientColors.dark,
-    marginTop: Spacing.xs,
-    marginBottom: Spacing.md,
-    letterSpacing: -0.3,
-  },
-  priceCard: {
-    backgroundColor: ClientColors.primaryTint,
-    borderRadius: 18,
-    paddingHorizontal: 18,
-    paddingVertical: 14,
-    marginBottom: 14,
-  },
-  priceCardLabel: {
-    fontSize: 13,
-    color: ClientColors.primaryDark,
-    fontWeight: '600' as const,
-  },
-  priceCardValue: {
-    fontSize: 28,
-    fontWeight: '700' as const,
-    color: ClientColors.primaryDark,
-    marginTop: 4,
-    letterSpacing: -0.4,
-  },
-  priceCardMissing: {
-    fontSize: 15,
-    fontWeight: '600' as const,
-    color: ClientColors.danger,
-    marginTop: 6,
-  },
-  roundTripRow: {
+  // Premium tariff card в стиле Yandex Go / GreenNow: иконка машины
+  // слева, название тарифа + meta по центру, цена справа.
+  tariffCard: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: Spacing.md,
-    paddingVertical: 10,
-    paddingHorizontal: Spacing.md,
-    borderRadius: 14,
-    borderWidth: 1,
-    borderColor: ClientColors.border,
-    marginBottom: 14,
-  },
-  roundTripRowActive: {
+    gap: 14,
+    backgroundColor: ClientColors.white,
+    borderRadius: 20,
+    borderWidth: 1.5,
     borderColor: ClientColors.primary,
-    backgroundColor: ClientColors.primaryTint,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    marginTop: 4,
+    shadowColor: ClientColors.primary,
+    shadowOpacity: 0.18,
+    shadowRadius: 14,
+    shadowOffset: { width: 0, height: 4 },
+    elevation: 3,
   },
-  checkbox: {
-    width: 22,
-    height: 22,
-    borderRadius: 6,
-    borderWidth: 2,
-    borderColor: ClientColors.textMuted,
+  tariffCarBadge: {
+    width: 52,
+    height: 52,
+    borderRadius: 16,
+    backgroundColor: ClientColors.primaryTint,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: 'transparent',
   },
-  checkboxActive: {
-    borderColor: ClientColors.primary,
-    backgroundColor: ClientColors.primary,
-  },
-  roundTripLabel: {
+  tariffInfo: {
     flex: 1,
-    fontSize: 14,
-    fontWeight: '600' as const,
-    color: ClientColors.dark,
+    minWidth: 0,
   },
-  roundTripBadge: {
-    paddingHorizontal: 10,
-    paddingVertical: Spacing.xs,
-    borderRadius: 10,
-    backgroundColor: ClientColors.primary,
-  },
-  roundTripBadgeText: {
-    fontSize: 12,
+  tariffName: {
+    fontSize: 17,
     fontWeight: '700' as const,
+    color: ClientColors.dark,
+    letterSpacing: -0.3,
+  },
+  tariffMeta: {
+    fontSize: 12,
+    fontWeight: '600' as const,
+    color: ClientColors.textSecondary,
+    marginTop: 2,
+  },
+  tariffPriceBlock: {
+    alignItems: 'flex-end',
+  },
+  tariffPrice: {
+    fontSize: 22,
+    fontWeight: '800' as const,
+    color: ClientColors.primaryDark,
+    letterSpacing: -0.5,
+  },
+  tariffCurrency: {
+    fontSize: 13,
+    fontWeight: '600' as const,
+    color: ClientColors.textSecondary,
+  },
+  tariffPriceMissing: {
+    fontSize: 22,
+    fontWeight: '700' as const,
+    color: ClientColors.textMuted,
+  },
+  inlineRow: {
+    flexDirection: 'row',
+    gap: 8,
+    marginTop: 12,
+    marginBottom: 14,
+  },
+  chip: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    height: 38,
+    paddingHorizontal: 12,
+    borderRadius: Radius.round,
+    backgroundColor: ClientColors.surfaceMuted,
+    borderWidth: 1,
+    borderColor: ClientColors.border,
+  },
+  chipActive: {
+    backgroundColor: ClientColors.primary,
+    borderColor: ClientColors.primary,
+  },
+  chipText: {
+    fontSize: 13,
+    fontWeight: '600' as const,
+    color: ClientColors.primaryDark,
+    letterSpacing: 0.1,
+  },
+  chipTextActive: {
     color: ClientColors.white,
   },
   heroButton: {
     backgroundColor: ClientColors.primary,
     borderRadius: 28,
-    height: 60,
+    height: 56,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    gap: Spacing.md,
     shadowColor: ClientColors.primary,
-    shadowOpacity: 0.35,
-    shadowRadius: 14,
+    shadowOpacity: 0.4,
+    shadowRadius: 16,
     shadowOffset: { width: 0, height: 8 },
     elevation: 8,
   },
   heroButtonDisabled: {
-    opacity: 0.5,
+    opacity: 0.45,
+    shadowOpacity: 0,
   },
   heroButtonText: {
     color: ClientColors.white,
     fontSize: 17,
     fontWeight: '700' as const,
-    letterSpacing: 0.2,
-  },
-  // Ghost secondary CTA — primary lives on the hero, this one is a
-  // text-link with a tap-target. Reads as "another option" instead of
-  // competing with the main button for attention.
-  intervillageButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 8,
-    marginTop: Spacing.md,
-    height: 44,
-    borderRadius: Radius.xl,
-    backgroundColor: 'transparent',
-  },
-  intervillageButtonText: {
-    fontSize: 14,
-    fontWeight: '600' as const,
-    color: ClientColors.primaryDark,
+    letterSpacing: 0.3,
   },
   // «Моя локация» FAB — приклеен к верхней грани шторки
   myLocationFab: {
