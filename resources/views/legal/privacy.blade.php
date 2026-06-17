@@ -20,11 +20,6 @@
             <h1 class="mb-2 text-3xl font-bold text-gray-900">Политика конфиденциальности</h1>
             <p class="mb-8 text-sm text-gray-500">Редакция от {{ date('d.m.Y') }}</p>
 
-            <p class="mb-6 rounded-lg border border-amber-200 bg-amber-50 p-4 text-sm text-amber-800">
-                <strong>Черновик для согласования с юристом.</strong> Поля в [квадратных скобках]
-                нужно заполнить реальными данными перед публикацией.
-            </p>
-
             <h2 class="mt-8 text-xl font-semibold text-gray-900">1. Общие положения</h2>
             <p>
                 Настоящая Политика конфиденциальности (далее — «Политика») определяет порядок
@@ -32,7 +27,7 @@
                 и связанных с ним веб-ресурсах.
             </p>
             <p>
-                Оператором персональных данных является <strong>[ИП «Фамилия И.О.» / ОсОО «Название», ИНН [номер], адрес: Кыргызская Республика, г. Талас, [адрес]]</strong>
+                Оператором персональных данных является <strong>Индивидуальный предприниматель Ernazarov Maksat Nurdinovich, ИНН 20801200001298, адрес регистрации: Кыргызская Республика, Таласская область, Манасский район, село Покровка, 724000</strong>
                 (далее — «Оператор»).
             </p>
             <p>
@@ -179,9 +174,9 @@
                 реализации Ваших прав свяжитесь с нами:
             </p>
             <ul class="list-disc pl-6">
-                <li>E-mail: <strong>[support@aliftaxi.kg]</strong></li>
-                <li>Телефон / WhatsApp: <strong>[+996 XXX XXX XXX]</strong></li>
-                <li>Адрес: <strong>[г. Талас, Кыргызская Республика, адрес офиса]</strong></li>
+                <li>E-mail: <strong><a href="mailto:ernazarovmaksat4@gmail.com" class="text-amber-600 hover:text-amber-700">ernazarovmaksat4@gmail.com</a></strong></li>
+                <li>Телефон / WhatsApp: <strong><a href="tel:+996509397226" class="text-amber-600 hover:text-amber-700">+996 509 397 226</a></strong></li>
+                <li>Адрес: <strong>Кыргызская Республика, Таласская область, Манасский район, село Покровка, 724000</strong></li>
             </ul>
         </article>
     </main>
