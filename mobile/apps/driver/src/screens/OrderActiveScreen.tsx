@@ -494,10 +494,11 @@ export default function OrderActiveScreen(): React.ReactNode {
   // Three positions like Yandex Taxi driver: barely visible (just handle
   // + ETA peek), default (all key info + main action), expanded (full
   // details, room for future content). Driver swipes between them.
-  // Minimal-bar дизайн: первый snap = только compact bar (~80px) с
-  // ключевыми цифрами и одной action-кнопкой. Тап на bar → snap[1]
-  // (детали + secondary actions).
-  const snapPoints = useMemo(() => [88, '46%', '88%'], []);
+  // Minimal-bar дизайн: первый snap ≈ только compact bar (~90px на
+  // средних экранах). Все значения в процентах — @gorhom/bottom-sheet
+  // на смеси абсолют+процент местами «забывает» переснапнуться, что
+  // через ~часа использования проявлялось как зависшая шторка.
+  const snapPoints = useMemo(() => ['12%', '46%', '88%'], []);
   const driverLocation = useLocation({ navigation: true });
   const [cancelSheetOpen, setCancelSheetOpen] = useState(false);
   const [pendingAction, setPendingAction] = useState<null | {
