@@ -395,14 +395,14 @@ function buildHtml(apiKey: string, styleName: string, center: [number, number], 
           type: 'line',
           source: 'route',
           layout: { 'line-cap': 'round', 'line-join': 'round' },
-          paint: { 'line-color': '#0B3B82', 'line-width': 9, 'line-opacity': 0.85 },
+          paint: { 'line-color': '#0B3B82', 'line-width': 12, 'line-opacity': 0.9 },
         });
         __map.addLayer({
           id: 'route',
           type: 'line',
           source: 'route',
           layout: { 'line-cap': 'round', 'line-join': 'round' },
-          paint: { 'line-color': '${DriverColors.primary}', 'line-width': 5, 'line-opacity': 0.95 },
+          paint: { 'line-color': '${DriverColors.primary}', 'line-width': 7 },
         });
       }
 
