@@ -51,5 +51,6 @@ export * from './utils/plate';
 export * from './utils/routeTrim';
 export * from './utils/storage';
 export * from './utils/dates';
+export * from './utils/format';
 export * from './utils/apiError';
 export * from './utils/haptics';

@@ -57,41 +57,12 @@ class RegionController extends Controller
             ])
             ->values();
 
-        $detectedVillage = null;
-        $inServiceArea = null;
-        $user = $request->user();
-        $isDemo = $user && $user->isDemo();
-
-        if (isset($validated['latitude'], $validated['longitude'])) {
-            $village = Region::findNearestByCoordinates(
-                (float) $validated['latitude'],
-                (float) $validated['longitude'],
-                Region::detectionMaxKm(),
-            );
-            if ($village !== null) {
-                $detectedVillage = ['id' => $village->id, 'name' => $village->name];
-                $inServiceArea = true;
-            } elseif ($isDemo) {
-                // Демо-юзер вне зоны (ревьюер Apple/Google из США): возвращаем
-                // первое сервисное село как fallback, чтобы UI пустил его в
-                // экран заказа. Реальные юзеры тут получают inServiceArea=false.
-                $fallback = Region::active()->service()->orderBy('sort_order')->first();
-                if ($fallback !== null) {
-                    $detectedVillage = ['id' => $fallback->id, 'name' => $fallback->name];
-                    $inServiceArea = true;
-                } else {
-                    $inServiceArea = false;
-                }
-            } else {
-                $inServiceArea = false;
-            }
-        } elseif ($isDemo) {
-            $fallback = Region::active()->service()->orderBy('sort_order')->first();
-            if ($fallback !== null) {
-                $detectedVillage = ['id' => $fallback->id, 'name' => $fallback->name];
-                $inServiceArea = true;
-            }
-        }
+        $isDemo = $request->user()?->isDemo() === true;
+        [$detectedVillage, $inServiceArea] = $this->detectVillage(
+            isset($validated['latitude']) ? (float) $validated['latitude'] : null,
+            isset($validated['longitude']) ? (float) $validated['longitude'] : null,
+            $isDemo,
+        );
 
         return response()->json([
             'routes' => $routes,
@@ -99,5 +70,34 @@ class RegionController extends Controller
             'detected_village' => $detectedVillage,
             'in_service_area' => $inServiceArea,
         ]);
+    }
+
+    /**
+     * @return array{0: array{id: int, name: string}|null, 1: bool|null}
+     */
+    private function detectVillage(?float $lat, ?float $lon, bool $isDemo): array
+    {
+        if ($lat !== null && $lon !== null) {
+            $village = Region::findNearestByCoordinates($lat, $lon, Region::detectionMaxKm());
+            if ($village !== null) {
+                return [['id' => $village->id, 'name' => $village->name], true];
+            }
+        }
+
+        // Demo-юзер (ревьюер) без GPS-fix или вне зоны — fallback на первое
+        // сервисное село, чтобы UI пустил его в экран заказа. Реальные
+        // юзеры вне зоны получают inServiceArea=false.
+        if ($isDemo) {
+            $fallback = Region::active()->service()->orderBy('sort_order')->first();
+            if ($fallback !== null) {
+                return [['id' => $fallback->id, 'name' => $fallback->name], true];
+            }
+        }
+
+        if ($lat === null || $lon === null) {
+            return [null, null];
+        }
+
+        return [null, false];
     }
 }

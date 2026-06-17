@@ -10,7 +10,7 @@ import {
   Vibration,
   Platform,
 } from 'react-native';
-import { DriverColors, Icon, Typography } from '@taxi/shared';
+import { DriverColors, formatDistance, formatDuration, Icon, Typography } from '@taxi/shared';
 import type { Order, Route } from '@taxi/shared';
 
 interface DriverNavigationBarProps {
@@ -23,23 +23,6 @@ interface DriverNavigationBarProps {
   onPrimary: () => void;
   onExpand: () => void;
   // Завершённая фаза показывает «Готово» — кнопка просто закрывает sheet.
-}
-
-function formatDuration(seconds: number): string {
-  const minutes = Math.round(seconds / 60);
-  if (minutes < 60) {
-    return `${minutes} мин`;
-  }
-  const h = Math.floor(minutes / 60);
-  const m = minutes % 60;
-  return m === 0 ? `${h} ч` : `${h} ч ${m} мин`;
-}
-
-function formatDistance(meters: number): string {
-  if (meters < 1000) {
-    return `${Math.round(meters)} м`;
-  }
-  return `${(meters / 1000).toFixed(meters < 10000 ? 1 : 0)} км`;
 }
 
 function PrimaryButton({
@@ -152,25 +135,27 @@ export default function DriverNavigationBar({
     ? formatDistance(route.distanceMeters)
     : null;
 
-  const primaryLabel =
-    phase === 'active' ? 'Прибыл'
-      : phase === 'arrived' ? 'Начать'
-        : phase === 'in_progress' ? 'Завершить'
-          : 'Готово';
+  const primaryLabel: Record<typeof phase, string> = {
+    active: 'Прибыл',
+    arrived: 'Начать',
+    in_progress: 'Завершить',
+    completed: 'Готово',
+  };
 
   const primaryDisabled = phase === 'active' && !canArrive;
 
-  const subtitle =
-    phase === 'active'
-      ? (canArrive ? order.client.name : `${Math.round((distanceToPickupMeters ?? 0))} м до клиента`)
-      : phase === 'arrived' ? 'Клиент ждёт'
-        : phase === 'in_progress' ? (order.dropoff_address ?? `${order.price} сом`)
-          : `${order.price} сом`;
+  const activeSubtitle = canArrive
+    ? order.client.name
+    : `${Math.round(distanceToPickupMeters ?? 0)} м до клиента`;
+  const subtitleByPhase: Record<typeof phase, string> = {
+    active: activeSubtitle,
+    arrived: 'Клиент ждёт',
+    in_progress: order.dropoff_address ?? `${order.price} сом`,
+    completed: `${order.price} сом`,
+  };
 
   const showCallButton = phase === 'active' || phase === 'arrived';
 
-  // Pulse-ring у status-точки рядом с именем клиента — лёгкое движение
-  // даёт ощущение «живой» панели в навигации.
   const pulse = useRef(new Animated.Value(1)).current;
   useEffect(() => {
     if (phase === 'completed') return;
@@ -182,7 +167,9 @@ export default function DriverNavigationBar({
     );
     loop.start();
     return () => loop.stop();
-  }, [phase, pulse]);
+    // pulse — useRef, не нуждается в deps; phase достаточно
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [phase]);
 
   return (
     <View style={styles.container}>
@@ -218,7 +205,7 @@ export default function DriverNavigationBar({
             </Text>
           )}
           <Text style={styles.subtitle} numberOfLines={1}>
-            {subtitle}
+            {subtitleByPhase[phase]}
           </Text>
         </View>
       </TouchableOpacity>
@@ -233,7 +220,7 @@ export default function DriverNavigationBar({
       )}
 
       <PrimaryButton
-        title={primaryLabel}
+        title={primaryLabel[phase]}
         disabled={primaryDisabled}
         loading={loading}
         onPress={onPrimary}

@@ -503,15 +503,23 @@ function buildHtml(apiKey: string, styleName: string, center: [number, number], 
       // MapLibre получал «изменение padding» при каждом jumpTo, что
       // приводило к рывкам стрелки. Также clientHeight — forced-reflow,
       // дёргать его 60 раз/сек кладёт фрейм-rate.
+      // Мутируем поля same-reference объекта вместо replace — MapLibre
+      // сравнивает padding по полям, а не по ссылке, и на одну и ту же
+      // ссылку не триггерит лишний re-layout.
       var __navPadding = { top: 440, bottom: 144, left: 0, right: 0 };
+      var __navResizeRaf = null;
       function recomputeNavPadding() {
         var h = (__map && __map._container) ? __map._container.clientHeight : 800;
-        __navPadding = {
-          top: Math.max(80, Math.round(h * 0.55)),
-          bottom: Math.max(80, Math.round(h * 0.18)),
-          left: 0,
-          right: 0,
-        };
+        __navPadding.top = Math.max(80, Math.round(h * 0.55));
+        __navPadding.bottom = Math.max(80, Math.round(h * 0.18));
+      }
+      function recomputeNavPaddingDeferred() {
+        // Orientation change шлёт resize 10-20 раз — батчим в один rAF.
+        if (__navResizeRaf) return;
+        __navResizeRaf = requestAnimationFrame(function () {
+          __navResizeRaf = null;
+          recomputeNavPadding();
+        });
       }
 
       function perfNow() {
@@ -717,7 +725,7 @@ function buildHtml(apiKey: string, styleName: string, center: [number, number], 
             recomputeNavPadding();
             post({ type: 'ready' });
           });
-          __map.on('resize', recomputeNavPadding);
+          __map.on('resize', recomputeNavPaddingDeferred);
           __map.on('error', function (e) {
             // MapLibre 'error' event приходит с полем .error — Error
             // объектом с message/stack. Сериализуем глубже и добавляем
