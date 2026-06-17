@@ -1,6 +1,6 @@
 import React from 'react';
 import { View, StyleSheet, ViewStyle, StyleProp } from 'react-native';
-import Svg, { Defs, LinearGradient, Stop, Path, Ellipse, Circle, Rect } from 'react-native-svg';
+import Svg, { Defs, LinearGradient, Stop, Path, Ellipse, Circle, G } from 'react-native-svg';
 import { ClientColors } from '@taxi/shared';
 
 interface TariffCarIllustrationProps {
@@ -8,116 +8,155 @@ interface TariffCarIllustrationProps {
   style?: StyleProp<ViewStyle>;
 }
 
-// Hatchback в 3/4 ракурсе: не профиль и не top-down — лёгкий перспективный
-// угол, как в illustration-стиле iOS. Фирменная teal-pearl краска, тёмные
-// тонированные стёкла, тонкая хром-окантовка, мягкая floor-shadow.
-// Отрисовывается одним SVG (~1.5KB) — без растровых assets, не зависит
-// от DPI, читается даже на 32px.
+// Sleek executive-sedan в строгом профиле. Минимум линий, длинная
+// низкая roofline, компактные колёса (~1/4 высоты кузова) — пресс-фото
+// silhouette в духе BMW 5 / Audi A6, а не мультяшная игрушка.
+// Один основной градиент кузова, тонкий window-belt, едва заметная
+// floor-shadow. Никаких ярких бликов — премиум-сдержанно.
 
 export default function TariffCarIllustration({
   size = 64,
   style,
 }: TariffCarIllustrationProps): React.ReactNode {
-  const w = size * 1.4;
+  const w = size * 2;
   const h = size;
 
   return (
     <View style={[{ width: w, height: h }, style]}>
-      <Svg width={w} height={h} viewBox="0 0 140 100" style={styles.svg}>
+      <Svg width={w} height={h} viewBox="0 0 200 100" style={styles.svg}>
         <Defs>
-          <LinearGradient id="body" x1="0.2" y1="0" x2="0.8" y2="1">
-            <Stop offset="0" stopColor="#5EEAD4" />
-            <Stop offset="0.45" stopColor={ClientColors.primary} />
-            <Stop offset="1" stopColor={ClientColors.primaryDark} />
+          <LinearGradient id="body" x1="0.5" y1="0" x2="0.5" y2="1">
+            <Stop offset="0" stopColor={ClientColors.primary} />
+            <Stop offset="0.55" stopColor={ClientColors.primaryDark} />
+            <Stop offset="1" stopColor="#0A6B5E" />
           </LinearGradient>
-          <LinearGradient id="hoodHighlight" x1="0.5" y1="0" x2="0.5" y2="1">
-            <Stop offset="0" stopColor="#ffffff" stopOpacity="0.65" />
+          <LinearGradient id="bodyHi" x1="0.5" y1="0" x2="0.5" y2="1">
+            <Stop offset="0" stopColor="#ffffff" stopOpacity="0.35" />
             <Stop offset="1" stopColor="#ffffff" stopOpacity="0" />
           </LinearGradient>
           <LinearGradient id="glass" x1="0.5" y1="0" x2="0.5" y2="1">
-            <Stop offset="0" stopColor="#0F2C4A" />
-            <Stop offset="1" stopColor="#1E3A5F" stopOpacity="0.85" />
+            <Stop offset="0" stopColor="#0B1220" />
+            <Stop offset="1" stopColor="#1A2438" />
           </LinearGradient>
-          <LinearGradient id="wheelRim" x1="0.5" y1="0" x2="0.5" y2="1">
-            <Stop offset="0" stopColor="#94A3B8" />
-            <Stop offset="1" stopColor="#475569" />
+          <LinearGradient id="rim" x1="0.5" y1="0" x2="0.5" y2="1">
+            <Stop offset="0" stopColor="#D1D5DB" />
+            <Stop offset="0.5" stopColor="#6B7280" />
+            <Stop offset="1" stopColor="#374151" />
           </LinearGradient>
         </Defs>
 
-        {/* Floor shadow — soft contact shadow под машиной */}
-        <Ellipse cx="70" cy="90" rx="50" ry="5" fill="#0B1220" opacity="0.22" />
+        {/* Floor shadow — узкая тёмная полоса под машиной */}
+        <Ellipse cx="100" cy="86" rx="78" ry="3" fill="#0B1220" opacity="0.22" />
 
-        {/* Кузов: чуть приподнятый hatchback-силуэт с плавной C-стойкой */}
+        {/* Кузов sedan: длинный, низкий, с обтекаемой крышей.
+            Передний свес короче заднего (premium-седан пропорции). */}
         <Path
-          d="M18 70
-             Q18 52 28 48
-             L46 32 Q52 26 62 26
-             L96 26 Q108 26 116 36
-             L126 50 L126 64
-             Q126 72 118 72
-             L24 72 Q18 72 18 70 Z"
+          d="M14 70
+             L14 60
+             Q14 52 22 50
+             L48 46
+             Q56 38 70 36
+             L132 32
+             Q146 32 154 40
+             L182 46
+             Q188 48 188 56
+             L188 70
+             Q188 74 184 74
+             L18 74
+             Q14 74 14 70 Z"
           fill="url(#body)"
         />
 
-        {/* Hood highlight — отражение неба на капоте */}
+        {/* Roof highlight — тонкое отражение неба */}
         <Path
-          d="M48 36 L92 32 L100 38 L52 42 Z"
-          fill="url(#hoodHighlight)"
-          opacity="0.55"
+          d="M58 38 L132 34 Q138 34 142 38 L138 42 L62 46 Z"
+          fill="url(#bodyHi)"
         />
 
-        {/* Чёрная полоса под окнами (window-belt) — визуально отделяет
-            стекло от кузова и даёт «дорогой» вид */}
+        {/* Window-belt — тонкая тёмная линия между стёклами и низом кузова */}
         <Path
-          d="M44 44 L106 38 L114 44 L46 50 Z"
-          fill="#0B1220"
-          opacity="0.55"
+          d="M48 47 L154 41 L156 45 L50 51 Z"
+          fill="#0A0F1F"
+          opacity="0.5"
         />
 
-        {/* Лобовое + боковое стёкла объединены одной формой с дугой */}
+        {/* Стёкла — единая стеклянная лента, premium-tinted */}
         <Path
-          d="M48 44
-             L54 32 Q58 28 64 28
-             L96 28 Q102 28 106 34
-             L112 44
-             L104 46
-             Q100 36 92 36
-             L62 36 Q56 36 54 44 Z"
+          d="M58 46
+             Q62 39 72 38
+             L130 35
+             Q140 35 148 41
+             L142 44
+             Q138 40 130 40
+             L72 43
+             Q66 44 62 47 Z"
           fill="url(#glass)"
         />
 
-        {/* Lens highlight — диагональный блик на лобовом */}
+        {/* Тонкий blacked-out trim под порогом — даёт ощущение «опущенной» подвески */}
         <Path
-          d="M56 36 L70 32 L66 40 L54 42 Z"
-          fill="#ffffff"
-          opacity="0.18"
+          d="M22 68 L180 68 L180 72 L22 72 Z"
+          fill="#0A0F1F"
+          opacity="0.32"
         />
 
-        {/* Door handle — тонкая горизонтальная chrome-полоска */}
-        <Rect x="74" y="58" width="14" height="2" rx="1" fill="#E2E8F0" opacity="0.75" />
-
-        {/* Передняя фара — каплевидная LED */}
+        {/* Door cut-line — одна тонкая вертикальная линия по борту */}
         <Path
-          d="M118 56 L126 56 L124 62 L116 60 Z"
+          d="M100 50 L100 70"
+          stroke="#0A0F1F"
+          strokeOpacity="0.18"
+          strokeWidth="0.6"
+        />
+
+        {/* Door handle — мини-chrome полоска */}
+        <Path
+          d="M90 56 L114 56"
+          stroke="#D1D5DB"
+          strokeWidth="1"
+          strokeLinecap="round"
+          opacity="0.85"
+        />
+
+        {/* Передняя фара — узкая LED-щёлка */}
+        <Path
+          d="M180 56 L188 58 L188 62 L180 62 Z"
           fill="#FEF9C3"
         />
-        <Circle cx="121" cy="58" r="1.5" fill="#ffffff" />
 
-        {/* Задняя стоп-сигналь — узкая красная */}
-        <Rect x="18" y="56" width="6" height="4" rx="1.5" fill="#EF4444" />
+        {/* Задний стоп-сигнал */}
+        <Path
+          d="M14 58 L20 58 L20 62 L14 62 Z"
+          fill="#EF4444"
+          opacity="0.85"
+        />
 
-        {/* Колёсные арки — затемнения */}
-        <Circle cx="42" cy="72" r="14" fill="#0B1220" opacity="0.4" />
-        <Circle cx="106" cy="72" r="14" fill="#0B1220" opacity="0.4" />
+        {/* Колёсные арки — тёмные кривые */}
+        <Path
+          d="M38 72 Q38 60 50 60 Q62 60 62 72"
+          fill="#0A0F1F"
+          opacity="0.55"
+        />
+        <Path
+          d="M140 72 Q140 60 152 60 Q164 60 164 72"
+          fill="#0A0F1F"
+          opacity="0.55"
+        />
 
-        {/* Колёса с металлик-обводкой */}
-        <Circle cx="42" cy="74" r="10" fill="#0F172A" stroke="url(#wheelRim)" strokeWidth="1.2" />
-        <Circle cx="42" cy="74" r="4" fill="url(#wheelRim)" />
-        <Circle cx="42" cy="74" r="1.5" fill="#0F172A" />
-
-        <Circle cx="106" cy="74" r="10" fill="#0F172A" stroke="url(#wheelRim)" strokeWidth="1.2" />
-        <Circle cx="106" cy="74" r="4" fill="url(#wheelRim)" />
-        <Circle cx="106" cy="74" r="1.5" fill="#0F172A" />
+        {/* Колёса: чёрная шина + металлик rim + тонкая центральная гайка.
+            Компактные ~12px радиус — premium-пропорции (а не cartoon-крупные). */}
+        <G>
+          <Circle cx="50" cy="74" r="11" fill="#0F172A" />
+          <Circle cx="50" cy="74" r="7" fill="url(#rim)" />
+          <Circle cx="50" cy="74" r="2.5" fill="#0F172A" />
+          {/* спицы — едва намечены */}
+          <Path d="M50 67 L50 81 M43 74 L57 74" stroke="#0F172A" strokeWidth="0.8" opacity="0.7" />
+        </G>
+        <G>
+          <Circle cx="152" cy="74" r="11" fill="#0F172A" />
+          <Circle cx="152" cy="74" r="7" fill="url(#rim)" />
+          <Circle cx="152" cy="74" r="2.5" fill="#0F172A" />
+          <Path d="M152 67 L152 81 M145 74 L159 74" stroke="#0F172A" strokeWidth="0.8" opacity="0.7" />
+        </G>
       </Svg>
     </View>
   );
