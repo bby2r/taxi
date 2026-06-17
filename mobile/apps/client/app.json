@@ -9,8 +9,21 @@
     "ios": {
       "supportsTablet": false,
       "bundleIdentifier": "kg.aliftaxi.client",
+      "buildNumber": "1",
+      "config": {
+        "usesNonExemptEncryption": false
+      },
       "infoPlist": {
-        "NSLocationWhenInUseUsageDescription": "Нужен доступ к геолокации для определения точки подачи такси"
+        "NSLocationWhenInUseUsageDescription": "Нужен доступ к геолокации для определения точки подачи такси",
+        "ITSAppUsesNonExemptEncryption": false,
+        "CFBundleAllowMixedLocalizations": true,
+        "UIBackgroundModes": [
+          "remote-notification"
+        ],
+        "LSApplicationQueriesSchemes": [
+          "tel",
+          "whatsapp"
+        ]
       }
     },
     "android": {
@@ -44,6 +57,10 @@
         {
           "android": {
             "extraMavenRepos": []
+          },
+          "ios": {
+            "useFrameworks": "static",
+            "deploymentTarget": "15.1"
           }
         }
       ],
@@ -66,6 +83,11 @@
           ]
         }
       ]
-    ]
+    ],
+    "extra": {
+      "eas": {
+        "projectId": "YOUR_CLIENT_EAS_PROJECT_ID"
+      }
+    }
   }
 }

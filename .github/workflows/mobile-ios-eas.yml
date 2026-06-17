@@ -1,0 +1,109 @@
+name: Build Mobile iOS (EAS)
+
+# iOS-сборка идёт через EAS Cloud — GitHub macos-runner не подходит без
+# ручной настройки certificates / provisioning profiles, а EAS управляет
+# ими автоматически на стороне Expo. Workflow ручной (workflow_dispatch),
+# чтобы не жечь EAS-квоту на каждый push.
+#
+# Требуется один secret в репо: EXPO_TOKEN (Settings → Account →
+# Access Tokens → Create token). Apple Developer credentials (Team ID,
+# ASC API key) задаются один раз через `eas credentials` локально или
+# в Expo Dashboard — отдельно от GitHub.
+#
+# Перед первым запуском:
+#   1) В app.json у обоих apps подставить реальный extra.eas.projectId
+#      (получается через `eas init` в директории каждого app)
+#   2) Зарегистрировать devices через `eas device:create` (для simulator
+#      / internal распространения это не нужно)
+#   3) Установить Apple Developer credentials через `eas credentials`
+
+on:
+  workflow_dispatch:
+    inputs:
+      app:
+        description: 'Какое приложение собрать'
+        required: true
+        default: 'client'
+        type: choice
+        options:
+          - client
+          - driver
+          - both
+      profile:
+        description: 'EAS build profile'
+        required: true
+        default: 'preview'
+        type: choice
+        options:
+          - development
+          - preview
+          - production
+
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
+jobs:
+  build-ios:
+    name: EAS Build iOS — ${{ matrix.app }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+
+    strategy:
+      fail-fast: false
+      matrix:
+        # Динамически разворачивается из inputs.app
+        app: ${{ fromJson(github.event.inputs.app == 'both' && '["client","driver"]' || format('["{0}"]', github.event.inputs.app)) }}
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: mobile/package-lock.json
+
+      - name: Install dependencies
+        working-directory: mobile
+        run: |
+          npm config set fetch-retries 5
+          for attempt in 1 2 3; do
+            if npm ci; then break; fi
+            if [ "$attempt" = "3" ]; then exit 1; fi
+            sleep 20
+          done
+
+      - name: Set up EAS CLI
+        uses: expo/expo-github-action@v8
+        with:
+          eas-version: latest
+          token: ${{ secrets.EXPO_TOKEN }}
+
+      - name: Verify EXPO_TOKEN is configured
+        run: |
+          if [ -z "${{ secrets.EXPO_TOKEN }}" ]; then
+            echo "::error::EXPO_TOKEN secret отсутствует в репо. Получить токен: Expo Dashboard → Account Settings → Access Tokens → Create. Добавить: Settings → Secrets and variables → Actions → New repository secret."
+            exit 1
+          fi
+
+      - name: Trigger EAS Build (iOS)
+        working-directory: mobile/apps/${{ matrix.app }}
+        env:
+          EXPO_PUBLIC_API_URL: ${{ vars.EXPO_PUBLIC_API_URL || 'https://taxi-api-cy7a.onrender.com/api' }}
+          EXPO_PUBLIC_PUSHER_KEY: ${{ vars.EXPO_PUBLIC_PUSHER_KEY }}
+          EXPO_PUBLIC_PUSHER_CLUSTER: ${{ vars.EXPO_PUBLIC_PUSHER_CLUSTER || 'ap1' }}
+          EXPO_PUBLIC_MAPBOX_TOKEN: ${{ secrets.EXPO_PUBLIC_MAPBOX_TOKEN }}
+          EXPO_PUBLIC_MAPTILER_KEY: ${{ secrets.EXPO_PUBLIC_MAPTILER_KEY }}
+          EXPO_PUBLIC_ORS_KEY: ${{ secrets.EXPO_PUBLIC_ORS_KEY }}
+        run: |
+          # --non-interactive обязателен на CI: без него EAS пытается
+          # запросить credentials в TTY. --wait блокирует workflow до
+          # завершения сборки (~20-40 мин для iOS), даёт прямой artifact
+          # link в логах.
+          eas build \
+            --platform ios \
+            --profile ${{ github.event.inputs.profile }} \
+            --non-interactive \
+            --wait

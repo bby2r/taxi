@@ -15,12 +15,25 @@
     "ios": {
       "supportsTablet": false,
       "bundleIdentifier": "kg.aliftaxi.app",
+      "buildNumber": "1",
+      "config": {
+        "usesNonExemptEncryption": false
+      },
       "infoPlist": {
         "NSLocationWhenInUseUsageDescription": "Нужен доступ к геолокации для определения вашего положения и приёма заказов",
         "NSLocationAlwaysAndWhenInUseUsageDescription": "Нужен доступ к геолокации в фоне для отправки координат пассажирам и диспетчеру",
+        "NSLocationAlwaysUsageDescription": "Нужен доступ к геолокации в фоне для отправки координат пассажирам и диспетчеру",
+        "ITSAppUsesNonExemptEncryption": false,
+        "CFBundleAllowMixedLocalizations": true,
         "UIBackgroundModes": [
           "location",
-          "audio"
+          "audio",
+          "remote-notification",
+          "fetch"
+        ],
+        "LSApplicationQueriesSchemes": [
+          "tel",
+          "whatsapp"
         ]
       }
     },
@@ -78,6 +91,10 @@
         {
           "android": {
             "extraMavenRepos": []
+          },
+          "ios": {
+            "useFrameworks": "static",
+            "deploymentTarget": "15.1"
           }
         }
       ],
