@@ -34,6 +34,7 @@ import DriverCard from '../components/DriverCard';
 import Icon from '../components/Icon';
 import IntervillageModal from '../components/IntervillageModal';
 import RatingModal from '../components/RatingModal';
+import TariffCarIllustration from '../components/TariffCarIllustration';
 import { getRegions, getTariffs, priceFor, type TariffRoute } from '../api/regions';
 
 function PulsingDot({ size = 14 }: { size?: number }): React.ReactNode {
@@ -533,9 +534,7 @@ export default function HomeScreen(): React.ReactNode {
             {pickupCoord && inServiceArea === true && detectedVillage && (
               <>
                 <View style={styles.tariffCard}>
-                  <View style={styles.tariffCarBadge}>
-                    <Icon name="car-side" size={28} color={ClientColors.primary} />
-                  </View>
+                  <TariffCarIllustration size={44} style={styles.tariffCar} />
                   <View style={styles.tariffInfo}>
                     <Text style={styles.tariffName} numberOfLines={1}>
                       В {detectedVillage.name}
@@ -810,13 +809,8 @@ const styles = StyleSheet.create({
     shadowOffset: { width: 0, height: 4 },
     elevation: 3,
   },
-  tariffCarBadge: {
-    width: 52,
-    height: 52,
-    borderRadius: 16,
-    backgroundColor: ClientColors.primaryTint,
-    alignItems: 'center',
-    justifyContent: 'center',
+  tariffCar: {
+    marginLeft: -6,
   },
   tariffInfo: {
     flex: 1,
