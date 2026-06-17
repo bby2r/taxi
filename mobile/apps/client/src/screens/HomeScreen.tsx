@@ -534,7 +534,7 @@ export default function HomeScreen(): React.ReactNode {
             {pickupCoord && inServiceArea === true && detectedVillage && (
               <>
                 <View style={styles.tariffCard}>
-                  <TariffCarIllustration size={44} style={styles.tariffCar} />
+                  <TariffCarIllustration size={64} style={styles.tariffCar} />
                   <View style={styles.tariffInfo}>
                     <Text style={styles.tariffName} numberOfLines={1}>
                       В {detectedVillage.name}
@@ -681,7 +681,7 @@ const styles = StyleSheet.create({
     borderTopLeftRadius: Radius.xxxl,
     borderTopRightRadius: Radius.xxxl,
     paddingHorizontal: Spacing.xxl,
-    paddingBottom: Spacing.xxl,
+    paddingBottom: 12,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: -4 },
     shadowOpacity: 0.12,

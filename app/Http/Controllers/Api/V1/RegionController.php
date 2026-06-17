@@ -59,29 +59,37 @@ class RegionController extends Controller
 
         $detectedVillage = null;
         $inServiceArea = null;
-
-        // Демо-клиент (ревьюер Apple/Google) — GPS у него где угодно,
-        // но UI обязан показать рабочий экран заказа. Возвращаем первый
-        // сервисный регион и in_service_area=true независимо от координат.
         $user = $request->user();
-        if ($user && $user->isDemo()) {
-            $village = Region::active()->service()->orderBy('sort_order')->first();
-            $detectedVillage = $village !== null
-                ? ['id' => $village->id, 'name' => $village->name]
-                : null;
-            $inServiceArea = $village !== null;
-        } elseif (isset($validated['latitude'], $validated['longitude'])) {
+        $isDemo = $user && $user->isDemo();
+
+        if (isset($validated['latitude'], $validated['longitude'])) {
             $village = Region::findNearestByCoordinates(
                 (float) $validated['latitude'],
                 (float) $validated['longitude'],
                 Region::detectionMaxKm(),
             );
-            $inServiceArea = $village !== null;
             if ($village !== null) {
-                $detectedVillage = [
-                    'id' => $village->id,
-                    'name' => $village->name,
-                ];
+                $detectedVillage = ['id' => $village->id, 'name' => $village->name];
+                $inServiceArea = true;
+            } elseif ($isDemo) {
+                // Демо-юзер вне зоны (ревьюер Apple/Google из США): возвращаем
+                // первое сервисное село как fallback, чтобы UI пустил его в
+                // экран заказа. Реальные юзеры тут получают inServiceArea=false.
+                $fallback = Region::active()->service()->orderBy('sort_order')->first();
+                if ($fallback !== null) {
+                    $detectedVillage = ['id' => $fallback->id, 'name' => $fallback->name];
+                    $inServiceArea = true;
+                } else {
+                    $inServiceArea = false;
+                }
+            } else {
+                $inServiceArea = false;
+            }
+        } elseif ($isDemo) {
+            $fallback = Region::active()->service()->orderBy('sort_order')->first();
+            if ($fallback !== null) {
+                $detectedVillage = ['id' => $fallback->id, 'name' => $fallback->name];
+                $inServiceArea = true;
             }
         }
 
