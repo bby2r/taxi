@@ -497,11 +497,11 @@ function buildHtml(apiKey: string, styleName: string, center: [number, number], 
       var FOLLOW_DEAD_DEG = 4; // ignore sub-4° heading wobble so the map doesn't shimmer on low-speed GPS noise
       var PREDICT_MAX_MS = 1500; // clamp dead-reckoning so a dropped fix can't run away
       var VEL_EMA = 0.4; // legacy fallback only (used when RN sends no velocity)
-      // Padding смещает логический центр камеры вверх — стрелка ставится
-      // в нижнюю треть экрана, впереди видно ~2/3 маршрута (как в Яндекс/
-      // 2GIS навигаторе). bottom 520 на экране 2400×1080 даёт стрелку
-      // примерно на 70% высоты от верха.
-      var NAV_PADDING = { top: 80, bottom: 520, left: 0, right: 0 };
+      // padding.top большой + padding.bottom маленький → логический центр
+      // карты смещается ВНИЗ, стрелка водителя ставится в нижнюю треть
+      // экрана. Сверху остаётся большая «обзорная» область с маршрутом
+      // впереди (как в Яндекс.Навигатор / 2GIS).
+      var NAV_PADDING = { top: 600, bottom: 120, left: 0, right: 0 };
 
       function perfNow() {
         return (window.performance && performance.now) ? performance.now() : Date.now();
