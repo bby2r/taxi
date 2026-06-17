@@ -114,8 +114,8 @@ function buildHtml(apiKey: string, styleName: string, center: [number, number], 
       .maplibregl-ctrl-bottom-left, .maplibregl-ctrl-bottom-right,
       .maplibregl-ctrl-top-left, .maplibregl-ctrl-top-right { display: none !important; }
       .driver-pin {
-        width: 40px; height: 40px;
-        filter: drop-shadow(0 2px 4px rgba(0,0,0,0.5));
+        width: 60px; height: 60px;
+        filter: drop-shadow(0 3px 6px rgba(0,0,0,0.55)) drop-shadow(0 1px 2px rgba(0,0,0,0.4));
       }
       /* Rotation сидит на ВНУТРЕННЕМ div'е, а не на .driver-pin —
          MapLibre владеет CSS transform внешнего элемента (translate
@@ -395,14 +395,14 @@ function buildHtml(apiKey: string, styleName: string, center: [number, number], 
           type: 'line',
           source: 'route',
           layout: { 'line-cap': 'round', 'line-join': 'round' },
-          paint: { 'line-color': '#0B3B82', 'line-width': 12, 'line-opacity': 0.9 },
+          paint: { 'line-color': '#0B3B82', 'line-width': 9, 'line-opacity': 0.85 },
         });
         __map.addLayer({
           id: 'route',
           type: 'line',
           source: 'route',
           layout: { 'line-cap': 'round', 'line-join': 'round' },
-          paint: { 'line-color': '${DriverColors.primary}', 'line-width': 7 },
+          paint: { 'line-color': '${DriverColors.primary}', 'line-width': 5, 'line-opacity': 0.95 },
         });
       }
 
@@ -497,11 +497,11 @@ function buildHtml(apiKey: string, styleName: string, center: [number, number], 
       var FOLLOW_DEAD_DEG = 4; // ignore sub-4° heading wobble so the map doesn't shimmer on low-speed GPS noise
       var PREDICT_MAX_MS = 1500; // clamp dead-reckoning so a dropped fix can't run away
       var VEL_EMA = 0.4; // legacy fallback only (used when RN sends no velocity)
-      // Padding смещает логический центр камеры вверх, чтобы driver-маркер
-      // оказывался НАД bottom sheet'ом (~48% экрана). Без padding center
-      // оказывается ровно посреди экрана — под sheet'ом, маркер не виден
-      // и визуально кажется, что он «пропал в угол».
-      var NAV_PADDING = { top: 80, bottom: 380, left: 0, right: 0 };
+      // Padding смещает логический центр камеры вверх — стрелка ставится
+      // в нижнюю треть экрана, впереди видно ~2/3 маршрута (как в Яндекс/
+      // 2GIS навигаторе). bottom 520 на экране 2400×1080 даёт стрелку
+      // примерно на 70% высоты от верха.
+      var NAV_PADDING = { top: 80, bottom: 520, left: 0, right: 0 };
 
       function perfNow() {
         return (window.performance && performance.now) ? performance.now() : Date.now();
