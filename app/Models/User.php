@@ -165,4 +165,9 @@ class User extends Authenticatable
     {
         return $this->role === UserRole::Admin;
     }
+
+    public function isDemo(): bool
+    {
+        return $this->phone === config('demo.phone');
+    }
 }

@@ -38,7 +38,25 @@ export default function OtpInput({
   }, [error, length, shakeAnim]);
 
   const handleChange = (text: string, index: number) => {
-    const digit = text.replace(/[^0-9]/g, '').slice(-1);
+    const digits = text.replace(/[^0-9]/g, '');
+
+    // iOS Messages auto-fill вставляет весь код в первое поле.
+    // Распределяем по всем ячейкам и сразу триггерим onComplete.
+    if (digits.length > 1 && index === 0) {
+      const filled = digits.slice(0, length).split('');
+      const newValues = Array(length)
+        .fill('')
+        .map((_, i) => filled[i] ?? '');
+      setValues(newValues);
+      const lastIdx = Math.min(filled.length, length) - 1;
+      inputRefs.current[lastIdx]?.focus();
+      if (newValues.every((v) => v !== '')) {
+        onComplete(newValues.join(''));
+      }
+      return;
+    }
+
+    const digit = digits.slice(-1);
     const newValues = [...values];
     newValues[index] = digit;
     setValues(newValues);
@@ -80,8 +98,11 @@ export default function OtpInput({
           onChangeText={(text) => handleChange(text, index)}
           onKeyPress={(e) => handleKeyPress(e, index)}
           keyboardType="number-pad"
-          maxLength={1}
+          maxLength={index === 0 ? length : 1}
           selectTextOnFocus
+          textContentType={index === 0 ? 'oneTimeCode' : 'none'}
+          autoComplete={index === 0 ? 'sms-otp' : 'off'}
+          importantForAutofill={index === 0 ? 'yes' : 'no'}
           accessibilityLabel={`Цифра ${index + 1} из ${length}`}
         />
       ))}

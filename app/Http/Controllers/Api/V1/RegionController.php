@@ -59,7 +59,18 @@ class RegionController extends Controller
 
         $detectedVillage = null;
         $inServiceArea = null;
-        if (isset($validated['latitude'], $validated['longitude'])) {
+
+        // Демо-клиент (ревьюер Apple/Google) — GPS у него где угодно,
+        // но UI обязан показать рабочий экран заказа. Возвращаем первый
+        // сервисный регион и in_service_area=true независимо от координат.
+        $user = $request->user();
+        if ($user && $user->isDemo()) {
+            $village = Region::active()->service()->orderBy('sort_order')->first();
+            $detectedVillage = $village !== null
+                ? ['id' => $village->id, 'name' => $village->name]
+                : null;
+            $inServiceArea = $village !== null;
+        } elseif (isset($validated['latitude'], $validated['longitude'])) {
             $village = Region::findNearestByCoordinates(
                 (float) $validated['latitude'],
                 (float) $validated['longitude'],

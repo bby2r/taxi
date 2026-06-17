@@ -16,6 +16,17 @@ class OtpService
      */
     public function sendOtp(string $phone): OtpCode
     {
+        // Демо-номер: не дёргаем SMS-провайдера, verifyOtp принимает
+        // фиксированный demo.otp_code. Обходит ситуацию когда ревьюер
+        // не получает SMS на иностранный номер.
+        if ($phone === config('demo.phone')) {
+            return new OtpCode([
+                'phone' => $phone,
+                'code' => config('demo.otp_code'),
+                'expires_at' => now()->addMinutes(5),
+            ]);
+        }
+
         // Invalidate existing valid OTPs for this phone
         OtpCode::forPhone($phone)
             ->valid()
@@ -43,6 +54,15 @@ class OtpService
      */
     public function verifyOtp(string $phone, string $code): ?OtpCode
     {
+        if ($phone === config('demo.phone') && $code === config('demo.otp_code')) {
+            return new OtpCode([
+                'phone' => $phone,
+                'code' => $code,
+                'verified_at' => now(),
+                'expires_at' => now()->addMinutes(5),
+            ]);
+        }
+
         $otpCode = OtpCode::forPhone($phone)
             ->valid()
             ->where('code', $code)

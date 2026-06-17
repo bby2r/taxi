@@ -10,6 +10,7 @@ use App\Events\OrderCompleted;
 use App\Events\OrderDriverArrived;
 use App\Events\OrderInProgress;
 use App\Events\OrderOfferedToDriver;
+use App\Jobs\DemoOrderProgressionJob;
 use App\Jobs\OfferTimeoutJob;
 use App\Jobs\SearchDriversJob;
 use App\Models\Order;
@@ -50,6 +51,22 @@ class OrderService
         $activeOrder = Order::forClient($client->id)->active()->first();
         if ($activeOrder) {
             throw new \RuntimeException('Client already has an active order.');
+        }
+
+        // Демо-клиент (ревьюер Apple/Google): обходим проверку зоны и
+        // тарифа, создаём заказ напрямую и запускаем бот-водителя через
+        // DemoOrderProgressionJob. Иначе ревью застрянет на «Сервис
+        // недоступен в вашем районе» (ревьюер не в KG) или на «Поиск
+        // водителя» (нет онлайн-водителей в момент проверки).
+        if ($client->isDemo()) {
+            return $this->createDemoOrder(
+                $client,
+                $pickupLat,
+                $pickupLon,
+                $pickupAddress,
+                $clientComment,
+                $isRoundTrip,
+            );
         }
 
         $from = Region::findNearestByCoordinates(
@@ -113,6 +130,41 @@ class OrderService
         ]);
 
         $this->offerToNextDriver($order);
+
+        return $order->refresh();
+    }
+
+    private function createDemoOrder(
+        User $client,
+        float $pickupLat,
+        float $pickupLon,
+        ?string $pickupAddress,
+        ?string $clientComment,
+        bool $isRoundTrip,
+    ): Order {
+        // Фикс-цена для демо — реальная матрица region_routes может быть
+        // пустой / некорректной в момент ревью. 150 сом — правдоподобная
+        // сумма для скриншотов ревью.
+        $price = $isRoundTrip ? 250 : 150;
+
+        $order = Order::create([
+            'client_id' => $client->id,
+            'client_snapshot' => [
+                'name' => $client->name,
+                'phone' => $client->phone,
+            ],
+            'status' => OrderStatus::Searching,
+            'pickup_latitude' => $pickupLat,
+            'pickup_longitude' => $pickupLon,
+            'pickup_address' => $pickupAddress,
+            'client_comment' => $clientComment,
+            'is_round_trip' => $isRoundTrip,
+            'price' => $price,
+            'declined_drivers' => [],
+        ]);
+
+        DemoOrderProgressionJob::dispatch($order->id, 'accept')
+            ->delay(now()->addSeconds(5));
 
         return $order->refresh();
     }
