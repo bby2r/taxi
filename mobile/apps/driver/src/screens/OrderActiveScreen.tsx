@@ -29,6 +29,7 @@ import {
 import type { Order, DriverCancellationReason, Route } from '@taxi/shared';
 import { useDriverOrder } from '../hooks/useDriverOrder';
 import MapLibreMapView, { type MapLibreMapHandle } from '../components/MapLibreMapView';
+import DriverNavigationBar from '../components/DriverNavigationBar';
 import type { DriverStackParamList } from '../navigation/types';
 
 // Driver must be within this distance of the pickup point before they can
@@ -493,7 +494,10 @@ export default function OrderActiveScreen(): React.ReactNode {
   // Three positions like Yandex Taxi driver: barely visible (just handle
   // + ETA peek), default (all key info + main action), expanded (full
   // details, room for future content). Driver swipes between them.
-  const snapPoints = useMemo(() => ['18%', '48%', '88%'], []);
+  // Minimal-bar дизайн: первый snap = только compact bar (~80px) с
+  // ключевыми цифрами и одной action-кнопкой. Тап на bar → snap[1]
+  // (детали + secondary actions).
+  const snapPoints = useMemo(() => [88, '46%', '88%'], []);
   const driverLocation = useLocation({ navigation: true });
   const [cancelSheetOpen, setCancelSheetOpen] = useState(false);
   const [pendingAction, setPendingAction] = useState<null | {
@@ -902,13 +906,42 @@ export default function OrderActiveScreen(): React.ReactNode {
 
       <BottomSheet
         ref={bottomSheetRef}
-        index={1}
+        index={0}
         snapPoints={snapPoints}
         enablePanDownToClose={false}
         backgroundStyle={styles.sheetBackground}
         handleIndicatorStyle={styles.sheetHandle}
       >
         <BottomSheetView style={styles.sheetInner}>
+          {(state.phase === 'active' ||
+            state.phase === 'arrived' ||
+            state.phase === 'in_progress' ||
+            state.phase === 'completed') && (
+            <DriverNavigationBar
+              phase={state.phase}
+              order={order}
+              route={route}
+              distanceToPickupMeters={
+                driverPoint && pickupPoint
+                  ? haversineMeters(driverPoint, pickupPoint)
+                  : null
+              }
+              canArrive={
+                driverPoint && pickupPoint
+                  ? haversineMeters(driverPoint, pickupPoint) <= ARRIVED_THRESHOLD_METERS
+                  : false
+              }
+              loading={loading}
+              onPrimary={() => {
+                if (state.phase === 'active') requestArrived();
+                else if (state.phase === 'arrived') requestStart();
+                else if (state.phase === 'in_progress') requestComplete();
+                else if (state.phase === 'completed') handleDismiss();
+              }}
+              onExpand={() => bottomSheetRef.current?.snapToIndex(1)}
+            />
+          )}
+
           {state.phase === 'active' && (
             <EnRouteCard
               order={order}
