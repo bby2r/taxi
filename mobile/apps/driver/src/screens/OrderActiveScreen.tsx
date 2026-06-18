@@ -826,7 +826,27 @@ export default function OrderActiveScreen(): React.ReactNode {
         <Modal visible transparent animationType="fade">
           <View style={styles.completedOverlay}>
             <View style={styles.completedCard}>
-              <CompletedCard order={order} onDismiss={handleDismiss} />
+              <View style={styles.completedBadge}>
+                <Icon name="check-circle" size={42} color={DriverColors.background} />
+              </View>
+              <Text style={styles.completedTitle}>Заказ завершён</Text>
+              <Text style={styles.completedSubtitle}>Спасибо за поездку</Text>
+
+              <View style={styles.completedPriceBlock}>
+                <Text style={styles.completedPriceLabel}>Заработали</Text>
+                <Text style={styles.completedPriceValue}>
+                  + {order.price} <Text style={styles.completedPriceUnit}>сом</Text>
+                </Text>
+              </View>
+
+              <TouchableOpacity
+                style={styles.completedDoneBtn}
+                onPress={handleDismiss}
+                activeOpacity={0.88}
+                accessibilityRole="button"
+              >
+                <Text style={styles.completedDoneText}>Готово</Text>
+              </TouchableOpacity>
             </View>
           </View>
         </Modal>
@@ -866,16 +886,97 @@ const styles = StyleSheet.create({
   },
   completedOverlay: {
     flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.55)',
+    backgroundColor: 'rgba(15, 23, 42, 0.72)',
     alignItems: 'center',
     justifyContent: 'center',
     paddingHorizontal: 24,
   },
   completedCard: {
-    backgroundColor: DriverColors.background,
-    borderRadius: 24,
-    padding: 24,
+    backgroundColor: DriverColors.cardBackground,
+    borderRadius: 28,
+    paddingHorizontal: 28,
+    paddingTop: 32,
+    paddingBottom: 24,
     width: '100%',
+    alignItems: 'center',
+    shadowColor: '#000',
+    shadowOpacity: 0.35,
+    shadowRadius: 28,
+    shadowOffset: { width: 0, height: 14 },
+    elevation: 12,
+  },
+  completedBadge: {
+    width: 84,
+    height: 84,
+    borderRadius: 42,
+    backgroundColor: DriverColors.success,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 20,
+    shadowColor: DriverColors.success,
+    shadowOpacity: 0.45,
+    shadowRadius: 18,
+    shadowOffset: { width: 0, height: 8 },
+    elevation: 8,
+  },
+  completedTitle: {
+    fontSize: 22,
+    fontWeight: '700' as const,
+    color: DriverColors.textPrimary,
+    letterSpacing: -0.4,
+  },
+  completedSubtitle: {
+    fontSize: 14,
+    color: DriverColors.textMuted,
+    marginTop: 6,
+    marginBottom: 24,
+  },
+  completedPriceBlock: {
+    alignItems: 'center',
+    paddingVertical: 14,
+    paddingHorizontal: 24,
+    backgroundColor: DriverColors.background,
+    borderRadius: 18,
+    marginBottom: 24,
+    width: '100%',
+  },
+  completedPriceLabel: {
+    fontSize: 12,
+    fontWeight: '600' as const,
+    color: DriverColors.textMuted,
+    textTransform: 'uppercase',
+    letterSpacing: 0.6,
+    marginBottom: 4,
+  },
+  completedPriceValue: {
+    fontSize: 36,
+    fontWeight: '800' as const,
+    color: DriverColors.primary,
+    letterSpacing: -0.6,
+  },
+  completedPriceUnit: {
+    fontSize: 18,
+    fontWeight: '600' as const,
+    color: DriverColors.textSecondary,
+  },
+  completedDoneBtn: {
+    height: 54,
+    width: '100%',
+    borderRadius: 27,
+    backgroundColor: DriverColors.primary,
+    alignItems: 'center',
+    justifyContent: 'center',
+    shadowColor: DriverColors.primary,
+    shadowOpacity: 0.4,
+    shadowRadius: 14,
+    shadowOffset: { width: 0, height: 6 },
+    elevation: 6,
+  },
+  completedDoneText: {
+    fontSize: 16,
+    fontWeight: '800' as const,
+    color: DriverColors.background,
+    letterSpacing: 0.4,
   },
   cardContent: {
     flex: 1,
