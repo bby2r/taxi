@@ -32,9 +32,10 @@ class OfferOverlayModule : Module() {
         OnActivityEntersForeground {
             OfferOverlayManager.isAppForeground = true
             OfferOverlayManager.hideOverlay()
-            // Active-order overlay скрываем в foreground — driver видит
-            // карточку внутри приложения. Возобновляется при background.
-            ActiveOrderOverlayManager.hide()
+            // Active-order overlay остаётся видимым и в foreground —
+            // он играет роль единственного UI заказа (карта на весь экран,
+            // карточка-glass поверх). JS-сторона решает когда скрывать
+            // (на completion / unmount).
         }
 
         OnActivityEntersBackground {

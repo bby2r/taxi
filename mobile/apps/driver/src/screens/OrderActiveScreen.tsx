@@ -1,7 +1,6 @@
-import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
   Alert,
-  AppState,
   View,
   Text,
   StyleSheet,
@@ -20,7 +19,6 @@ import {
   updateActiveOrderOverlay,
   type ActiveOrderPayload,
 } from '../../modules/offer-overlay/src';
-import BottomSheet, { BottomSheetView } from '@gorhom/bottom-sheet';
 import { Icon } from '@taxi/shared';
 import { useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
@@ -41,7 +39,6 @@ import {
 import type { Order, DriverCancellationReason, Route } from '@taxi/shared';
 import { useDriverOrder } from '../hooks/useDriverOrder';
 import MapLibreMapView, { type MapLibreMapHandle } from '../components/MapLibreMapView';
-import DriverNavigationBar from '../components/DriverNavigationBar';
 import type { DriverStackParamList } from '../navigation/types';
 
 // Driver must be within this distance of the pickup point before they can
@@ -343,14 +340,6 @@ export default function OrderActiveScreen(): React.ReactNode {
       });
     }
   });
-  const bottomSheetRef = useRef<BottomSheet>(null);
-  // Three positions like Yandex Taxi driver: barely visible (just handle
-  // + ETA peek), default (all key info + main action), expanded (full
-  // details, room for future content). Driver swipes between them.
-  // Pixel-pinned первый snap для compact-bar: процент '12%' зависел
-  // от parent container'a и на ряде девайсов давал ~46% (sheet застывал
-  // в полу-открытом состоянии).
-  const snapPoints = useMemo(() => [90, '46%', '88%'], []);
   const driverLocation = useLocation({ navigation: true });
   const [cancelSheetOpen, setCancelSheetOpen] = useState(false);
   const [pendingAction, setPendingAction] = useState<null | {
@@ -418,20 +407,6 @@ export default function OrderActiveScreen(): React.ReactNode {
     }
   }, [state.phase, navigation]);
 
-  // CompletedCard centered + needs full sheet → snap to 2.
-  // Active фазы (active/arrived/in_progress) = режим езды → compact bar.
-  // Без этого sheet мог застрять на snap[1] и закрывал большую часть карты.
-  useEffect(() => {
-    if (state.phase === 'completed') {
-      bottomSheetRef.current?.snapToIndex(2);
-    } else if (
-      state.phase === 'active' ||
-      state.phase === 'arrived' ||
-      state.phase === 'in_progress'
-    ) {
-      bottomSheetRef.current?.snapToIndex(0);
-    }
-  }, [state.phase]);
 
   // Block the Android hardware back button + swipe-back gesture while
   // there's an active order. Previously the driver could press back,
@@ -513,9 +488,9 @@ export default function OrderActiveScreen(): React.ReactNode {
     error: routeError,
   } = useNavigationRoute(routeOrigin, routeDestination);
 
-  // Floating overlay поверх внешнего навигатора (Я.Навигатор / 2ГИС /
-  // GMaps). Показывается когда приложение в background; foreground →
-  // hide (в самом приложении DriverNavigationBar играет ту же роль).
+  // Floating glass-card overlay — единственный UI заказа. Показывается
+  // и в foreground, и в background (поверх внешнего навигатора).
+  // Шторка внизу убрана: карта на весь экран + glass-карточка сверху.
   const buildOverlayPayload = useCallback((): ActiveOrderPayload | null => {
     if (!order) return null;
     if (state.phase !== 'active' && state.phase !== 'arrived' && state.phase !== 'in_progress') {
@@ -547,25 +522,13 @@ export default function OrderActiveScreen(): React.ReactNode {
   }, [order, state.phase, route]);
 
   useEffect(() => {
-    const sub = AppState.addEventListener('change', (next) => {
-      if (next === 'background') {
-        const payload = buildOverlayPayload();
-        if (payload && hasOverlayPermission()) {
-          showActiveOrderOverlay(payload);
-        }
-      } else if (next === 'active') {
-        hideActiveOrderOverlay();
-      }
-    });
-    return () => sub.remove();
-  }, [buildOverlayPayload]);
-
-  useEffect(() => {
     const payload = buildOverlayPayload();
-    if (payload) {
-      updateActiveOrderOverlay(payload);
-    } else {
+    if (payload && hasOverlayPermission()) {
+      showActiveOrderOverlay(payload);
+    } else if (!payload) {
       hideActiveOrderOverlay();
+    } else if (payload) {
+      updateActiveOrderOverlay(payload);
     }
   }, [buildOverlayPayload]);
 
@@ -846,57 +809,15 @@ export default function OrderActiveScreen(): React.ReactNode {
         </TouchableOpacity>
       )}
 
-      <BottomSheet
-        ref={bottomSheetRef}
-        index={0}
-        snapPoints={snapPoints}
-        enablePanDownToClose={false}
-        backgroundStyle={styles.sheetBackground}
-        handleIndicatorStyle={styles.sheetHandle}
-      >
-        <BottomSheetView style={styles.sheetInner}>
-          {(state.phase === 'active' ||
-            state.phase === 'arrived' ||
-            state.phase === 'in_progress' ||
-            state.phase === 'completed') && (
-            <DriverNavigationBar
-              phase={state.phase}
-              order={order}
-              route={route}
-              distanceToPickupMeters={
-                driverPoint && pickupPoint
-                  ? haversineMeters(driverPoint, pickupPoint)
-                  : null
-              }
-              canArrive={
-                driverPoint && pickupPoint
-                  ? haversineMeters(driverPoint, pickupPoint) <= ARRIVED_THRESHOLD_METERS
-                  : false
-              }
-              loading={loading}
-              onPrimary={() => {
-                if (state.phase === 'active') requestArrived();
-                else if (state.phase === 'arrived') requestStart();
-                else if (state.phase === 'in_progress') requestComplete();
-                else if (state.phase === 'completed') handleDismiss();
-              }}
-              onExpand={() => bottomSheetRef.current?.snapToIndex(1)}
-            />
-          )}
-
-          {state.phase === 'active' && <EnRouteCard order={order} />}
-          {state.phase === 'arrived' && (
-            <ArrivedCard
-              order={order}
-              onCancelRequest={() => setCancelSheetOpen(true)}
-            />
-          )}
-          {state.phase === 'in_progress' && <InProgressCard order={order} />}
-          {state.phase === 'completed' && (
-            <CompletedCard order={order} onDismiss={handleDismiss} />
-          )}
-        </BottomSheetView>
-      </BottomSheet>
+      {state.phase === 'completed' && (
+        <Modal visible transparent animationType="fade">
+          <View style={styles.completedOverlay}>
+            <View style={styles.completedCard}>
+              <CompletedCard order={order} onDismiss={handleDismiss} />
+            </View>
+          </View>
+        </Modal>
+      )}
 
       <CancelSheet
         visible={cancelSheetOpen}
@@ -930,22 +851,18 @@ const styles = StyleSheet.create({
   map: {
     ...StyleSheet.absoluteFillObject,
   },
-  sheetBackground: {
-    backgroundColor: DriverColors.background,
-    borderTopLeftRadius: 24,
-    borderTopRightRadius: 24,
-  },
-  sheetHandle: {
-    backgroundColor: DriverColors.border,
-    width: 44,
-    height: 5,
-    borderRadius: 3,
-  },
-  sheetInner: {
+  completedOverlay: {
     flex: 1,
-    paddingHorizontal: 20,
-    paddingTop: 8,
-    paddingBottom: 34,
+    backgroundColor: 'rgba(0,0,0,0.55)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 24,
+  },
+  completedCard: {
+    backgroundColor: DriverColors.background,
+    borderRadius: 24,
+    padding: 24,
+    width: '100%',
   },
   cardContent: {
     flex: 1,
