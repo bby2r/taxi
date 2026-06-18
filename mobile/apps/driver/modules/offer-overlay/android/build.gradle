@@ -41,4 +41,6 @@ dependencies {
   // already pulls play-services-location at runtime, so compileOnly
   // avoids duplicate-class merge failures.
   compileOnly 'com.google.android.gms:play-services-location:21.3.0'
+  // Spring-animation for the active-order overlay's drag-snap back.
+  implementation 'androidx.dynamicanimation:dynamicanimation:1.0.0'
 }

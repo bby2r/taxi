@@ -24,7 +24,34 @@ let NativeModule: {
   }) => void;
   hideOffer: () => void;
   dismissOffer: () => void;
+  showActiveOrder: (payload: ActiveOrderPayload) => void;
+  updateActiveOrder: (payload: Partial<ActiveOrderPayload>) => void;
+  hideActiveOrder: () => void;
+  addListener: (eventName: string, listener: (e: unknown) => void) => { remove: () => void };
 } | null = null;
+
+export interface ActiveOrderPayload {
+  orderId: number;
+  clientName: string;
+  ratingText?: string;
+  statusText: string;
+  etaText: string;
+  pickupAddress: string;
+  dropoffAddress?: string;
+  priceText: string;
+  primaryLabel: string;
+}
+
+export type ActiveOrderAction =
+  | 'call'
+  | 'primary'
+  | 'openMaps'
+  | 'hide';
+
+export interface ActiveOrderActionEvent {
+  action: ActiveOrderAction;
+  orderId: number;
+}
 
 if (Platform.OS === 'android') {
   try {
@@ -121,4 +148,25 @@ export function hideOfferOverlay(): void {
  */
 export function dismissOffer(): void {
   NativeModule?.dismissOffer();
+}
+
+export function showActiveOrderOverlay(payload: ActiveOrderPayload): void {
+  NativeModule?.showActiveOrder(payload);
+}
+
+export function updateActiveOrderOverlay(payload: Partial<ActiveOrderPayload>): void {
+  NativeModule?.updateActiveOrder(payload);
+}
+
+export function hideActiveOrderOverlay(): void {
+  NativeModule?.hideActiveOrder();
+}
+
+export function addActiveOrderListener(
+  callback: (event: ActiveOrderActionEvent) => void,
+): { remove: () => void } {
+  if (!NativeModule) return { remove: () => undefined };
+  return NativeModule.addListener('ActiveOrderAction', (e: unknown) =>
+    callback(e as ActiveOrderActionEvent),
+  );
 }

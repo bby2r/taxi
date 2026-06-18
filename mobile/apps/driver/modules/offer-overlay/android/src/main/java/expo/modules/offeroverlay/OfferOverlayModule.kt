@@ -23,6 +23,8 @@ class OfferOverlayModule : Module() {
     override fun definition() = ModuleDefinition {
         Name("OfferOverlay")
 
+        Events("ActiveOrderAction")
+
         // Track foreground state so the FCM service can suppress the
         // SYSTEM_ALERT_WINDOW overlay when the driver is already looking
         // at the in-app OrderOfferCard — without this both surfaces
@@ -30,10 +32,19 @@ class OfferOverlayModule : Module() {
         OnActivityEntersForeground {
             OfferOverlayManager.isAppForeground = true
             OfferOverlayManager.hideOverlay()
+            // Active-order overlay скрываем в foreground — driver видит
+            // карточку внутри приложения. Возобновляется при background.
+            ActiveOrderOverlayManager.hide()
         }
 
         OnActivityEntersBackground {
             OfferOverlayManager.isAppForeground = false
+        }
+
+        // Wire native button presses → JS event "ActiveOrderAction" с
+        // полями action и orderId.
+        ActiveOrderOverlayManager.setActionEmitter { action, orderId ->
+            sendEvent("ActiveOrderAction", mapOf("action" to action, "orderId" to orderId))
         }
 
         Function("hasOverlayPermission") {
@@ -96,6 +107,20 @@ class OfferOverlayModule : Module() {
 
         Function("dismissOffer") {
             appContext.reactContext?.let { OfferOverlayManager.dismissOffer(it) }
+        }
+
+        Function("showActiveOrder") { payload: Map<String, Any?> ->
+            appContext.reactContext?.let {
+                ActiveOrderOverlayManager.show(it, payload)
+            }
+        }
+
+        Function("updateActiveOrder") { payload: Map<String, Any?> ->
+            ActiveOrderOverlayManager.update(payload)
+        }
+
+        Function("hideActiveOrder") {
+            ActiveOrderOverlayManager.hide()
         }
     }
 }

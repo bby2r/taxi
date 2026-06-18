@@ -1,6 +1,7 @@
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   Alert,
+  AppState,
   View,
   Text,
   StyleSheet,
@@ -10,6 +11,15 @@ import {
   StatusBar,
   Modal,
 } from 'react-native';
+import {
+  addActiveOrderListener,
+  hasOverlayPermission,
+  hideActiveOrderOverlay,
+  openOverlaySettings,
+  showActiveOrderOverlay,
+  updateActiveOrderOverlay,
+  type ActiveOrderPayload,
+} from '../../modules/offer-overlay/src';
 import BottomSheet, { BottomSheetView } from '@gorhom/bottom-sheet';
 import { Icon } from '@taxi/shared';
 import { useNavigation } from '@react-navigation/native';
@@ -19,6 +29,8 @@ import {
   Typography,
   ActionButton,
   ConfirmModal,
+  formatDistance,
+  formatDuration,
   useLocation,
   useMapRemountRestoration,
   useRoute as useNavigationRoute,
@@ -501,6 +513,89 @@ export default function OrderActiveScreen(): React.ReactNode {
     error: routeError,
   } = useNavigationRoute(routeOrigin, routeDestination);
 
+  // Floating overlay поверх внешнего навигатора (Я.Навигатор / 2ГИС /
+  // GMaps). Показывается когда приложение в background; foreground →
+  // hide (в самом приложении DriverNavigationBar играет ту же роль).
+  const buildOverlayPayload = useCallback((): ActiveOrderPayload | null => {
+    if (!order) return null;
+    if (state.phase !== 'active' && state.phase !== 'arrived' && state.phase !== 'in_progress') {
+      return null;
+    }
+    const phaseLabel = {
+      active: 'Еду к клиенту',
+      arrived: 'Жду клиента',
+      in_progress: 'В поездке',
+    } as const;
+    const primaryLabel = {
+      active: 'Прибыл',
+      arrived: 'Начать',
+      in_progress: 'Завершить',
+    } as const;
+    return {
+      orderId: order.id,
+      clientName: order.client.name ?? 'Клиент',
+      ratingText: undefined,
+      statusText: phaseLabel[state.phase],
+      etaText: route
+        ? `${formatDuration(route.durationSeconds)} · ${formatDistance(route.distanceMeters)}`
+        : '',
+      pickupAddress: order.pickup_address ?? '',
+      dropoffAddress: order.dropoff_address ?? undefined,
+      priceText: `${order.price} сом`,
+      primaryLabel: primaryLabel[state.phase],
+    };
+  }, [order, state.phase, route]);
+
+  useEffect(() => {
+    const sub = AppState.addEventListener('change', (next) => {
+      if (next === 'background') {
+        const payload = buildOverlayPayload();
+        if (payload && hasOverlayPermission()) {
+          showActiveOrderOverlay(payload);
+        }
+      } else if (next === 'active') {
+        hideActiveOrderOverlay();
+      }
+    });
+    return () => sub.remove();
+  }, [buildOverlayPayload]);
+
+  useEffect(() => {
+    const payload = buildOverlayPayload();
+    if (payload) {
+      updateActiveOrderOverlay(payload);
+    } else {
+      hideActiveOrderOverlay();
+    }
+  }, [buildOverlayPayload]);
+
+  useEffect(() => {
+    if (!order) return undefined;
+    const sub = addActiveOrderListener((event) => {
+      if (event.orderId !== order.id) return;
+      switch (event.action) {
+        case 'call':
+          if (order.client.phone) Linking.openURL(`tel:${order.client.phone}`);
+          break;
+        case 'primary':
+          if (state.phase === 'active') requestArrived();
+          else if (state.phase === 'arrived') requestStart();
+          else if (state.phase === 'in_progress') requestComplete();
+          break;
+        case 'openMaps':
+          openNavigation(order.pickup_latitude, order.pickup_longitude);
+          break;
+        case 'hide':
+          hideActiveOrderOverlay();
+          break;
+      }
+    });
+    return () => sub.remove();
+    // requestArrived/Start/Complete стабильны по ref в этом сетапе.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [order?.id, state.phase]);
+
+  useEffect(() => () => hideActiveOrderOverlay(), []);
 
   // Two camera modes for the active screen:
   //
