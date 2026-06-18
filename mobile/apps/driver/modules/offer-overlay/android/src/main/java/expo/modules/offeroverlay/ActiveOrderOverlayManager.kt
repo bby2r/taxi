@@ -13,10 +13,6 @@ import android.view.MotionEvent
 import android.view.View
 import android.view.WindowManager
 import android.widget.TextView
-import androidx.dynamicanimation.animation.FloatValueHolder
-import androidx.dynamicanimation.animation.SpringAnimation
-import androidx.dynamicanimation.animation.SpringForce
-import kotlin.math.max
 
 /**
  * Floating glass-style card pinned to TOP of the screen showing the
@@ -131,11 +127,12 @@ object ActiveOrderOverlayManager {
             PixelFormat.TRANSLUCENT,
         )
         lp.gravity = Gravity.TOP or Gravity.CENTER_HORIZONTAL
-        lp.x = 0
-        // 24dp от верха статус-бара. Не пытаемся точно подгрести inset:
-        // FLAG_LAYOUT_NO_LIMITS + WRAP_CONTENT + spring-pin при ACTION_UP
-        // ставят карточку в безопасную верхнюю позицию.
-        lp.y = dp(context, 28)
+        // Восстанавливаем последнюю выбранную юзером позицию (за сессию
+        // сохраняется в SharedPreferences). Если юзер ещё не двигал —
+        // дефолт 0,28dp (по центру, под статус-баром).
+        val saved = loadPosition(context)
+        lp.x = saved?.first ?: 0
+        lp.y = saved?.second ?: dp(context, 28)
 
         // Реальный blur навигатора под карточкой на Android 12+.
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
@@ -160,6 +157,7 @@ object ActiveOrderOverlayManager {
         var initialTouchY = 0f
         var dragging = false
         val touchSlop = 8
+        val dm = view.context.resources.displayMetrics
 
         dragSurface.setOnTouchListener { _, event ->
             when (event.action) {
@@ -178,18 +176,25 @@ object ActiveOrderOverlayManager {
                         dragging = true
                     }
                     if (dragging) {
-                        lp.x = initialX + dx
-                        lp.y = max(0, initialY + dy)
+                        // Clamp границы: верх под статус-бар, низ — не дальше
+                        // screenHeight - cardHeight; X — чтобы карточка не убежала
+                        // полностью за край.
+                        val cardW = view.width.coerceAtLeast(1)
+                        val cardH = view.height.coerceAtLeast(1)
+                        val maxX = (dm.widthPixels - cardW) / 2
+                        val newX = (initialX + dx).coerceIn(-maxX, maxX)
+                        val newY = (initialY + dy).coerceIn(0, dm.heightPixels - cardH)
+                        lp.x = newX
+                        lp.y = newY
                         try {
                             wm.updateViewLayout(view, lp)
+                            savePosition(view.context, newX, newY)
                         } catch (_: Exception) {}
                     }
                     true
                 }
                 MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> {
-                    if (dragging) {
-                        springBackToTop(view, lp, wm)
-                    } else {
+                    if (!dragging) {
                         toggleExpanded(view)
                     }
                     dragging = false
@@ -200,35 +205,26 @@ object ActiveOrderOverlayManager {
         }
     }
 
-    private fun springBackToTop(view: View, lp: WindowManager.LayoutParams, wm: WindowManager) {
-        val targetY = dp(view.context, 28).toFloat()
-        val targetX = 0f
+    private const val PREFS_NAME = "active_overlay_prefs"
+    private const val KEY_X = "pos_x"
+    private const val KEY_Y = "pos_y"
+    private const val KEY_HAS_POS = "has_pos"
 
-        SpringAnimation(FloatValueHolder().apply { value = lp.y.toFloat() })
-            .setSpring(
-                SpringForce(targetY).apply {
-                    dampingRatio = SpringForce.DAMPING_RATIO_LOW_BOUNCY
-                    stiffness = SpringForce.STIFFNESS_LOW
-                }
-            )
-            .addUpdateListener { _, value, _ ->
-                lp.y = value.toInt()
-                try { wm.updateViewLayout(view, lp) } catch (_: Exception) {}
-            }
-            .start()
+    private fun savePosition(context: Context, x: Int, y: Int) {
+        try {
+            val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+            prefs.edit().putInt(KEY_X, x).putInt(KEY_Y, y).putBoolean(KEY_HAS_POS, true).apply()
+        } catch (_: Exception) {}
+    }
 
-        SpringAnimation(FloatValueHolder().apply { value = lp.x.toFloat() })
-            .setSpring(
-                SpringForce(targetX).apply {
-                    dampingRatio = SpringForce.DAMPING_RATIO_LOW_BOUNCY
-                    stiffness = SpringForce.STIFFNESS_LOW
-                }
-            )
-            .addUpdateListener { _, value, _ ->
-                lp.x = value.toInt()
-                try { wm.updateViewLayout(view, lp) } catch (_: Exception) {}
-            }
-            .start()
+    private fun loadPosition(context: Context): Pair<Int, Int>? {
+        return try {
+            val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+            if (!prefs.getBoolean(KEY_HAS_POS, false)) return null
+            Pair(prefs.getInt(KEY_X, 0), prefs.getInt(KEY_Y, dp(context, 28)))
+        } catch (_: Exception) {
+            null
+        }
     }
 
     private fun toggleExpanded(view: View) {
