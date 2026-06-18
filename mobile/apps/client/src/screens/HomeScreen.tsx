@@ -8,7 +8,9 @@ import {
   ActivityIndicator,
   Animated,
   Easing,
+  Linking,
   Platform,
+  Pressable,
   StatusBar,
   TouchableOpacity,
   Dimensions,
@@ -28,7 +30,8 @@ const HEIGHT_IDLE = 340;
 const HEIGHT_SEARCHING = 260;
 const HEIGHT_ACTIVE = 340;
 
-import { useLocation, ActionButton, ClientColors, ErrorPill, FadeInView, Haptics, Radius, Spacing, Typography, reverseGeocode, Region } from '@taxi/shared';
+import { useLocation, ActionButton, ClientColors, ErrorPill, FadeInView, Haptics, Radius, Skeleton, Spacing, Typography, reverseGeocode, Region } from '@taxi/shared';
+import { Shadow } from '../theme/tokens';
 import { useOrder } from '../hooks/useOrder';
 import DriverCard from '../components/DriverCard';
 import Icon from '../components/Icon';
@@ -490,79 +493,117 @@ export default function HomeScreen(): React.ReactNode {
 
         {state.phase === 'idle' && (
           <>
-            {/* Лоадер: ждём GPS или ответа /tariffs */}
-            {(!pickupCoord || inServiceArea === null || regions.length === 0) && (
-              <View style={styles.loadingBlock}>
-                <ActivityIndicator color={ClientColors.primary} />
-                <Text style={styles.loadingText}>
-                  {!location.hasRealFix
-                    ? (location.error ?? 'Определяем ваше местоположение…')
-                    : 'Загружаем тарифы…'}
+            {/* Skeleton-loader пока ждём GPS или ответа /tariffs.
+                Структура сохраняется — юзер сразу видит «контент уже едет»,
+                а не пустоту с спиннером. */}
+            {(!pickupCoord || inServiceArea === null || regions.length === 0)
+              && !location.error && (
+              <>
+                <View style={styles.tariffSkeleton}>
+                  <Skeleton width={56} height={40} radius={10} />
+                  <View style={{ flex: 1, marginLeft: 12 }}>
+                    <Skeleton width="60%" height={16} radius={6} />
+                    <View style={{ height: 6 }} />
+                    <Skeleton width="40%" height={12} radius={6} />
+                  </View>
+                  <Skeleton width={64} height={22} radius={6} />
+                </View>
+                <View style={[styles.inlineRow, { marginTop: 14 }]}>
+                  <Skeleton width="48%" height={40} radius={999} />
+                  <Skeleton width="48%" height={40} radius={999} />
+                </View>
+                <Skeleton width="100%" height={56} radius={28} style={{ marginTop: 14 }} />
+              </>
+            )}
+
+            {/* Permission denied / GPS error — карточка с действием.
+                Раньше показывался один спиннер навечно — юзер не понимал
+                что делать. */}
+            {location.error && !pickupCoord && (
+              <View style={styles.permissionCard}>
+                <View style={styles.permissionIcon}>
+                  <Icon name="pin" size={26} color={ClientColors.primary} strokeWidth={2.2} />
+                </View>
+                <Text style={styles.permissionTitle}>Нужен доступ к геолокации</Text>
+                <Text style={styles.permissionBody}>
+                  Без GPS мы не сможем подать такси к вам. Откройте настройки и
+                  разрешите доступ к местоположению для Alif Taxi.
                 </Text>
+                <TouchableOpacity
+                  style={styles.permissionButton}
+                  onPress={() => Linking.openSettings()}
+                  activeOpacity={0.85}
+                  accessibilityRole="button"
+                >
+                  <Text style={styles.permissionButtonText}>Открыть настройки</Text>
+                </TouchableOpacity>
               </View>
             )}
 
-            {/* Вне зоны — большая плашка с объяснением */}
+            {/* Вне зоны обслуживания — мягкая карточка с CTA */}
             {pickupCoord && inServiceArea === false && (
-              <View style={styles.serviceUnavailable}>
-                <View style={styles.serviceUnavailableIcon}>
-                  <Icon name="pin" size={28} color={ClientColors.secondaryDark} strokeWidth={2.2} />
+              <View style={styles.permissionCard}>
+                <View style={[styles.permissionIcon, { backgroundColor: ClientColors.secondaryTint }]}>
+                  <Icon name="pin" size={26} color={ClientColors.secondaryDark} strokeWidth={2.2} />
                 </View>
-                <Text style={styles.serviceUnavailableTitle}>
-                  Сервис пока недоступен в вашем районе
-                </Text>
-                <Text style={styles.serviceUnavailableBody}>
+                <Text style={styles.permissionTitle}>Вне зоны обслуживания</Text>
+                <Text style={styles.permissionBody}>
                   Мы работаем в Таласе, Кировке и Покровке.
                   {pinDragged
                     ? ' Перетащите метку обратно или вернитесь к GPS.'
-                    : ' Если вы в одном из этих сёл — проверьте GPS.'}
+                    : ' Проверьте GPS — может быть, у нас расходятся данные.'}
                 </Text>
                 {pinDragged && (
                   <TouchableOpacity
-                    style={styles.serviceUnavailableButton}
+                    style={styles.permissionButton}
                     onPress={resetPinToGps}
                     activeOpacity={0.85}
                   >
-                    <Icon name="pin" size={18} color={ClientColors.primary} strokeWidth={2.4} />
-                    <Text style={styles.serviceUnavailableButtonText}>К моему GPS</Text>
+                    <Text style={styles.permissionButtonText}>К моему GPS</Text>
                   </TouchableOpacity>
                 )}
               </View>
             )}
 
-            {/* В зоне — премиум-композиция в стиле Yandex Go / GreenNow */}
+            {/* В зоне — премиум-композиция Bolt / Yandex Go стиль */}
             {pickupCoord && inServiceArea === true && detectedVillage && (
               <>
                 <View style={styles.tariffCard}>
-                  <TariffCarIllustration size={64} style={styles.tariffCar} />
+                  <TariffCarIllustration size={56} style={styles.tariffCar} />
                   <View style={styles.tariffInfo}>
                     <Text style={styles.tariffName} numberOfLines={1}>
                       В {detectedVillage.name}
                     </Text>
                     <Text style={styles.tariffMeta} numberOfLines={1}>
-                      {isRoundTrip ? 'Туда и обратно' : 'Эконом · 4 места'}
+                      {isRoundTrip ? `Туда и обратно · +${roundTripPct}%` : 'Эконом · до 4 мест'}
                     </Text>
                   </View>
                   <View style={styles.tariffPriceBlock}>
                     {inVillageTariffMissing ? (
                       <Text style={styles.tariffPriceMissing}>—</Text>
                     ) : (
-                      <Text style={styles.tariffPrice}>
-                        {displayedPrice} <Text style={styles.tariffCurrency}>сом</Text>
-                      </Text>
+                      <>
+                        <Text style={styles.tariffPrice}>{displayedPrice}</Text>
+                        <Text style={styles.tariffCurrency}>сом</Text>
+                      </>
                     )}
                   </View>
                 </View>
 
                 <View style={styles.inlineRow}>
-                  <TouchableOpacity
-                    style={[styles.chip, isRoundTrip && styles.chipActive]}
-                    onPress={() => setIsRoundTrip((v) => !v)}
-                    activeOpacity={0.75}
+                  <Pressable
+                    style={({ pressed }) => [
+                      styles.chip,
+                      isRoundTrip && styles.chipActive,
+                      pressed && styles.chipPressed,
+                    ]}
+                    onPress={() => {
+                      Haptics.light();
+                      setIsRoundTrip((v) => !v);
+                    }}
                     accessibilityRole="checkbox"
                     accessibilityState={{ checked: isRoundTrip }}
                     accessibilityLabel={`Туда и обратно, наценка ${roundTripPct} процентов`}
-                    hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
                   >
                     <Icon
                       name="route"
@@ -571,32 +612,30 @@ export default function HomeScreen(): React.ReactNode {
                       strokeWidth={2.4}
                     />
                     <Text style={[styles.chipText, isRoundTrip && styles.chipTextActive]}>
-                      Туда-обратно{isRoundTrip ? ` +${roundTripPct}%` : ''}
+                      Туда-обратно
                     </Text>
-                  </TouchableOpacity>
+                  </Pressable>
 
-                  <TouchableOpacity
-                    style={styles.chip}
+                  <Pressable
+                    style={({ pressed }) => [styles.chip, pressed && styles.chipPressed]}
                     onPress={() => setIntervillageOpen(true)}
-                    activeOpacity={0.75}
                     disabled={loading}
                     accessibilityRole="button"
                     accessibilityLabel="Заказать такси между сёлами"
-                    hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
                   >
                     <Icon name="pin" size={14} color={ClientColors.primaryDark} strokeWidth={2.4} />
                     <Text style={styles.chipText}>Межсёлами</Text>
-                  </TouchableOpacity>
+                  </Pressable>
                 </View>
 
-                <TouchableOpacity
-                  style={[
+                <Pressable
+                  style={({ pressed }) => [
                     styles.heroButton,
+                    pressed && styles.heroButtonPressed,
                     (loading || inVillageTariffMissing) && styles.heroButtonDisabled,
                   ]}
                   onPress={handleInVillageCallTaxi}
                   disabled={loading || inVillageTariffMissing}
-                  activeOpacity={0.9}
                   accessibilityRole="button"
                   accessibilityLabel={`Заказать такси, ${displayedPrice} сом`}
                   accessibilityState={{ disabled: loading || inVillageTariffMissing, busy: loading }}
@@ -606,7 +645,7 @@ export default function HomeScreen(): React.ReactNode {
                   ) : (
                     <Text style={styles.heroButtonText}>Заказать такси</Text>
                   )}
-                </TouchableOpacity>
+                </Pressable>
               </>
             )}
           </>
@@ -735,112 +774,121 @@ const styles = StyleSheet.create({
     color: ClientColors.dark,
     letterSpacing: -0.2,
   },
-  loadingBlock: {
+  // Skeleton tariff-row: те же пропорции что финальная карточка —
+  // когда контент догрузится, разница в layout не дёрнет глаз.
+  tariffSkeleton: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'center',
-    gap: Spacing.md,
-    paddingVertical: 36,
+    backgroundColor: ClientColors.white,
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: ClientColors.border,
+    paddingHorizontal: 14,
+    paddingVertical: 14,
+    marginTop: 4,
+    ...Shadow.surface,
   },
-  loadingText: {
-    fontSize: 14,
-    color: ClientColors.textSecondary,
-  },
-  serviceUnavailable: {
+  // Permission / service-unavailable — единая premium-карточка с CTA.
+  permissionCard: {
     alignItems: 'center',
-    paddingVertical: Spacing.xl,
-    paddingHorizontal: Spacing.xs,
+    backgroundColor: ClientColors.white,
+    borderRadius: 20,
+    borderWidth: 1,
+    borderColor: ClientColors.border,
+    paddingVertical: 24,
+    paddingHorizontal: 22,
+    marginTop: 4,
+    ...Shadow.surface,
   },
-  serviceUnavailableIcon: {
-    width: 64,
-    height: 64,
-    borderRadius: Radius.xxxl,
-    backgroundColor: ClientColors.secondaryTint,
+  permissionIcon: {
+    width: 56,
+    height: 56,
+    borderRadius: 28,
+    backgroundColor: ClientColors.primaryTint,
     alignItems: 'center',
     justifyContent: 'center',
-    marginBottom: Spacing.lg,
+    marginBottom: 14,
   },
-  serviceUnavailableTitle: {
-    fontSize: 18,
+  permissionTitle: {
+    fontSize: 17,
     fontWeight: '700' as const,
     color: ClientColors.dark,
     textAlign: 'center',
-    marginBottom: Spacing.sm,
-    letterSpacing: -0.2,
+    marginBottom: 6,
+    letterSpacing: -0.3,
   },
-  serviceUnavailableBody: {
-    fontSize: 14,
+  permissionBody: {
+    fontSize: 13,
     color: ClientColors.textSecondary,
     textAlign: 'center',
-    lineHeight: 20,
+    lineHeight: 19,
   },
-  serviceUnavailableButton: {
+  permissionButton: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: Spacing.sm,
+    justifyContent: 'center',
     marginTop: 18,
-    paddingHorizontal: 18,
-    paddingVertical: Spacing.md,
-    borderRadius: Radius.xxl,
-    borderWidth: 1,
-    borderColor: ClientColors.primary,
+    paddingHorizontal: 22,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: ClientColors.primary,
+    ...Shadow.brandGlow,
   },
-  serviceUnavailableButtonText: {
+  permissionButtonText: {
     fontSize: 14,
     fontWeight: '700' as const,
-    color: ClientColors.primary,
+    color: ClientColors.white,
+    letterSpacing: 0.2,
   },
-  // Premium tariff card в стиле Yandex Go / GreenNow: иконка машины
-  // слева, название тарифа + meta по центру, цена справа.
+  // Tariff card Bolt-style: иллюстрация авто слева, название/мета посередине,
+  // цена справа крупно. Active state имеет brand-glow.
   tariffCard: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 14,
+    gap: 12,
     backgroundColor: ClientColors.white,
-    borderRadius: 20,
+    borderRadius: 16,
     borderWidth: 1.5,
     borderColor: ClientColors.primary,
     paddingHorizontal: 14,
-    paddingVertical: 12,
+    paddingVertical: 14,
     marginTop: 4,
-    shadowColor: ClientColors.primary,
-    shadowOpacity: 0.18,
-    shadowRadius: 14,
-    shadowOffset: { width: 0, height: 4 },
-    elevation: 3,
+    ...Shadow.brandGlow,
   },
   tariffCar: {
-    marginLeft: -6,
+    marginLeft: -4,
   },
   tariffInfo: {
     flex: 1,
     minWidth: 0,
   },
   tariffName: {
-    fontSize: 17,
+    fontSize: 16,
     fontWeight: '700' as const,
     color: ClientColors.dark,
-    letterSpacing: -0.3,
+    letterSpacing: -0.2,
   },
   tariffMeta: {
     fontSize: 12,
-    fontWeight: '600' as const,
-    color: ClientColors.textSecondary,
+    fontWeight: '500' as const,
+    color: ClientColors.textMuted,
     marginTop: 2,
   },
   tariffPriceBlock: {
-    alignItems: 'flex-end',
+    flexDirection: 'row',
+    alignItems: 'baseline',
+    gap: 4,
   },
   tariffPrice: {
-    fontSize: 22,
+    fontSize: 24,
     fontWeight: '800' as const,
     color: ClientColors.primaryDark,
-    letterSpacing: -0.5,
+    letterSpacing: -0.6,
   },
   tariffCurrency: {
     fontSize: 13,
     fontWeight: '600' as const,
-    color: ClientColors.textSecondary,
+    color: ClientColors.textMuted,
   },
   tariffPriceMissing: {
     fontSize: 22,
@@ -849,8 +897,8 @@ const styles = StyleSheet.create({
   },
   inlineRow: {
     flexDirection: 'row',
-    gap: 8,
-    marginTop: 12,
+    gap: 10,
+    marginTop: 14,
     marginBottom: 14,
   },
   chip: {
@@ -859,12 +907,15 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     gap: 6,
-    height: 38,
-    paddingHorizontal: 12,
-    borderRadius: Radius.round,
+    height: 40,
+    paddingHorizontal: 14,
+    borderRadius: 999,
     backgroundColor: ClientColors.surfaceMuted,
     borderWidth: 1,
     borderColor: ClientColors.border,
+  },
+  chipPressed: {
+    transform: [{ scale: 0.97 }],
   },
   chipActive: {
     backgroundColor: ClientColors.primary,
@@ -886,14 +937,13 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    shadowColor: ClientColors.primary,
-    shadowOpacity: 0.4,
-    shadowRadius: 16,
-    shadowOffset: { width: 0, height: 8 },
-    elevation: 8,
+    ...Shadow.brandGlow,
+  },
+  heroButtonPressed: {
+    transform: [{ scale: 0.98 }],
   },
   heroButtonDisabled: {
-    opacity: 0.45,
+    opacity: 0.4,
     shadowOpacity: 0,
   },
   heroButtonText: {
