@@ -50,15 +50,38 @@ object ActiveOrderOverlayManager {
     }
 
     fun show(context: Context, payload: Map<String, Any?>) {
-        mainHandler.post { showOnMain(context.applicationContext, payload) }
+        mainHandler.post {
+            showOnMain(context.applicationContext, payload)
+            scheduleAutoHide()
+        }
     }
 
     fun update(payload: Map<String, Any?>) {
-        mainHandler.post { updateOnMain(payload) }
+        mainHandler.post {
+            updateOnMain(payload)
+            scheduleAutoHide()
+        }
     }
 
     fun hide() {
-        mainHandler.post { hideOnMain() }
+        mainHandler.post {
+            cancelAutoHide()
+            hideOnMain()
+        }
+    }
+
+    // Защита от зависшего overlay: если за 60 секунд не пришло ни одного
+    // update'а — значит JS-сторона мертва (приложение убито OEM'ом /
+    // потеряла подписку Pusher / не пересчитала useEffect). Гасим сами,
+    // чтобы overlay не висел поверх Instagram после реально-завершённого
+    // заказа.
+    private val autoHideRunnable = Runnable { hideOnMain() }
+    private fun scheduleAutoHide() {
+        mainHandler.removeCallbacks(autoHideRunnable)
+        mainHandler.postDelayed(autoHideRunnable, 60_000)
+    }
+    private fun cancelAutoHide() {
+        mainHandler.removeCallbacks(autoHideRunnable)
     }
 
     private fun showOnMain(context: Context, payload: Map<String, Any?>) {
@@ -244,9 +267,8 @@ object ActiveOrderOverlayManager {
         view.findViewById<View>(R.id.active_btn_open_maps)?.setOnClickListener {
             actionEmitter?.invoke("openMaps", orderId)
         }
-        view.findViewById<View>(R.id.active_btn_hide)?.setOnClickListener {
-            actionEmitter?.invoke("hide", orderId)
-        }
+        // Кнопка hide убрана из UI — overlay управляется автоматически
+        // через useOverlayLifecycle (DriverOrderProvider) + auto-TTL ниже.
     }
 
     private fun updateOnMain(payload: Map<String, Any?>) {

@@ -111,17 +111,7 @@
                     android:textStyle="bold"
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
-                    android:layout_marginEnd="8dp"
                     android:singleLine="true" />
-
-                <TextView
-                    android:id="@+id/active_btn_hide"
-                    android:text="✕"
-                    android:textColor="#9CA3AF"
-                    android:textSize="18sp"
-                    android:padding="6dp"
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content" />
             </LinearLayout>
 
             <TextView

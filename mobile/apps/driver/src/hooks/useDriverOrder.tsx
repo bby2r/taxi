@@ -193,6 +193,23 @@ function useOverlayLifecycle(phase: DriverOrderState['phase']): void {
       hideActiveOrderOverlay();
     }
   }, [phase]);
+
+  // Двойная страховка: если Pusher пропустил event смены phase пока app
+  // был убит OEM'ом — при возвращении в foreground пересчитываем и
+  // прячем если phase не активная.
+  useEffect(() => {
+    const sub = RNAppState.addEventListener('change', (next) => {
+      if (
+        next === 'active' &&
+        phase !== 'active' &&
+        phase !== 'arrived' &&
+        phase !== 'in_progress'
+      ) {
+        hideActiveOrderOverlay();
+      }
+    });
+    return () => sub.remove();
+  }, [phase]);
 }
 
 function useDriverOrderState(): UseDriverOrderReturn {
