@@ -40,6 +40,7 @@ export interface ActiveOrderPayload {
   dropoffAddress?: string;
   priceText: string;
   primaryLabel: string;
+  primaryDisabled?: boolean;
 }
 
 export type ActiveOrderAction =

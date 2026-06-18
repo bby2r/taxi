@@ -237,16 +237,20 @@ object ActiveOrderOverlayManager {
         view.findViewById<View>(R.id.active_expanded_block).visibility = if (expanded) View.VISIBLE else View.GONE
     }
 
+    private var primaryDisabled = false
     private fun bindActions(view: View, orderId: Int) {
-        fun bind(id: Int, action: String) {
-            view.findViewById<View>(id)?.setOnClickListener {
-                actionEmitter?.invoke(action, orderId)
-            }
+        view.findViewById<View>(R.id.active_btn_call)?.setOnClickListener {
+            actionEmitter?.invoke("call", orderId)
         }
-        bind(R.id.active_btn_call, "call")
-        bind(R.id.active_btn_primary, "primary")
-        bind(R.id.active_btn_open_maps, "openMaps")
-        bind(R.id.active_btn_hide, "hide")
+        view.findViewById<View>(R.id.active_btn_primary)?.setOnClickListener {
+            if (!primaryDisabled) actionEmitter?.invoke("primary", orderId)
+        }
+        view.findViewById<View>(R.id.active_btn_open_maps)?.setOnClickListener {
+            actionEmitter?.invoke("openMaps", orderId)
+        }
+        view.findViewById<View>(R.id.active_btn_hide)?.setOnClickListener {
+            actionEmitter?.invoke("hide", orderId)
+        }
     }
 
     private fun updateOnMain(payload: Map<String, Any?>) {
@@ -272,6 +276,13 @@ object ActiveOrderOverlayManager {
         (payload["priceText"] as? String)?.let { set(R.id.active_price, it) }
         (payload["primaryLabel"] as? String)?.let { set(R.id.active_btn_primary, it) }
         (payload["ratingText"] as? String)?.let { set(R.id.active_client_rating, it) }
+
+        val disabled = payload["primaryDisabled"] as? Boolean ?: false
+        primaryDisabled = disabled
+        v.findViewById<View>(R.id.active_btn_primary)?.let { btn ->
+            btn.alpha = if (disabled) 0.4f else 1f
+            btn.isEnabled = !disabled
+        }
     }
 
     private fun hideOnMain() {

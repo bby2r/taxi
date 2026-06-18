@@ -8,6 +8,7 @@ import React, {
   useMemo,
 } from 'react';
 import { Alert, Platform, Vibration } from 'react-native';
+import { hideActiveOrderOverlay } from '../../modules/offer-overlay/src';
 import { Order, DeclineReason, DriverCancellationReason, useAuth, usePusher } from '@taxi/shared';
 import {
   goOnline,
@@ -179,6 +180,21 @@ interface UseDriverOrderReturn {
 // component spins up its own state initialized to `offline` and the
 // OrderActiveScreen's goBack-on-non-active effect bounces the driver
 // straight back to the home tab the moment the active order screen mounts.
+// Гасим overlay при любом переходе в нерабочую фазу (offline / online_idle /
+// completed / cancelled). Делаем здесь в Provider, чтобы overlay реагировал
+// даже когда OrderActiveScreen unmounted (юзер на home-tab или вне app'a).
+function useOverlayLifecycle(phase: DriverOrderState['phase']): void {
+  useEffect(() => {
+    if (
+      phase !== 'active' &&
+      phase !== 'arrived' &&
+      phase !== 'in_progress'
+    ) {
+      hideActiveOrderOverlay();
+    }
+  }, [phase]);
+}
+
 function useDriverOrderState(): UseDriverOrderReturn {
   const { user } = useAuth();
   const [state, setState] = useState<DriverOrderState>({ phase: 'offline', order: null });
@@ -988,6 +1004,7 @@ export function DriverOrderProvider({
   children: React.ReactNode;
 }): React.ReactElement {
   const value = useDriverOrderState();
+  useOverlayLifecycle(value.state.phase);
   return (
     <DriverOrderContext.Provider value={value}>
       {children}

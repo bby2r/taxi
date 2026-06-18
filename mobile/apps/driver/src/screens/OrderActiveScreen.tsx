@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   Alert,
   View,
@@ -491,6 +491,16 @@ export default function OrderActiveScreen(): React.ReactNode {
   // Floating glass-card overlay — единственный UI заказа. Показывается
   // и в foreground, и в background (поверх внешнего навигатора).
   // Шторка внизу убрана: карта на весь экран + glass-карточка сверху.
+  const distanceToPickup = useMemo(
+    () =>
+      driverPoint && pickupPoint
+        ? haversineMeters(driverPoint, pickupPoint)
+        : null,
+    [driverPoint, pickupPoint],
+  );
+  const canArrive =
+    distanceToPickup !== null && distanceToPickup <= ARRIVED_THRESHOLD_METERS;
+
   const buildOverlayPayload = useCallback((): ActiveOrderPayload | null => {
     if (!order) return null;
     if (state.phase !== 'active' && state.phase !== 'arrived' && state.phase !== 'in_progress') {
@@ -518,8 +528,11 @@ export default function OrderActiveScreen(): React.ReactNode {
       dropoffAddress: order.dropoff_address ?? undefined,
       priceText: `${order.price} сом`,
       primaryLabel: primaryLabel[state.phase],
+      // «Прибыл» доступна только когда водитель в радиусе ARRIVED_THRESHOLD_METERS.
+      // На overlay это рендерится как полупрозрачная неактивная кнопка.
+      primaryDisabled: state.phase === 'active' && !canArrive,
     };
-  }, [order, state.phase, route]);
+  }, [order, state.phase, route, canArrive]);
 
   useEffect(() => {
     const payload = buildOverlayPayload();
