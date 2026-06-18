@@ -335,11 +335,10 @@ export default function OrderActiveScreen(): React.ReactNode {
   // Three positions like Yandex Taxi driver: barely visible (just handle
   // + ETA peek), default (all key info + main action), expanded (full
   // details, room for future content). Driver swipes between them.
-  // Minimal-bar дизайн: первый snap ≈ только compact bar (~90px на
-  // средних экранах). Все значения в процентах — @gorhom/bottom-sheet
-  // на смеси абсолют+процент местами «забывает» переснапнуться, что
-  // через ~часа использования проявлялось как зависшая шторка.
-  const snapPoints = useMemo(() => ['12%', '46%', '88%'], []);
+  // Pixel-pinned первый snap для compact-bar: процент '12%' зависел
+  // от parent container'a и на ряде девайсов давал ~46% (sheet застывал
+  // в полу-открытом состоянии).
+  const snapPoints = useMemo(() => [90, '46%', '88%'], []);
   const driverLocation = useLocation({ navigation: true });
   const [cancelSheetOpen, setCancelSheetOpen] = useState(false);
   const [pendingAction, setPendingAction] = useState<null | {
@@ -407,12 +406,18 @@ export default function OrderActiveScreen(): React.ReactNode {
     }
   }, [state.phase, navigation]);
 
-  // CompletedCard is centered and needs the full sheet to render
-  // correctly — auto-expand on completion so the driver sees the
-  // payout summary without having to swipe.
+  // CompletedCard centered + needs full sheet → snap to 2.
+  // Active фазы (active/arrived/in_progress) = режим езды → compact bar.
+  // Без этого sheet мог застрять на snap[1] и закрывал большую часть карты.
   useEffect(() => {
     if (state.phase === 'completed') {
       bottomSheetRef.current?.snapToIndex(2);
+    } else if (
+      state.phase === 'active' ||
+      state.phase === 'arrived' ||
+      state.phase === 'in_progress'
+    ) {
+      bottomSheetRef.current?.snapToIndex(0);
     }
   }, [state.phase]);
 
