@@ -4,7 +4,6 @@ namespace App\Http\Resources\V1;
 
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\JsonResource;
-use Illuminate\Support\Facades\URL;
 
 class OrderResource extends JsonResource
 {
@@ -49,13 +48,6 @@ class OrderResource extends JsonResource
             ],
             'driver' => $this->when($this->driver_id, function () {
                 $stats = $this->driver->driverRatingStats();
-                $photoUrl = $this->driver->driverProfile?->driver_photo_path
-                    ? URL::temporarySignedRoute(
-                        'driver.photo',
-                        now()->addHours(24),
-                        ['user' => $this->driver_id],
-                    )
-                    : null;
 
                 return [
                     'id' => $this->driver->id,
@@ -63,7 +55,7 @@ class OrderResource extends JsonResource
                     'phone' => $this->driver->phone,
                     'car_model' => $this->driver->driverProfile?->car_model,
                     'car_number' => $this->driver->driverProfile?->car_number,
-                    'photo_url' => $photoUrl,
+                    'photo_url' => $this->driver->driverPhotoUrl(),
                     'latitude' => $this->driver->driverProfile?->latitude !== null
                         ? (float) $this->driver->driverProfile->latitude
                         : null,

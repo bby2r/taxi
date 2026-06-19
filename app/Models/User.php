@@ -13,6 +13,7 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\Relations\HasOne;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
+use Illuminate\Support\Facades\URL;
 use Laravel\Sanctum\HasApiTokens;
 
 #[Fillable(['name', 'email', 'password', 'role', 'phone', 'phone_verified_at', 'expo_push_token'])]
@@ -169,5 +170,27 @@ class User extends Authenticatable
     public function isDemo(): bool
     {
         return $this->phone === config('demo.phone');
+    }
+
+    /**
+     * Подписанный URL фото водителя — действует 24ч, не угадывается
+     * без secret. Возвращает null если водитель ещё не загрузил фото
+     * или роль не Driver.
+     */
+    public function driverPhotoUrl(): ?string
+    {
+        if (! $this->isDriver()) {
+            return null;
+        }
+        $path = $this->driverProfile?->driver_photo_path;
+        if (! $path) {
+            return null;
+        }
+
+        return URL::temporarySignedRoute(
+            'driver.photo',
+            now()->addHours(24),
+            ['user' => $this->id],
+        );
     }
 }

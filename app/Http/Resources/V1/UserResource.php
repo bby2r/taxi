@@ -4,7 +4,6 @@ namespace App\Http\Resources\V1;
 
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\JsonResource;
-use Illuminate\Support\Facades\URL;
 
 class UserResource extends JsonResource
 {
@@ -43,13 +42,7 @@ class UserResource extends JsonResource
                 'rating_avg' => $ratingStats['avg'],
                 'rating_count' => $ratingStats['count'],
                 'has_photo' => ! empty($this->driverProfile->driver_photo_path),
-                'photo_url' => $this->driverProfile->driver_photo_path
-                    ? URL::temporarySignedRoute(
-                        'driver.photo',
-                        now()->addHours(24),
-                        ['user' => $this->id],
-                    )
-                    : null,
+                'photo_url' => $this->driverPhotoUrl(),
             ]),
         ];
     }

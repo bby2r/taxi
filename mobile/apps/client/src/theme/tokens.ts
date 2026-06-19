@@ -58,58 +58,6 @@ export const Curves = {
 } as const;
 
 /**
- * Surface-комбинации для частых паттернов. Если карточка одинаково
- * выглядит в 3 местах — пусть будет одно описание в одном месте.
- */
-export const Surfaces = {
-  card: {
-    backgroundColor: ClientColors.white,
-    borderRadius: 16,
-    borderWidth: 1,
-    borderColor: ClientColors.border,
-    ...Shadow.surface,
-  } as ViewStyle,
-  cardActive: {
-    backgroundColor: ClientColors.primaryTint,
-    borderRadius: 16,
-    borderWidth: 1.5,
-    borderColor: ClientColors.primary,
-    ...Shadow.brandGlow,
-  } as ViewStyle,
-  sheet: {
-    backgroundColor: ClientColors.white,
-    borderTopLeftRadius: 24,
-    borderTopRightRadius: 24,
-    ...Shadow.floating,
-  } as ViewStyle,
-  chip: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 6,
-    height: 40,
-    paddingHorizontal: 14,
-    borderRadius: 999,
-    backgroundColor: ClientColors.surfaceMuted,
-    borderWidth: 1,
-    borderColor: ClientColors.border,
-  } as ViewStyle,
-  chipActive: {
-    backgroundColor: ClientColors.primary,
-    borderColor: ClientColors.primary,
-  } as ViewStyle,
-  fab: {
-    width: 48,
-    height: 48,
-    borderRadius: 24,
-    backgroundColor: ClientColors.white,
-    alignItems: 'center',
-    justifyContent: 'center',
-    ...Shadow.floating,
-  } as ViewStyle,
-} as const;
-
-/**
  * Размеры тап-зон. Никогда меньше 44 (Apple HIG). Используется на
  * скрытых-обводкой touchable (например, иконка в тексте).
  */
