@@ -37,7 +37,7 @@ import DriverCard from '../components/DriverCard';
 import Icon from '../components/Icon';
 import IntervillageModal from '../components/IntervillageModal';
 import RatingModal from '../components/RatingModal';
-import TariffCarIllustration from '../components/TariffCarIllustration';
+import CarPhoto from '../components/CarPhoto';
 import { getRegions, getTariffs, priceFor, type TariffRoute } from '../api/regions';
 
 function PulsingDot({ size = 14 }: { size?: number }): React.ReactNode {
@@ -525,13 +525,13 @@ export default function HomeScreen(): React.ReactNode {
               && !location.error && (
               <>
                 <View style={styles.tariffSkeleton}>
-                  <Skeleton width={56} height={40} radius={10} />
-                  <View style={{ flex: 1, marginLeft: 12 }}>
+                  <Skeleton width={48} height={40} radius={8} />
+                  <View style={{ flex: 1, marginLeft: 12, marginRight: 12 }}>
                     <Skeleton width="60%" height={16} radius={6} />
                     <View style={{ height: 6 }} />
                     <Skeleton width="40%" height={12} radius={6} />
                   </View>
-                  <Skeleton width={64} height={22} radius={6} />
+                  <Skeleton width={104} height={54} radius={10} />
                 </View>
                 <View style={[styles.inlineRow, { marginTop: 14 }]}>
                   <Skeleton width="48%" height={40} radius={999} />
@@ -594,15 +594,6 @@ export default function HomeScreen(): React.ReactNode {
             {pickupCoord && inServiceArea === true && detectedVillage && (
               <>
                 <View style={styles.tariffCard}>
-                  <TariffCarIllustration size={56} style={styles.tariffCar} />
-                  <View style={styles.tariffInfo}>
-                    <Text style={styles.tariffName} numberOfLines={1}>
-                      В {detectedVillage.name}
-                    </Text>
-                    <Text style={styles.tariffMeta} numberOfLines={1}>
-                      {isRoundTrip ? `Туда и обратно · +${roundTripPct}%` : 'Эконом · до 4 мест'}
-                    </Text>
-                  </View>
                   <View style={styles.tariffPriceBlock}>
                     {inVillageTariffMissing ? (
                       <Text style={styles.tariffPriceMissing}>—</Text>
@@ -613,6 +604,15 @@ export default function HomeScreen(): React.ReactNode {
                       </>
                     )}
                   </View>
+                  <View style={styles.tariffInfo}>
+                    <Text style={styles.tariffName} numberOfLines={1}>
+                      В {detectedVillage.name}
+                    </Text>
+                    <Text style={styles.tariffMeta} numberOfLines={1}>
+                      {isRoundTrip ? `Туда и обратно · +${roundTripPct}%` : 'Эконом · до 4 мест'}
+                    </Text>
+                  </View>
+                  <CarPhoto width={104} style={styles.tariffCar} />
                 </View>
 
                 <View style={styles.inlineRow}>
@@ -677,13 +677,21 @@ export default function HomeScreen(): React.ReactNode {
         )}
 
         {state.phase === 'searching' && (
-          <ActionButton
-            title="Отменить"
-            onPress={cancelOrder}
-            loading={loading}
-            variant="outline"
-            style={{ marginTop: 18 }}
-          />
+          <>
+            <View style={styles.searchingHero}>
+              <CarPhoto width={150} />
+              <Text style={styles.searchingSubtitle}>
+                Подбираем ближайшую машину Alif
+              </Text>
+            </View>
+            <ActionButton
+              title="Отменить"
+              onPress={cancelOrder}
+              loading={loading}
+              variant="outline"
+              style={{ marginTop: 18 }}
+            />
+          </>
         )}
 
         {(state.phase === 'accepted' || state.phase === 'arrived' || state.phase === 'in_progress') &&
@@ -881,7 +889,7 @@ const styles = StyleSheet.create({
     ...Shadow.brandGlow,
   },
   tariffCar: {
-    marginLeft: -4,
+    marginRight: -4,
   },
   tariffInfo: {
     flex: 1,
@@ -899,10 +907,11 @@ const styles = StyleSheet.create({
     color: ClientColors.textMuted,
     marginTop: 2,
   },
+  // Цена теперь ведущий элемент слева — стопкой «100 / сом», как на
+  // выбранном макете (раньше была справа в строку через baseline).
   tariffPriceBlock: {
-    flexDirection: 'row',
-    alignItems: 'baseline',
-    gap: 4,
+    minWidth: 52,
+    alignItems: 'flex-start',
   },
   tariffPrice: {
     fontSize: 24,
@@ -919,6 +928,20 @@ const styles = StyleSheet.create({
     fontSize: 22,
     fontWeight: '700' as const,
     color: ClientColors.textMuted,
+  },
+  // «Ищем водителя…» — фото машины Alif пока подбираем водителя.
+  // Статус-строка живёт в peek-хедере, тут — крупное фото + подпись.
+  searchingHero: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    marginTop: 10,
+  },
+  searchingSubtitle: {
+    fontSize: 14,
+    fontWeight: '500' as const,
+    color: ClientColors.textSecondary,
+    textAlign: 'center',
   },
   inlineRow: {
     flexDirection: 'row',
