@@ -19,7 +19,7 @@ interface DriverArrowProps {
  * without re-laying out the children — the arrow body stays centered
  * over the geo-anchor of the parent PointAnnotation.
  */
-export default function DriverArrow({
+function DriverArrowComponent({
   heading,
   online = true,
 }: DriverArrowProps): React.ReactElement {
@@ -99,3 +99,6 @@ const styles = StyleSheet.create({
     backgroundColor: '#9CA3AF',
   },
 });
+
+const DriverArrow = React.memo(DriverArrowComponent);
+export default DriverArrow;

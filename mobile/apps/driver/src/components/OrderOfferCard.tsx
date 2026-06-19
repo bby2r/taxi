@@ -49,7 +49,7 @@ const REASON_OPTIONS: { value: DeclineReason; label: string }[] = [
 // Window at which the "hurry up" red pulse kicks in.
 const WARNING_THRESHOLD = 5;
 
-export default function OrderOfferCard({
+function OrderOfferCardComponent({
   order,
   onAccept,
   onDecline,
@@ -418,3 +418,10 @@ const styles = StyleSheet.create({
     borderBottomColor: DriverColors.border,
   },
 });
+
+// Order реактивно обновляется только при смене offered_at / order_id —
+// контент карточки в принципе статичен в течение 20-30с окна. Memo
+// исключает лишние рендеры от родительского HomeScreen на каждый
+// state-update useDriverOrder.
+const OrderOfferCard = React.memo(OrderOfferCardComponent);
+export default OrderOfferCard;
