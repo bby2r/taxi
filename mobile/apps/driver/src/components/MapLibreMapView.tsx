@@ -1012,7 +1012,12 @@ const MapLibreMapView = forwardRef<MapLibreMapHandle, Props>(function MapLibreMa
   );
 });
 
-export default MapLibreMapView;
+// Props у driver-map очень узкие (initialCenter/initialZoom/style +
+// callbacks); все обновления карты идут imperative через handle
+// (setDriver/setRoute/setFollowTarget). Memo защищает от лишних
+// React-проходов когда OrderActiveScreen пересчитывает hooks на
+// каждый Kalman-tick.
+export default React.memo(MapLibreMapView);
 
 const styles = StyleSheet.create({
   container: {

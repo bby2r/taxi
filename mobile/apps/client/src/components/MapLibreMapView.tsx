@@ -740,7 +740,33 @@ const MapLibreMapView = forwardRef<MapLibreMapHandle, Props>(function MapLibreMa
   );
 });
 
-export default MapLibreMapView;
+// Memo-сравнение по shallow + deep на coords. WebView рендерит карту
+// через injectJavaScript императивно из useEffect'ов — повторный
+// React-рендер с теми же координатами должен no-op'ом. Без memo
+// каждый ре-рендер родителя (а HomeScreen ре-рендерится на каждое
+// движение pickup-pin и каждый GPS-tick) пересоздавал props-объекты,
+// и React всё равно проходил весь render-цикл компонента.
+function coordEq(a: { latitude: number; longitude: number } | null | undefined,
+                 b: { latitude: number; longitude: number } | null | undefined): boolean {
+  if (a === b) return true;
+  if (!a || !b) return false;
+  return a.latitude === b.latitude && a.longitude === b.longitude;
+}
+
+export default React.memo(MapLibreMapView, (prev, next) => {
+  return (
+    prev.style === next.style &&
+    prev.initialZoom === next.initialZoom &&
+    prev.paddingTop === next.paddingTop &&
+    prev.paddingBottom === next.paddingBottom &&
+    prev.pickupDraggable === next.pickupDraggable &&
+    prev.onPickupDragEnd === next.onPickupDragEnd &&
+    coordEq(prev.userLocation, next.userLocation) &&
+    coordEq(prev.pickup, next.pickup) &&
+    coordEq(prev.driver, next.driver) &&
+    (prev.driver?.heading ?? null) === (next.driver?.heading ?? null)
+  );
+});
 
 const styles = StyleSheet.create({
   container: {

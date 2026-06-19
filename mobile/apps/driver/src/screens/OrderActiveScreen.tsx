@@ -595,6 +595,15 @@ export default function OrderActiveScreen(): React.ReactNode {
   // Держим ref в синхроне для стабильного handleMapReady (см. ниже).
   followingRef.current = following;
 
+  // Stable callback для onUserGesture — без useCallback каждый рендер
+  // OrderActiveScreen создавал новый closure, и React.memo на
+  // MapLibreMapView терял эффект.
+  const handleUserGesture = useCallback(() => {
+    if (followingRef.current) {
+      setFollowing(false);
+    }
+  }, []);
+
   // Re-enable follow whenever the screen transitions into a new phase
   // (newly accepted, freshly in-progress). Driver expects auto-follow
   // again after a state change even if they had panned away.
@@ -785,14 +794,7 @@ export default function OrderActiveScreen(): React.ReactNode {
         }
         initialZoom={14}
         onReady={handleMapReady}
-        onUserGesture={() => {
-          // Driver panned/pinched — drop follow so our camera effect
-          // stops fighting their view. "Вернуться к маршруту" button
-          // below re-engages it.
-          if (following && isNavigating) {
-            setFollowing(false);
-          }
-        }}
+        onUserGesture={handleUserGesture}
       />
 
       {/* Re-engage follow camera. Shows only when driver opted out of

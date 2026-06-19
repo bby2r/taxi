@@ -214,24 +214,46 @@ export default function HomeScreen(): React.ReactNode {
     [translateY, snapTo, collapseOffset],
   );
 
-  // Тарифы + определение района по pickupCoord (а не location).
-  // Перетянул метку → запрос ушёл с новыми координатами → бейдж и
-  // цена обновились автоматически.
-  useFocusEffect(
-    useCallback(() => {
-      const lat = pickupCoord?.lat;
-      const lng = pickupCoord?.lng;
-      Promise.all([getRegions(), getTariffs(lat, lng)])
-        .then(([rs, t]) => {
-          setRegions(rs);
-          setTariffs(t.routes);
-          setRoundTripPct(t.roundTripSurchargePercent);
-          setDetectedVillage(t.detectedVillage);
-          setInServiceArea(t.inServiceArea);
+  // Регионы статичны в рамках сессии — фетчим один раз, а не на каждый
+  // фокус/GPS-tick.
+  useEffect(() => {
+    getRegions().then(setRegions).catch(() => undefined);
+  }, []);
+
+  // Тарифы зависят от pickup-координат, но координаты обновляются на
+  // каждый GPS-tick (~1Hz) когда юзер ещё не перетянул pin. Раньше это
+  // бомбило сервер ~60 раз/мин, и каждый ответ триггерил setState →
+  // полный ре-рендер HomeScreen + всех детей. Debounce 800ms + distance
+  // 80м: запрос уходит только когда позиция реально сменилась.
+  const lastTariffRequestRef = useRef<{ lat: number; lng: number; ts: number } | null>(null);
+  useEffect(() => {
+    const lat = pickupCoord?.lat;
+    const lng = pickupCoord?.lng;
+    if (lat === undefined || lng === undefined) return;
+
+    const last = lastTariffRequestRef.current;
+    if (last) {
+      const dLat = lat - last.lat;
+      const dLng = lng - last.lng;
+      const movedDeg = Math.sqrt(dLat * dLat + dLng * dLng);
+      // ~0.0007° ≈ 80m на широте Бишкека/Таласа
+      if (movedDeg < 0.0007 && Date.now() - last.ts < 30_000) return;
+    }
+
+    const t = setTimeout(() => {
+      lastTariffRequestRef.current = { lat, lng, ts: Date.now() };
+      getTariffs(lat, lng)
+        .then((data) => {
+          setTariffs(data.routes);
+          setRoundTripPct(data.roundTripSurchargePercent);
+          setDetectedVillage(data.detectedVillage);
+          setInServiceArea(data.inServiceArea);
         })
         .catch(() => undefined);
-    }, [pickupCoord?.lat, pickupCoord?.lng]),
-  );
+    }, 800);
+
+    return () => clearTimeout(t);
+  }, [pickupCoord?.lat, pickupCoord?.lng]);
 
   useEffect(() => {
     snapTo('expanded');
@@ -295,10 +317,13 @@ export default function HomeScreen(): React.ReactNode {
     return error === before;
   };
 
-  const handlePinDragEnd = (coord: { latitude: number; longitude: number }): void => {
-    setPickupCoord({ lat: coord.latitude, lng: coord.longitude });
-    setPinDragged(true);
-  };
+  const handlePinDragEnd = useCallback(
+    (coord: { latitude: number; longitude: number }): void => {
+      setPickupCoord({ lat: coord.latitude, lng: coord.longitude });
+      setPinDragged(true);
+    },
+    [],
+  );
 
   const inVillagePrice = detectedVillage
     ? priceFor(tariffs, detectedVillage.id, detectedVillage.id)
