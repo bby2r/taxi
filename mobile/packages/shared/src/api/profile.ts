@@ -31,3 +31,16 @@ export async function sendChangePhoneOtp(phone: string): Promise<void> {
 export async function verifyChangePhone(phone: string, code: string): Promise<void> {
   await apiClient.post('/api/v1/auth/change-phone/verify', { phone, code });
 }
+
+export async function uploadDriverPhoto(uri: string): Promise<void> {
+  const form = new FormData();
+  // RN FormData type — file shape extension не в стандартном lib.
+  form.append('photo', {
+    uri,
+    name: 'photo.jpg',
+    type: 'image/jpeg',
+  } as unknown as Blob);
+  await apiClient.post('/api/v1/driver/profile/photo', form, {
+    headers: { 'Content-Type': 'multipart/form-data' },
+  });
+}

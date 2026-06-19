@@ -21,6 +21,9 @@ export interface Driver {
   // тогда показываем «Новый водитель» вместо ★ 0.0.
   rating_avg: number | null;
   rating_count: number;
+  // Signed temporary URL (24ч) на фото водителя. null если фото не
+  // загружено — клиент показывает инициал-аватар.
+  photo_url: string | null;
 }
 
 export type DeclineReason =
@@ -143,6 +146,8 @@ export interface DriverProfile {
   car_number: string;
   rating_avg?: number | null;
   rating_count?: number;
+  has_photo?: boolean;
+  photo_url?: string | null;
 }
 
 export interface DriverChangeRequest {

@@ -10,14 +10,17 @@ import {
   ScrollView,
   RefreshControl,
   Linking,
+  Image,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import * as ImagePicker from 'expo-image-picker';
 import {
   useAuth,
   getDriverProfile,
   requestDriverChanges,
   getDriverChangeRequests,
   sendChangePhoneOtp,
+  uploadDriverPhoto,
   verifyChangePhone,
   DriverProfile,
   DriverChangeRequest,
@@ -73,6 +76,32 @@ export default function ProfileScreen(): React.ReactNode {
   const [otpSent, setOtpSent] = useState(false);
   const [otpCode, setOtpCode] = useState('');
   const [phoneLoading, setPhoneLoading] = useState(false);
+  const [photoUploading, setPhotoUploading] = useState(false);
+
+  const handlePickPhoto = async (): Promise<void> => {
+    const perm = await ImagePicker.requestMediaLibraryPermissionsAsync();
+    if (perm.status !== 'granted') {
+      Alert.alert('Нет доступа', 'Разрешите доступ к фото в настройках');
+      return;
+    }
+    const result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ImagePicker.MediaTypeOptions.Images,
+      allowsEditing: true,
+      aspect: [1, 1],
+      quality: 0.7,
+    });
+    if (result.canceled || !result.assets[0]) return;
+    setPhotoUploading(true);
+    try {
+      await uploadDriverPhoto(result.assets[0].uri);
+      await fetchData(true);
+      Alert.alert('Готово', 'Фото обновлено');
+    } catch {
+      Alert.alert('Ошибка', 'Не удалось загрузить фото');
+    } finally {
+      setPhotoUploading(false);
+    }
+  };
 
   const fetchData = useCallback(async (isRefresh: boolean): Promise<void> => {
     try {
@@ -227,9 +256,27 @@ export default function ProfileScreen(): React.ReactNode {
 
         {/* Avatar + rating */}
         <View style={styles.avatarContainer}>
-          <View style={styles.avatar}>
-            <Text style={styles.avatarText}>{initial}</Text>
-          </View>
+          <TouchableOpacity
+            style={styles.avatar}
+            onPress={handlePickPhoto}
+            activeOpacity={0.85}
+            disabled={photoUploading}
+            accessibilityRole="button"
+            accessibilityLabel="Загрузить фото профиля"
+          >
+            {profile?.photo_url ? (
+              <Image source={{ uri: profile.photo_url }} style={styles.avatarImage} />
+            ) : (
+              <Text style={styles.avatarText}>{initial}</Text>
+            )}
+            <View style={styles.avatarEdit}>
+              {photoUploading ? (
+                <ActivityIndicator size="small" color={DriverColors.white} />
+              ) : (
+                <Text style={styles.avatarEditText}>✎</Text>
+              )}
+            </View>
+          </TouchableOpacity>
           <View style={styles.ratingBlock}>
             <RatingBadge
               avg={profile?.rating_avg ?? null}
@@ -539,6 +586,30 @@ const styles = StyleSheet.create({
   },
   avatarText: {
     ...Typography.h1,
+    color: DriverColors.background,
+  },
+  avatarImage: {
+    position: 'absolute',
+    width: 80,
+    height: 80,
+    borderRadius: 40,
+  },
+  avatarEdit: {
+    position: 'absolute',
+    right: -2,
+    bottom: -2,
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    backgroundColor: DriverColors.primary,
+    borderWidth: 2.5,
+    borderColor: DriverColors.background,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  avatarEditText: {
+    fontSize: 14,
+    fontWeight: '700' as const,
     color: DriverColors.background,
   },
   ratingBlock: {

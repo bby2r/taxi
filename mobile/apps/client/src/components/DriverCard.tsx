@@ -5,6 +5,7 @@ import {
   TouchableOpacity,
   StyleSheet,
   Linking,
+  Image,
 } from 'react-native';
 import { Driver, ClientColors, FadeInView, formatPlate, isFullPlate, PopInView, Radius, RatingBadge, Spacing, Haptics } from '@taxi/shared';
 import Icon, { IconName } from './Icon';
@@ -45,7 +46,7 @@ function getStatusText(status: DriverCardProps['status']): {
   }
 }
 
-export default function DriverCard({ driver, status }: DriverCardProps): React.ReactNode {
+function DriverCardComponent({ driver, status }: DriverCardProps): React.ReactNode {
   const statusInfo = getStatusText(status);
   const initial = driver.name.charAt(0).toUpperCase();
   const hasFullPlate = isFullPlate(driver.car_number);
@@ -73,9 +74,17 @@ export default function DriverCard({ driver, status }: DriverCardProps): React.R
         <View style={styles.row}>
           <PopInView fromScale={0.85} duration={340}>
             <View style={styles.avatarRing}>
-              <View style={styles.avatar}>
-                <Text style={styles.avatarText}>{initial}</Text>
-              </View>
+              {driver.photo_url ? (
+                <Image
+                  source={{ uri: driver.photo_url }}
+                  style={styles.avatar}
+                  accessibilityLabel={`Фото водителя ${driver.name}`}
+                />
+              ) : (
+                <View style={styles.avatar}>
+                  <Text style={styles.avatarText}>{initial}</Text>
+                </View>
+              )}
             </View>
           </PopInView>
 
@@ -137,6 +146,9 @@ export default function DriverCard({ driver, status }: DriverCardProps): React.R
     </FadeInView>
   );
 }
+
+const DriverCard = React.memo(DriverCardComponent);
+export default DriverCard;
 
 const styles = StyleSheet.create({
   outer: {

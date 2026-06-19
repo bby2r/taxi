@@ -147,10 +147,11 @@ export function useOrder(): UseOrderReturn {
             latitude: payload.latitude,
             longitude: payload.longitude,
             heading: prevDriver?.heading ?? null,
-            // Рейтинг придёт с refetch — пока заполняем из prevDriver
-            // или null, чтобы тип Driver был полным.
+            // Рейтинг + photo придут с refetch — пока заполняем из
+            // prevDriver или null, чтобы тип Driver был полным.
             rating_avg: prevDriver?.rating_avg ?? null,
             rating_count: prevDriver?.rating_count ?? 0,
+            photo_url: prevDriver?.photo_url ?? null,
           },
         };
         orderRef.current = optimistic;

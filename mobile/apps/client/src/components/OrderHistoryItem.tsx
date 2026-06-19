@@ -29,7 +29,7 @@ function getStatusBadge(status: OrderStatus): StatusBadgeConfig {
   }
 }
 
-export default function OrderHistoryItem({ order, index = 0 }: OrderHistoryItemProps): React.ReactNode {
+function OrderHistoryItemComponent({ order, index = 0 }: OrderHistoryItemProps): React.ReactNode {
   const formattedDate = dayjs(order.created_at).format('D MMM YYYY, HH:mm');
   const badge = getStatusBadge(order.status);
   const address = order.pickup_address || 'Без адреса';
@@ -132,3 +132,6 @@ const styles = StyleSheet.create({
     paddingVertical: 3,
   },
 });
+
+const OrderHistoryItem = React.memo(OrderHistoryItemComponent);
+export default OrderHistoryItem;
