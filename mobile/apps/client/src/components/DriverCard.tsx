@@ -7,15 +7,27 @@ import {
   Linking,
   Image,
 } from 'react-native';
-import { Driver, ClientColors, FadeInView, formatPlate, isFullPlate, PopInView, Radius, RatingBadge, Spacing, Haptics } from '@taxi/shared';
+import {
+  Driver,
+  ClientColors,
+  FadeInView,
+  formatPlate,
+  isFullPlate,
+  PopInView,
+  Radius,
+  RatingBadge,
+  Spacing,
+  Haptics,
+} from '@taxi/shared';
 import Icon, { IconName } from './Icon';
+import CarPhoto from './CarPhoto';
 
 interface DriverCardProps {
   driver: Driver;
   status: 'accepted' | 'arrived' | 'in_progress';
 }
 
-function getStatusText(status: DriverCardProps['status']): {
+function getStatusInfo(status: DriverCardProps['status']): {
   label: string;
   color: string;
   bg: string;
@@ -47,7 +59,7 @@ function getStatusText(status: DriverCardProps['status']): {
 }
 
 function DriverCardComponent({ driver, status }: DriverCardProps): React.ReactNode {
-  const statusInfo = getStatusText(status);
+  const statusInfo = getStatusInfo(status);
   const initial = driver.name.charAt(0).toUpperCase();
   const hasFullPlate = isFullPlate(driver.car_number);
 
@@ -65,13 +77,13 @@ function DriverCardComponent({ driver, status }: DriverCardProps): React.ReactNo
           duration={280}
           style={[styles.statusPill, { backgroundColor: statusInfo.bg }]}
         >
-          <Icon name={statusInfo.icon} size={14} color={statusInfo.color} strokeWidth={2.4} />
+          <Icon name={statusInfo.icon} size={13} color={statusInfo.color} strokeWidth={2.4} />
           <Text style={[styles.statusLabel, { color: statusInfo.color }]}>
             {statusInfo.label}
           </Text>
         </FadeInView>
 
-        <View style={styles.row}>
+        <View style={styles.heroRow}>
           <PopInView fromScale={0.85} duration={340}>
             <View style={styles.avatarRing}>
               {driver.photo_url ? (
@@ -89,10 +101,10 @@ function DriverCardComponent({ driver, status }: DriverCardProps): React.ReactNo
           </PopInView>
 
           <View style={styles.info}>
-            <View style={styles.nameRow}>
-              <Text style={styles.name} numberOfLines={1}>
-                {driver.name}
-              </Text>
+            <Text style={styles.name} numberOfLines={1}>
+              {driver.name}
+            </Text>
+            <View style={styles.ratingWrap}>
               <RatingBadge
                 avg={driver.rating_avg ?? null}
                 count={driver.rating_count ?? 0}
@@ -102,46 +114,44 @@ function DriverCardComponent({ driver, status }: DriverCardProps): React.ReactNo
                 emptyLabel="Новый"
               />
             </View>
-
-            <View style={styles.carRow}>
-              <View style={styles.carIconWrap}>
-                <Icon name="car-side" size={18} color={ClientColors.primary} />
-              </View>
-              <Text style={styles.carModel} numberOfLines={1}>
-                {driver.car_model}
-              </Text>
-            </View>
-
-            {hasFullPlate ? (
-              <FadeInView translateY={4} duration={280} delay={100} style={styles.plateWrap}>
-                <View style={styles.plate}>
-                  <View style={styles.plateFlag}>
-                    <View style={styles.plateFlagBar} />
-                    <Text style={styles.plateFlagText}>KG</Text>
-                  </View>
-                  <Text style={styles.plateNumber} numberOfLines={1}>
-                    {formatPlate(driver.car_number)}
-                  </Text>
-                </View>
-              </FadeInView>
-            ) : (
-              <Text style={styles.plateFallback} numberOfLines={1}>
-                {driver.car_number}
-              </Text>
-            )}
           </View>
 
-          <TouchableOpacity
-            onPress={handleCall}
-            style={styles.phoneButton}
-            accessibilityRole="button"
-            accessibilityLabel={`Позвонить водителю ${driver.name}`}
-            activeOpacity={0.88}
-            hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
-          >
-            <Icon name="phone" size={22} color={ClientColors.white} strokeWidth={2.2} />
-          </TouchableOpacity>
+          <View style={styles.carPhotoWrap} pointerEvents="none">
+            <CarPhoto width={108} />
+          </View>
         </View>
+
+        <View style={styles.metaRow}>
+          <Text style={styles.carModel} numberOfLines={1}>
+            {driver.car_model}
+          </Text>
+          {hasFullPlate ? (
+            <View style={styles.plate}>
+              <View style={styles.plateFlag}>
+                <View style={styles.plateFlagBar} />
+                <Text style={styles.plateFlagText}>KG</Text>
+              </View>
+              <Text style={styles.plateNumber} numberOfLines={1}>
+                {formatPlate(driver.car_number)}
+              </Text>
+            </View>
+          ) : (
+            <Text style={styles.plateFallback} numberOfLines={1}>
+              {driver.car_number}
+            </Text>
+          )}
+        </View>
+
+        <TouchableOpacity
+          onPress={handleCall}
+          style={styles.phoneButton}
+          accessibilityRole="button"
+          accessibilityLabel={`Позвонить водителю ${driver.name}`}
+          activeOpacity={0.88}
+        >
+          <Icon name="phone" size={18} color={ClientColors.white} strokeWidth={2.4} />
+          <Text style={styles.phoneButtonText}>Позвонить водителю</Text>
+        </TouchableOpacity>
       </View>
     </FadeInView>
   );
@@ -156,10 +166,10 @@ const styles = StyleSheet.create({
   },
   card: {
     backgroundColor: ClientColors.white,
-    borderRadius: 22,
-    paddingTop: 14,
-    paddingBottom: 16,
-    paddingHorizontal: 16,
+    borderRadius: 20,
+    paddingTop: 12,
+    paddingBottom: 12,
+    paddingHorizontal: 14,
     borderWidth: 1,
     borderColor: ClientColors.border,
     shadowColor: '#1a1a2e',
@@ -167,51 +177,47 @@ const styles = StyleSheet.create({
     shadowRadius: 18,
     shadowOffset: { width: 0, height: 8 },
     elevation: 6,
+    overflow: 'hidden',
   },
   statusPill: {
     alignSelf: 'flex-start',
     flexDirection: 'row',
     alignItems: 'center',
-    paddingHorizontal: 10,
-    paddingVertical: 5,
+    paddingHorizontal: 9,
+    paddingVertical: 4,
     borderRadius: Radius.round,
-    marginBottom: 14,
-    gap: 6,
+    marginBottom: 10,
+    gap: 5,
   },
   statusLabel: {
-    fontSize: 12,
+    fontSize: 11,
     fontWeight: '700' as const,
     letterSpacing: 0.2,
   },
-  row: {
+  heroRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 14,
+    gap: 10,
   },
   avatarRing: {
-    width: 60,
-    height: 60,
-    borderRadius: 30,
+    width: 52,
+    height: 52,
+    borderRadius: 26,
     backgroundColor: ClientColors.primaryTint,
-    padding: 3,
+    padding: 2.5,
     alignItems: 'center',
     justifyContent: 'center',
   },
   avatar: {
-    width: 54,
-    height: 54,
-    borderRadius: 27,
+    width: 47,
+    height: 47,
+    borderRadius: 23.5,
     backgroundColor: ClientColors.primary,
     alignItems: 'center',
     justifyContent: 'center',
-    shadowColor: ClientColors.primary,
-    shadowOpacity: 0.35,
-    shadowRadius: 10,
-    shadowOffset: { width: 0, height: 4 },
-    elevation: 4,
   },
   avatarText: {
-    fontSize: 22,
+    fontSize: 20,
     fontWeight: '700' as const,
     color: ClientColors.white,
     letterSpacing: -0.5,
@@ -219,108 +225,100 @@ const styles = StyleSheet.create({
   info: {
     flex: 1,
     minWidth: 0,
-  },
-  nameRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-    flexWrap: 'wrap',
+    justifyContent: 'center',
+    gap: 4,
   },
   name: {
-    fontSize: 18,
+    fontSize: 17,
     fontWeight: '700' as const,
     color: ClientColors.dark,
     letterSpacing: -0.3,
-    flexShrink: 1,
   },
-  carRow: {
+  ratingWrap: {
+    flexDirection: 'row',
+  },
+  carPhotoWrap: {
+    marginRight: -8,
+  },
+  metaRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 6,
-    marginTop: 6,
-  },
-  carIconWrap: {
-    width: 24,
-    height: 18,
-    alignItems: 'center',
-    justifyContent: 'center',
+    justifyContent: 'space-between',
+    gap: 8,
+    marginTop: 8,
+    marginBottom: 12,
   },
   carModel: {
+    flex: 1,
     fontSize: 13,
     fontWeight: '600' as const,
     color: ClientColors.textSecondary,
-    flexShrink: 1,
-  },
-  plateWrap: {
-    marginTop: 6,
   },
   // Лицензионная плашка — белый фон, тонкая чёрная рамка, синий
   // KG-флаг слева как на реальных KG-номерах.
   plate: {
-    alignSelf: 'flex-start',
     flexDirection: 'row',
     alignItems: 'stretch',
-    borderRadius: 8,
+    borderRadius: 7,
     borderWidth: 1.5,
     borderColor: '#1a1a1a',
     backgroundColor: '#FFFFFF',
     overflow: 'hidden',
-    shadowColor: '#000',
-    shadowOpacity: 0.06,
-    shadowRadius: 3,
-    shadowOffset: { width: 0, height: 1 },
-    elevation: 1,
   },
   plateFlag: {
     backgroundColor: '#1B4FA0',
-    paddingHorizontal: 6,
-    paddingTop: 6,
-    paddingBottom: 5,
+    paddingHorizontal: 5,
+    paddingTop: 4,
+    paddingBottom: 3,
     alignItems: 'center',
     justifyContent: 'center',
-    minWidth: 26,
+    minWidth: 22,
   },
   plateFlagBar: {
-    width: 14,
-    height: 3,
-    borderRadius: 1.5,
+    width: 12,
+    height: 2.5,
+    borderRadius: 1,
     backgroundColor: '#FFD400',
-    marginBottom: 2,
+    marginBottom: 1.5,
   },
   plateFlagText: {
-    fontSize: 9,
+    fontSize: 8,
     fontWeight: '800' as const,
     color: '#FFFFFF',
-    letterSpacing: 0.5,
+    letterSpacing: 0.4,
   },
   plateNumber: {
-    paddingHorizontal: 10,
-    paddingVertical: 6,
-    fontSize: 15,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    fontSize: 13,
     fontWeight: '800' as const,
     color: '#1a1a1a',
-    letterSpacing: 1.2,
+    letterSpacing: 1.1,
   },
-  // Когда номер не парсится как полный KG-формат — показываем без
-  // рамки, чтобы не выглядело как «обрезанный» номерной знак.
   plateFallback: {
-    marginTop: 6,
     fontSize: 13,
     fontWeight: '700' as const,
     color: ClientColors.dark,
     letterSpacing: 0.5,
   },
   phoneButton: {
-    width: 56,
-    height: 56,
-    borderRadius: 28,
-    backgroundColor: ClientColors.success,
+    flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
+    gap: 8,
+    height: 46,
+    borderRadius: 23,
+    backgroundColor: ClientColors.success,
     shadowColor: ClientColors.success,
-    shadowOpacity: 0.4,
-    shadowRadius: 12,
-    shadowOffset: { width: 0, height: 6 },
-    elevation: 8,
+    shadowOpacity: 0.32,
+    shadowRadius: 10,
+    shadowOffset: { width: 0, height: 5 },
+    elevation: 5,
+  },
+  phoneButtonText: {
+    fontSize: 15,
+    fontWeight: '700' as const,
+    color: ClientColors.white,
+    letterSpacing: 0.2,
   },
 });
