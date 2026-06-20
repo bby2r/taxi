@@ -636,6 +636,20 @@ export default function OrderActiveScreen(): React.ReactNode {
       }
       lastFedTsRef.current = ts;
 
+      // Дропаем fix'ы с большой неопределённостью (тоннель / двор-колодец /
+      // плотная застройка). Kalman формально весит fix по `accuracy`, но один
+      // выброс accuracy~80 м всё равно дёргает state на десятки метров — глаз
+      // ловит это как телепорт стрелки. Лучше пропустить такой fix и дать
+      // WebView'у dead-reckon'ить по последней velocity (см. PREDICT_MAX_MS):
+      // карта продолжает плыть по инерции, а на следующем нормальном fix'е
+      // Kalman корректирует без видимого скачка.
+      if (
+        typeof driverLocation.accuracy === 'number' &&
+        driverLocation.accuracy > 50
+      ) {
+        return;
+      }
+
       const filtered = kalmanRef.current.update({
         latitude: driverPoint.latitude,
         longitude: driverPoint.longitude,
@@ -646,6 +660,20 @@ export default function OrderActiveScreen(): React.ReactNode {
       // map keeps its orientation instead of spinning on standstill noise.
       if (filtered.bearing !== null) {
         targetBearingRef.current = filtered.bearing;
+      } else if (
+        targetBearingRef.current === null &&
+        typeof driverLocation.heading === 'number' &&
+        driverLocation.heading >= 0
+      ) {
+        // Cold-start seed. Kalman нужно 2–3 fix'а, чтобы накопить velocity и
+        // выдать осмысленный bearing — до этого карта стоит north-up даже на
+        // полной скорости, водитель видит «не туда повёрнуто». Берём сырой
+        // coords.heading ровно один раз — как стартовый курс. Сырой heading
+        // шумный (поэтому в установившемся режиме мы его принципиально НЕ
+        // используем — это в `kalman.ts` объяснено), но 1–2 секунды «грубо
+        // правильного» курса лучше, чем 1–2 секунды north-up. Как только
+        // Kalman выдаст реальный bearing — ветка выше его подменит.
+        targetBearingRef.current = driverLocation.heading;
       }
 
       // Snap-to-route: pin position to the routed polyline when we're close

@@ -495,7 +495,7 @@ function buildHtml(apiKey: string, styleName: string, center: [number, number], 
       var FOLLOW_POS_A = 0.10;
       var FOLLOW_BRG_A = 0.12;
       var FOLLOW_DEAD_DEG = 4; // ignore sub-4° heading wobble so the map doesn't shimmer on low-speed GPS noise
-      var PREDICT_MAX_MS = 1500; // clamp dead-reckoning so a dropped fix can't run away
+      var PREDICT_MAX_MS = 2500; // clamp dead-reckoning so a dropped fix can't run away; 2.5с покрывает типичный туннель/двор без видимого скачка на возврате
       var VEL_EMA = 0.4; // legacy fallback only (used when RN sends no velocity)
       // Padding пропорционально высоте viewport. Кешируется в __navPadding
       // и пересчитывается только при ресайзе карты — иначе на каждом

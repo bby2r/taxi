@@ -103,7 +103,13 @@ export function useLocation(options?: UseLocationOptions): LocationState {
           navigation
             ? {
                 accuracy: Location.Accuracy.BestForNavigation,
-                distanceInterval: 2,
+                // distanceInterval намеренно НЕ задаём (default 0). На Android
+                // LocationManager требует одновременно timeInterval И
+                // distanceInterval — fix'ы переставали приходить на светофоре /
+                // в пробке (< 2 м смещения за секунду), а потом разом догоняли
+                // одним «прыжком». Чистые 1Hz time-based апдейты + Kalman сам
+                // схлопывает velocity к 0 при остановке — карта не дрожит, но и
+                // не «отстаёт» при возобновлении движения.
                 timeInterval: 1000,
               }
             : { accuracy: Location.Accuracy.Balanced, distanceInterval: 10, timeInterval: 5000 },
