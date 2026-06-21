@@ -71,6 +71,26 @@ const ARRIVED_THRESHOLD_METERS = 150;
 // в плотной застройке). Над порогом — настоящее отклонение, оставляем
 // Kalman-позицию как есть, до следующего перерасчёта маршрута бэкендом.
 const SNAP_REJECT_METERS = 25;
+// Дропаем fix'ы с неопределённостью выше этого порога (тоннель / двор-колодец).
+// Kalman формально весит fix по accuracy, но один выброс ~80 м всё равно дёргает
+// state на десятки метров — глаз ловит как телепорт.
+const MAX_ACCURACY_METERS = 50;
+// Навигационный камера preset. Один и тот же в follow-loop'е и в recenterTo,
+// чтобы переход «жест → возврат» не менял зум/наклон.
+const NAV_ZOOM = 17;
+const NAV_PITCH = 50;
+// Heartbeat для native overlay. ActiveOrderOverlayManager.scheduleAutoHide
+// гасит окно через 60 сек без update'а; шлём update каждые 25 сек, чтобы
+// payload-стабильность (canArrive/route/phase минуту не меняются) не убивала
+// карточку.
+const OVERLAY_HEARTBEAT_MS = 25_000;
+
+// expo-location отдаёт `heading: -1` когда курс не определён (стоим / ещё не
+// успело сойтись). Возвращаем number когда есть осмысленное значение, иначе
+// null — null лучше «магической» -1 для chain'а fallback'ов.
+function rawHeading(heading: number | null | undefined): number | null {
+  return typeof heading === 'number' && heading >= 0 ? heading : null;
+}
 
 type NavigationProp = NativeStackNavigationProp<DriverStackParamList, 'OrderActive'>;
 
@@ -322,16 +342,17 @@ export default function OrderActiveScreen(): React.ReactNode {
   const kalmanRef = useRef<GeoKalmanFilter | null>(null);
   const lastFedTsRef = useRef<number | null>(null);
   const targetBearingRef = useRef<number | null>(null);
-  // Зеркало following для handleMapReady (стабильный useCallback не читает
-  // свежий state напрямую).
+  // handleMapReady — стабильный useCallback, не видит свежий state напрямую,
+  // поэтому держим зеркало через ref.
   const followingRef = useRef(true);
   const { lastRef: lastNavRef, handleMapReady } = useMapRemountRestoration((p) => {
     if (followingRef.current) {
       mapRef.current?.recenterTo({
         latitude: p.latitude,
         longitude: p.longitude,
-        zoom: 17,
-        pitch: 50,
+        bearing: p.heading,
+        zoom: NAV_ZOOM,
+        pitch: NAV_PITCH,
       });
     } else {
       mapRef.current?.setDriver({
@@ -535,32 +556,37 @@ export default function OrderActiveScreen(): React.ReactNode {
     };
   }, [order, state.phase, route, canArrive]);
 
+  // Дедуп идентичных payload'ов: RN bridge не диффает аргументы и сериализует
+  // каждый вызов. Около границы canArrive (150м) рендеры идут ~1Hz с тем же
+  // payload'ом — пропускаем такие через JSON-сравнение, чтобы не гонять bridge.
+  const lastOverlayJsonRef = useRef<string | null>(null);
+
   useEffect(() => {
     const payload = buildOverlayPayload();
-    if (payload && hasOverlayPermission()) {
-      showActiveOrderOverlay(payload);
-    } else if (!payload) {
-      hideActiveOrderOverlay();
-    } else if (payload) {
-      updateActiveOrderOverlay(payload);
+    if (!payload) {
+      if (lastOverlayJsonRef.current !== null) {
+        hideActiveOrderOverlay();
+        lastOverlayJsonRef.current = null;
+      }
+      return;
     }
+    if (!hasOverlayPermission()) return;
+    const json = JSON.stringify(payload);
+    if (json === lastOverlayJsonRef.current) return;
+    lastOverlayJsonRef.current = json;
+    showActiveOrderOverlay(payload);
   }, [buildOverlayPayload]);
 
-  // Native overlay прячется автоматически через 60 секунд без update'а — это
-  // защита от «зомби-overlay», когда JS реально умер (см.
-  // ActiveOrderOverlayManager.scheduleAutoHide). Но JS-сторона шлёт update
-  // ТОЛЬКО когда `buildOverlayPayload` reference меняется. Если водитель
-  // едет к pickup'у и canArrive/route/phase стабильны минуту — ни одного
-  // update'а в native не уйдёт, и карточка пропадёт «без причины».
-  // Heartbeat каждые 25 сек сбрасывает 60-сек таймер. Update идемпотентен на
-  // нативной стороне (cheap field-set), эффект на батарею пренебрежимый.
   useEffect(() => {
+    // Native ActiveOrderOverlayManager гасит окно через 60 сек без update'а —
+    // защита от зомби-overlay при крашнутом JS. На стабильном payload'е bridge
+    // ничего не пишет (см. lastOverlayJsonRef), но сам вызов сбрасывает native-
+    // таймер, поэтому шлём с запасом OVERLAY_HEARTBEAT_MS.
     const id = setInterval(() => {
       const payload = buildOverlayPayload();
-      if (payload && hasOverlayPermission()) {
-        updateActiveOrderOverlay(payload);
-      }
-    }, 25_000);
+      if (!payload || !hasOverlayPermission()) return;
+      updateActiveOrderOverlay(payload);
+    }, OVERLAY_HEARTBEAT_MS);
     return () => clearInterval(id);
   }, [buildOverlayPayload]);
 
@@ -592,31 +618,17 @@ export default function OrderActiveScreen(): React.ReactNode {
 
   useEffect(() => () => hideActiveOrderOverlay(), []);
 
-  // Two camera modes for the active screen:
-  //
-  //   - "Navigation" — driving phases (active / in_progress). Camera
-  //     locks onto the driver, tilts to 55°, rotates to follow heading.
-  //     Yandex-style "you're inside the trip", not "you're looking down
-  //     at a map". Updated on every coord/heading change.
-  //
-  //   - "Overview" — arrived / completed / no route yet. Fit to bounds
-  //     (driver + pickup or full route line) so the operator can see
-  //     the whole situation at a glance.
-  //
   const isNavigating =
     (state.phase === 'active' || state.phase === 'in_progress') && driverPoint !== null;
 
-  // Camera follow toggle. Defaults on; the driver pinching/panning the
-  // map sets it to false (handled by onCameraChanged below) — that's
-  // when the "Вернуться к маршруту" button appears so they can opt back
-  // in. Same pattern Yandex uses: never fight the user's gesture.
+  // following=false когда водитель сам отпанил карту — тогда показываем
+  // «Вернуться к маршруту» и не дёргаем камеру до явного тапа. Не боремся с
+  // жестом — это Yandex/2GIS-style.
   const [following, setFollowing] = useState(true);
-  // Держим ref в синхроне для стабильного handleMapReady (см. ниже).
   followingRef.current = following;
 
-  // Stable callback для onUserGesture — без useCallback каждый рендер
-  // OrderActiveScreen создавал новый closure, и React.memo на
-  // MapLibreMapView терял эффект.
+  // useCallback нужен, чтобы React.memo на MapLibreMapView не пересоздавал
+  // WebView на каждый рендер OrderActiveScreen.
   const handleUserGesture = useCallback(() => {
     if (followingRef.current) {
       setFollowing(false);
@@ -655,16 +667,12 @@ export default function OrderActiveScreen(): React.ReactNode {
       }
       lastFedTsRef.current = ts;
 
-      // Дропаем fix'ы с большой неопределённостью (тоннель / двор-колодец /
-      // плотная застройка). Kalman формально весит fix по `accuracy`, но один
-      // выброс accuracy~80 м всё равно дёргает state на десятки метров — глаз
-      // ловит это как телепорт стрелки. Лучше пропустить такой fix и дать
-      // WebView'у dead-reckon'ить по последней velocity (см. PREDICT_MAX_MS):
-      // карта продолжает плыть по инерции, а на следующем нормальном fix'е
-      // Kalman корректирует без видимого скачка.
+      // Бросать плохие fix'ы лучше, чем кормить ими Kalman: WebView dead-reckon'ит
+      // по последней velocity (см. PREDICT_MAX_MS) и плавно догонит на следующем
+      // нормальном fix'е, иначе глаз ловит выброс accuracy~80м как телепорт.
       if (
         typeof driverLocation.accuracy === 'number' &&
-        driverLocation.accuracy > 50
+        driverLocation.accuracy > MAX_ACCURACY_METERS
       ) {
         return;
       }
@@ -719,29 +727,20 @@ export default function OrderActiveScreen(): React.ReactNode {
       } else if (filtered.bearing !== null) {
         nextBearing = filtered.bearing;
       }
+      const seedHeading = rawHeading(driverLocation.heading);
       if (nextBearing !== null) {
         targetBearingRef.current = nextBearing;
-      } else if (
-        targetBearingRef.current === null &&
-        typeof driverLocation.heading === 'number' &&
-        driverLocation.heading >= 0
-      ) {
-        // Cold-start seed. Kalman нужно 2–3 fix'а, чтобы накопить velocity и
-        // выдать осмысленный bearing — до этого карта стоит north-up даже на
-        // полной скорости, водитель видит «не туда повёрнуто». Берём сырой
-        // coords.heading ровно один раз — как стартовый курс.
-        targetBearingRef.current = driverLocation.heading;
+      } else if (targetBearingRef.current === null && seedHeading !== null) {
+        // Cold-start: до сходимости Kalman'а (2-3 fix'а) bearing у фильтра null —
+        // подставляем сырой coords.heading, иначе карта стоит north-up даже на
+        // полной скорости. На остановке (всё null) ничего не делаем — держим
+        // предыдущий курс, чтобы стрелку не крутило от GPS-шума.
+        targetBearingRef.current = seedHeading;
       }
-      // На остановке (filtered.bearing === null) ничего не делаем — держим
-      // прежний bearing, чтобы карту не крутило от стояночного GPS-шума.
 
-      // Hand the WebView a smooth position + velocity; its 60fps loop
-      // dead-reckons between fixes and eases the camera + marker toward it.
-      // pitch 50° (а не 55°): на 55° горизонт почти уходит к верху экрана,
-      // ближняя дорога сильно растягивается и метки улиц становятся плоскими.
-      // 50° — как в Яндекс.Навигаторе: ощущение 3D остаётся, но дорога вдаль
-      // читается без искажения.
-      // Запоминаем точку, чтобы восстановить иконку+камеру после ремаунта.
+      // 60fps follow-loop в WebView dead-reckonит по velocity между fix'ами.
+      // NAV_PITCH=50° — на 55° горизонт уходит к верху экрана и ближняя
+      // дорога растягивается; 50° даёт Яндекс-style 3D без искажения.
       lastNavRef.current = {
         latitude: posLat,
         longitude: posLng,
@@ -753,8 +752,8 @@ export default function OrderActiveScreen(): React.ReactNode {
         bearing: targetBearingRef.current ?? undefined,
         velLng: filtered.velLngPerMs,
         velLat: filtered.velLatPerMs,
-        zoom: 17,
-        pitch: 50,
+        zoom: NAV_ZOOM,
+        pitch: NAV_PITCH,
       });
       return;
     }
@@ -875,31 +874,20 @@ export default function OrderActiveScreen(): React.ReactNode {
           style={styles.recenterButton}
           onPress={() => {
             if (driverPoint) {
-              // Передаём ТЕКУЩИЙ известный курс. Если этого не сделать,
-              // recenterTo на стороне WebView возьмёт `__map.getBearing()` —
-              // угол, в котором водитель оставил карту жестом, — и камера
-              // развернётся «криво». Приоритет: накопленный bearing из Kalman
-              // (стабильный, по velocity) → сырой coords.heading (есть всегда
-              // при движении на BestForNavigation) → undefined (тогда WebView
-              // подставит getBearing(), но это последний резерв).
+              // Передаём явный bearing — иначе WebView подставит __map.getBearing()
+              // (угол, в котором водитель оставил карту жестом) и камера встанет
+              // «сбоку». Kalman/refs НЕ обнуляем: они валидны и нужны, чтобы
+              // курс не сбрасывался в 0 пока фильтр сходится заново.
               const bearing =
-                targetBearingRef.current ??
-                (typeof driverLocation.heading === 'number' && driverLocation.heading >= 0
-                  ? driverLocation.heading
-                  : undefined);
+                targetBearingRef.current ?? rawHeading(driverLocation.heading) ?? undefined;
               mapRef.current?.recenterTo({
                 latitude: driverPoint.latitude,
                 longitude: driverPoint.longitude,
                 bearing,
-                zoom: 17,
-                pitch: 50,
+                zoom: NAV_ZOOM,
+                pitch: NAV_PITCH,
               });
             }
-            // Kalman/lastFedTs/targetBearing НЕ обнуляем: они валидны и нужны,
-            // чтобы карта продолжила смотреть по реальному курсу сразу после
-            // возврата к маршруту. Раньше мы их сбрасывали, и 2–3 секунды (пока
-            // Kalman не накопит velocity заново) bearing шёл с нуля → карта
-            // смотрела не туда, а потом резко доворачивалась.
             setFollowing(true);
           }}
           activeOpacity={0.85}

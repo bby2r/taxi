@@ -483,15 +483,11 @@ function buildHtml(apiKey: string, styleName: string, center: [number, number], 
         setDriverRotation(rot);
       }
 
-      // Per-frame lerp factors. POS is deliberately gentle: the camera never
-      // snaps to the ~1Hz target, it eases toward it continuously, so the map
-      // flows at a steady speed with no per-fix hard stop. The lerp itself IS
-      // the low-pass filter on position + bearing. DEAD ignores sub-threshold
-      // heading changes so the map doesn't shimmer on tiny direction noise.
-      // Per-frame chase factors. Because the target is dead-reckoned forward
-      // (below) it moves continuously, so these can be tight — low lag AND
-      // smooth. DEAD ignores sub-threshold heading noise so the map never
-      // shimmers on a jittery bearing.
+      // Per-frame chase factors. Target is dead-reckoned forward by velocity
+      // (see followStep), so it moves continuously — these can be tight without
+      // sacrificing smoothness. The lerp itself is the low-pass filter on
+      // position+bearing; DEAD ignores sub-threshold heading noise so the map
+      // doesn't shimmer on a jittery bearing.
       var FOLLOW_POS_A = 0.10;
       var FOLLOW_BRG_A = 0.12;
       var FOLLOW_DEAD_DEG = 4; // ignore sub-4° heading wobble so the map doesn't shimmer on low-speed GPS noise
