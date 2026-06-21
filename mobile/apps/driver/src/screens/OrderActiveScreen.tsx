@@ -546,6 +546,24 @@ export default function OrderActiveScreen(): React.ReactNode {
     }
   }, [buildOverlayPayload]);
 
+  // Native overlay прячется автоматически через 60 секунд без update'а — это
+  // защита от «зомби-overlay», когда JS реально умер (см.
+  // ActiveOrderOverlayManager.scheduleAutoHide). Но JS-сторона шлёт update
+  // ТОЛЬКО когда `buildOverlayPayload` reference меняется. Если водитель
+  // едет к pickup'у и canArrive/route/phase стабильны минуту — ни одного
+  // update'а в native не уйдёт, и карточка пропадёт «без причины».
+  // Heartbeat каждые 25 сек сбрасывает 60-сек таймер. Update идемпотентен на
+  // нативной стороне (cheap field-set), эффект на батарею пренебрежимый.
+  useEffect(() => {
+    const id = setInterval(() => {
+      const payload = buildOverlayPayload();
+      if (payload && hasOverlayPermission()) {
+        updateActiveOrderOverlay(payload);
+      }
+    }, 25_000);
+    return () => clearInterval(id);
+  }, [buildOverlayPayload]);
+
   useEffect(() => {
     if (!order) return undefined;
     const sub = addActiveOrderListener((event) => {
