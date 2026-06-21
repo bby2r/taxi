@@ -41,6 +41,20 @@ export async function arriveAtPickup(orderId: number): Promise<Order> {
   return data.data;
 }
 
+/**
+ * Report ETA to the pickup so the server can drive the «не успевает»
+ * indicator (driver-side red countdown + admin late-driver flag).
+ * Server fixes expected_arrival_at on the first call and ignores
+ * subsequent ones — rerouting не должно сбрасывать дедлайн.
+ */
+export async function reportEta(orderId: number, etaSeconds: number): Promise<Order> {
+  const { data } = await apiClient.post<{ data: Order }>(
+    `/api/v1/driver/orders/${orderId}/eta`,
+    { eta_seconds: Math.round(etaSeconds) },
+  );
+  return data.data;
+}
+
 export async function startRide(orderId: number): Promise<Order> {
   const { data } = await apiClient.post<{ data: Order }>(`/api/v1/driver/orders/${orderId}/start`);
   return data.data;

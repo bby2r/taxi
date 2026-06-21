@@ -85,6 +85,7 @@ Route::prefix('v1')->middleware('auth:sanctum')->group(function () {
         Route::get('/orders', [DriverController::class, 'orders'])->name('api.v1.driver.orders.index');
         Route::post('/orders/{order}/accept', [DriverController::class, 'acceptOrder'])->name('api.v1.driver.orders.accept');
         Route::post('/orders/{order}/decline', [DriverController::class, 'declineOrder'])->name('api.v1.driver.orders.decline');
+        Route::post('/orders/{order}/eta', [DriverController::class, 'reportEta'])->name('api.v1.driver.orders.eta');
         Route::post('/orders/{order}/arrived', [DriverController::class, 'arrived'])->name('api.v1.driver.orders.arrived');
         Route::post('/orders/{order}/start', [DriverController::class, 'startRide'])->name('api.v1.driver.orders.start');
         Route::post('/orders/{order}/complete', [DriverController::class, 'completeOrder'])->name('api.v1.driver.orders.complete');

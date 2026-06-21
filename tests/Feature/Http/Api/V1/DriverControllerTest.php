@@ -181,6 +181,67 @@ class DriverControllerTest extends TestCase
     }
 
     // ──────────────────────────────────────────────────────────────
+    // ETA reporting (driver «не успевает» indicator)
+    // ──────────────────────────────────────────────────────────────
+
+    public function test_report_eta_sets_expected_arrival_at(): void
+    {
+        $order = $this->createOrderOfferedToDriver();
+        $this->postJson("/api/v1/driver/orders/{$order->id}/accept")->assertOk();
+
+        $response = $this->postJson("/api/v1/driver/orders/{$order->id}/eta", [
+            'eta_seconds' => 300,
+        ]);
+
+        $response->assertOk();
+        $order->refresh();
+        $this->assertNotNull($order->expected_arrival_at);
+        // 300с ± 5с допуска на тест-выполнение
+        $this->assertEqualsWithDelta(
+            now()->addSeconds(300)->timestamp,
+            $order->expected_arrival_at->timestamp,
+            5,
+        );
+    }
+
+    public function test_report_eta_is_idempotent(): void
+    {
+        $order = $this->createOrderOfferedToDriver();
+        $this->postJson("/api/v1/driver/orders/{$order->id}/accept")->assertOk();
+
+        $this->postJson("/api/v1/driver/orders/{$order->id}/eta", ['eta_seconds' => 300])->assertOk();
+        $first = $order->refresh()->expected_arrival_at;
+
+        $this->postJson("/api/v1/driver/orders/{$order->id}/eta", ['eta_seconds' => 900])->assertOk();
+        $second = $order->refresh()->expected_arrival_at;
+
+        // Повторный вызов с другим ETA не перезаписывает — дедлайн фиксируется один раз.
+        $this->assertEquals($first->timestamp, $second->timestamp);
+    }
+
+    public function test_report_eta_rejects_other_driver(): void
+    {
+        $order = $this->createOrderOfferedToDriver();
+        $this->postJson("/api/v1/driver/orders/{$order->id}/accept")->assertOk();
+
+        $otherDriver = User::factory()->driver()->create();
+        DriverProfile::factory()->for($otherDriver)->online()->atLocation(42.88, 74.58)->create();
+        Sanctum::actingAs($otherDriver);
+
+        $response = $this->postJson("/api/v1/driver/orders/{$order->id}/eta", ['eta_seconds' => 300]);
+
+        $response->assertStatus(403);
+    }
+
+    public function test_report_eta_requires_seconds(): void
+    {
+        $order = $this->createOrderOfferedToDriver();
+        $this->postJson("/api/v1/driver/orders/{$order->id}/accept")->assertOk();
+
+        $this->postJson("/api/v1/driver/orders/{$order->id}/eta")->assertStatus(422);
+    }
+
+    // ──────────────────────────────────────────────────────────────
     // status transitions
     // ──────────────────────────────────────────────────────────────
 

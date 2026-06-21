@@ -63,6 +63,21 @@
                             <td class="whitespace-nowrap px-6 py-4 text-gray-700">{{ $order->driver?->name ?? $order->driver_snapshot['name'] ?? '—' }}</td>
                             <td class="whitespace-nowrap px-6 py-4">
                                 @include('admin.partials.order-status-badge', ['status' => $order->status])
+                                @if ($order->status === \App\Enums\OrderStatus::Accepted && $order->expected_arrival_at)
+                                    @php
+                                        $deltaSeconds = now()->diffInSeconds($order->expected_arrival_at, false);
+                                        $isLate = $deltaSeconds < 0;
+                                        $absSeconds = abs((int) $deltaSeconds);
+                                        $mm = intdiv($absSeconds, 60);
+                                        $ss = str_pad((string) ($absSeconds % 60), 2, '0', STR_PAD_LEFT);
+                                    @endphp
+                                    <span
+                                        class="ml-2 inline-flex items-center rounded-full px-2 py-0.5 text-xs font-bold {{ $isLate ? 'animate-pulse bg-red-100 text-red-700' : 'bg-gray-100 text-gray-600' }}"
+                                        title="{{ $isLate ? 'Водитель опаздывает' : 'До прибытия' }}"
+                                    >
+                                        {{ $isLate ? 'Опоздание ' : 'До приб. ' }}{{ $mm }}:{{ $ss }}
+                                    </span>
+                                @endif
                             </td>
                             <td class="whitespace-nowrap px-6 py-4 text-right font-medium text-gray-900">{{ number_format($order->price) }} сом</td>
                             <td class="whitespace-nowrap px-6 py-4 text-right">

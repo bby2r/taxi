@@ -61,6 +61,10 @@ export interface Order {
   driver: Driver | null;
   created_at: string;
   accepted_at: string | null;
+  // Расчётный дедлайн прибытия водителя к pickup'у. Фиксируется один раз,
+  // когда driver-app отправит первый ETA после accept'а. Используется для
+  // красного обратного отсчёта у водителя и индикатора «не успевает» в админке.
+  expected_arrival_at?: string | null;
   cancelled_by: string | null;
   rating: number | null;
   feedback_tags: string[] | null;

@@ -67,6 +67,7 @@ class OrderResource extends JsonResource
                 ];
             }),
             'accepted_at' => $this->accepted_at?->toISOString(),
+            'expected_arrival_at' => $this->expected_arrival_at?->toISOString(),
             'arrived_at' => $this->arrived_at?->toISOString(),
             'in_progress_at' => $this->in_progress_at?->toISOString(),
             'completed_at' => $this->completed_at?->toISOString(),

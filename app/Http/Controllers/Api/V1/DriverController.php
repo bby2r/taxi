@@ -160,6 +160,44 @@ class DriverController extends Controller
     }
 
     /**
+     * Report the ETA from the driver's app to the pickup point.
+     *
+     * Called once right after accept, when the driver app builds its first
+     * route via ORS/OSRM and learns how long the trip to the client will
+     * take. Server records `expected_arrival_at = now() + eta_seconds` —
+     * used to drive the «не успевает» red countdown on the driver screen
+     * AND the late-driver indicator on the admin orders dashboard.
+     *
+     * Idempotent for the same call: once set, не перезаписываем при
+     * повторных обращениях (rerouting не должно сбрасывать дедлайн).
+     */
+    public function reportEta(Request $request, Order $order): JsonResponse
+    {
+        $validated = $request->validate([
+            'eta_seconds' => ['required', 'integer', 'min:0', 'max:7200'],
+        ]);
+
+        if ($order->driver_id !== $request->user()->id) {
+            return response()->json(['message' => 'Forbidden.'], 403);
+        }
+
+        // ETA имеет смысл только пока водитель ещё ЕДЕТ к клиенту.
+        if ($order->status !== OrderStatus::Accepted) {
+            return response()->json(['message' => 'Order is not in accepted phase.'], 422);
+        }
+
+        if ($order->expected_arrival_at === null) {
+            $order->update([
+                'expected_arrival_at' => now()->addSeconds((int) $validated['eta_seconds']),
+            ]);
+        }
+
+        $order->load(['client', 'driver.driverProfile']);
+
+        return (new OrderResource($order))->response();
+    }
+
+    /**
      * Mark that the driver has arrived at the pickup location.
      */
     public function arrived(Request $request, Order $order): JsonResponse
