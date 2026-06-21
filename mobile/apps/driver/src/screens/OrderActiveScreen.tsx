@@ -34,6 +34,7 @@ import {
   useRoute as useNavigationRoute,
   haversineMeters,
   snapToPolyline,
+  bearingBetween,
   GeoKalmanFilter,
 } from '@taxi/shared';
 import type { Order, DriverCancellationReason, Route } from '@taxi/shared';
@@ -656,25 +657,6 @@ export default function OrderActiveScreen(): React.ReactNode {
         timestamp: ts,
         accuracy: driverLocation.accuracy,
       });
-      // Hold the previous heading while stopped (filter returns null) so the
-      // map keeps its orientation instead of spinning on standstill noise.
-      if (filtered.bearing !== null) {
-        targetBearingRef.current = filtered.bearing;
-      } else if (
-        targetBearingRef.current === null &&
-        typeof driverLocation.heading === 'number' &&
-        driverLocation.heading >= 0
-      ) {
-        // Cold-start seed. Kalman нужно 2–3 fix'а, чтобы накопить velocity и
-        // выдать осмысленный bearing — до этого карта стоит north-up даже на
-        // полной скорости, водитель видит «не туда повёрнуто». Берём сырой
-        // coords.heading ровно один раз — как стартовый курс. Сырой heading
-        // шумный (поэтому в установившемся режиме мы его принципиально НЕ
-        // используем — это в `kalman.ts` объяснено), но 1–2 секунды «грубо
-        // правильного» курса лучше, чем 1–2 секунды north-up. Как только
-        // Kalman выдаст реальный bearing — ветка выше его подменит.
-        targetBearingRef.current = driverLocation.heading;
-      }
 
       // Snap-to-route: pin position to the routed polyline when we're close
       // enough to it. Kalman уже сгладил GPS noise; snap корректирует
@@ -692,6 +674,48 @@ export default function OrderActiveScreen(): React.ReactNode {
       const useSnap = snap !== null && snap.perpMeters <= SNAP_REJECT_METERS;
       const posLat = useSnap ? snap.latitude : filtered.latitude;
       const posLng = useSnap ? snap.longitude : filtered.longitude;
+
+      // Bearing: вдоль линии маршрута, не вдоль velocity-вектора. Velocity от
+      // Kalman'а — это «куда сейчас смотрит машина», route tangent — это «куда
+      // идёт дорога». На прямой это одно и то же, но в повороте/перекрёстке
+      // velocity размазана по дуге (машина едет по кривой), а tangent чётко
+      // следует за улицей. Так делает Яндекс.Навигатор — поэтому камера у него
+      // не «съезжает» в стену на повороте.
+      //
+      // Берём tangent ТОЛЬКО когда мы реально на маршруте (useSnap) и есть
+      // следующий сегмент — это значит у нас валидная улица под колёсами.
+      // Иначе откатываемся на velocity-bearing от Kalman'а (стабильный, но
+      // следует за машиной, а не за дорогой). Сглаживание целевого bearing'а
+      // на 60fps делает WebView (FOLLOW_BRG_A=0.12 + dead-zone 4°), так что
+      // переход с одного сегмента на другой не «прыгает» — лерпится мягко.
+      let nextBearing: number | null = null;
+      if (
+        useSnap &&
+        snap !== null &&
+        snap.segmentIndex < trimmedCoordinates.length - 1 &&
+        filtered.bearing !== null
+      ) {
+        const segA = trimmedCoordinates[snap.segmentIndex];
+        const segB = trimmedCoordinates[snap.segmentIndex + 1];
+        nextBearing = bearingBetween(segA, segB);
+      } else if (filtered.bearing !== null) {
+        nextBearing = filtered.bearing;
+      }
+      if (nextBearing !== null) {
+        targetBearingRef.current = nextBearing;
+      } else if (
+        targetBearingRef.current === null &&
+        typeof driverLocation.heading === 'number' &&
+        driverLocation.heading >= 0
+      ) {
+        // Cold-start seed. Kalman нужно 2–3 fix'а, чтобы накопить velocity и
+        // выдать осмысленный bearing — до этого карта стоит north-up даже на
+        // полной скорости, водитель видит «не туда повёрнуто». Берём сырой
+        // coords.heading ровно один раз — как стартовый курс.
+        targetBearingRef.current = driverLocation.heading;
+      }
+      // На остановке (filtered.bearing === null) ничего не делаем — держим
+      // прежний bearing, чтобы карту не крутило от стояночного GPS-шума.
 
       // Hand the WebView a smooth position + velocity; its 60fps loop
       // dead-reckons between fixes and eases the camera + marker toward it.
@@ -833,16 +857,31 @@ export default function OrderActiveScreen(): React.ReactNode {
           style={styles.recenterButton}
           onPress={() => {
             if (driverPoint) {
+              // Передаём ТЕКУЩИЙ известный курс. Если этого не сделать,
+              // recenterTo на стороне WebView возьмёт `__map.getBearing()` —
+              // угол, в котором водитель оставил карту жестом, — и камера
+              // развернётся «криво». Приоритет: накопленный bearing из Kalman
+              // (стабильный, по velocity) → сырой coords.heading (есть всегда
+              // при движении на BestForNavigation) → undefined (тогда WebView
+              // подставит getBearing(), но это последний резерв).
+              const bearing =
+                targetBearingRef.current ??
+                (typeof driverLocation.heading === 'number' && driverLocation.heading >= 0
+                  ? driverLocation.heading
+                  : undefined);
               mapRef.current?.recenterTo({
                 latitude: driverPoint.latitude,
                 longitude: driverPoint.longitude,
+                bearing,
                 zoom: 17,
                 pitch: 50,
               });
             }
-            kalmanRef.current = null;
-            lastFedTsRef.current = null;
-            targetBearingRef.current = null;
+            // Kalman/lastFedTs/targetBearing НЕ обнуляем: они валидны и нужны,
+            // чтобы карта продолжила смотреть по реальному курсу сразу после
+            // возврата к маршруту. Раньше мы их сбрасывали, и 2–3 секунды (пока
+            // Kalman не накопит velocity заново) bearing шёл с нуля → карта
+            // смотрела не туда, а потом резко доворачивалась.
             setFollowing(true);
           }}
           activeOpacity={0.85}
