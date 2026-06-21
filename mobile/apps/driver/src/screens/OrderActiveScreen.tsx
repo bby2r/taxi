@@ -14,7 +14,6 @@ import {
   addActiveOrderListener,
   hasOverlayPermission,
   hideActiveOrderOverlay,
-  openOverlaySettings,
   showActiveOrderOverlay,
   updateActiveOrderOverlay,
   type ActiveOrderPayload,
@@ -25,7 +24,6 @@ import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import {
   DriverColors,
   Typography,
-  ActionButton,
   ConfirmModal,
   formatDistance,
   formatDuration,
@@ -35,10 +33,12 @@ import {
   haversineMeters,
   snapToPolyline,
   bearingBetween,
+  angularGapDeg,
   GeoKalmanFilter,
 } from '@taxi/shared';
-import type { Order, DriverCancellationReason, Route } from '@taxi/shared';
+import type { DriverCancellationReason } from '@taxi/shared';
 import { useDriverOrder } from '../hooks/useDriverOrder';
+import { reportEta } from '../api/driver';
 import MapLibreMapView, { type MapLibreMapHandle } from '../components/MapLibreMapView';
 import type { DriverStackParamList } from '../navigation/types';
 
@@ -66,19 +66,36 @@ const ARRIVED_THRESHOLD_METERS = 150;
 // rejected past SNAP_REJECT_METERS — that's a real divergence (wrong turn,
 // stale route), keep the raw filtered position and let the backend reroute.
 
-// Перпендикулярный порог принятия snap'а. Под порогом — водителя считаем «на
-// маршруте» и привязываем точку к polyline (убирает GPS-смещение тротуар/двор
-// в плотной застройке). Над порогом — настоящее отклонение, оставляем
-// Kalman-позицию как есть, до следующего перерасчёта маршрута бэкендом.
-const SNAP_REJECT_METERS = 25;
+// Перпендикулярный порог принятия snap'а. Под SNAP_FULL_METERS — водителя
+// считаем строго «на маршруте» и привязываем точку к polyline (убирает GPS-
+// смещение тротуар/двор в плотной застройке). Между SNAP_FULL и SNAP_REJECT —
+// плавный blend snap↔raw (см. ниже): на повороте GPS на 0.5-1 сек прыгает
+// на 30-35м, и бинарный reject раньше выкидывал точку с маршрута в кювет —
+// driver-pin визуально «ехал сбоку от дороги». Линейный fade оставляет точку
+// прижатой к улице пока перп растёт, и плавно отпускает на off-route.
+// Над SNAP_REJECT — настоящее отклонение, рисуем чистую Kalman-позицию,
+// useRoute сам перестроит маршрут (порог 50м, см. useRoute.ts).
+const SNAP_FULL_METERS = 18;
+const SNAP_REJECT_METERS = 45;
 // Дропаем fix'ы с неопределённостью выше этого порога (тоннель / двор-колодец).
 // Kalman формально весит fix по accuracy, но один выброс ~80 м всё равно дёргает
 // state на десятки метров — глаз ловит как телепорт.
 const MAX_ACCURACY_METERS = 50;
 // Навигационный камера preset. Один и тот же в follow-loop'е и в recenterTo,
-// чтобы переход «жест → возврат» не менял зум/наклон.
+// чтобы переход «жест → возврат» не менял зум/наклон. Pitch — базовый;
+// на низкой скорости снижается до PITCH_SLOW (см. pickPitch ниже), чтобы
+// в узких улицах посёлка водителю было видно ближайший поворот, а не
+// только пятиметровый клочок перед капотом.
 const NAV_ZOOM = 17;
 const NAV_PITCH = 50;
+const PITCH_SLOW = 35;
+const PITCH_CRUISE = 45;
+// Пороги скорости (m/s). 3 ≈ 11 км/ч (пешеход / двор), 12 ≈ 43 км/ч.
+function pickPitch(speedMs: number | null): number {
+  if (speedMs === null || speedMs < 3) return PITCH_SLOW;
+  if (speedMs < 12) return PITCH_CRUISE;
+  return NAV_PITCH;
+}
 // Heartbeat для native overlay. ActiveOrderOverlayManager.scheduleAutoHide
 // гасит окно через 60 сек без update'а; шлём update каждые 25 сек, чтобы
 // payload-стабильность (canArrive/route/phase минуту не меняются) не убивала
@@ -90,6 +107,13 @@ const OVERLAY_HEARTBEAT_MS = 25_000;
 // null — null лучше «магической» -1 для chain'а fallback'ов.
 function rawHeading(heading: number | null | undefined): number | null {
   return typeof heading === 'number' && heading >= 0 ? heading : null;
+}
+
+function formatMmSs(totalSeconds: number): string {
+  const s = Math.max(0, Math.round(totalSeconds));
+  const mm = Math.floor(s / 60);
+  const ss = s % 60;
+  return `${mm}:${ss.toString().padStart(2, '0')}`;
 }
 
 type NavigationProp = NativeStackNavigationProp<DriverStackParamList, 'OrderActive'>;
@@ -115,30 +139,6 @@ function callPhone(phone: string): void {
   Linking.openURL(`tel:${phone}`);
 }
 
-
-function ClientContact({ order }: { order: Order }): React.ReactNode {
-  return (
-    <TouchableOpacity
-      style={styles.contactRow}
-      onPress={() => callPhone(order.client.phone)}
-      activeOpacity={0.7}
-      accessibilityLabel="Позвонить клиенту"
-      testID="call-client"
-    >
-      <View style={styles.contactInfo}>
-        <Text style={[Typography.bodyBold, { color: DriverColors.textPrimary }]}>
-          {order.client.name}
-        </Text>
-        <Text style={[Typography.caption, { color: DriverColors.textMuted }]}>
-          {order.client.phone}
-        </Text>
-      </View>
-      <View style={styles.callButton}>
-        <Icon name="phone" size={18} color={DriverColors.white} />
-      </View>
-    </TouchableOpacity>
-  );
-}
 
 function CancelSheet({
   visible,
@@ -179,145 +179,6 @@ function CancelSheet({
         </TouchableOpacity>
       </TouchableOpacity>
     </Modal>
-  );
-}
-
-function EnRouteCard({
-  order,
-}: {
-  order: Order;
-}): React.ReactNode {
-  return (
-    <View style={styles.cardContent}>
-      <Text style={[Typography.caption, { color: DriverColors.textMuted }]}>
-        Адрес подачи
-      </Text>
-      <Text
-        style={[Typography.bodyBold, { color: DriverColors.textPrimary, marginTop: 4 }]}
-        numberOfLines={3}
-      >
-        {order.pickup_address || 'Геолокация клиента'}
-      </Text>
-
-      {order.is_inter_district && (
-        <>
-          <Text style={[Typography.caption, { color: DriverColors.textMuted, marginTop: 16 }]}>
-            Куда
-          </Text>
-          <Text
-            style={[Typography.bodyBold, { color: DriverColors.textPrimary, marginTop: 4 }]}
-            numberOfLines={2}
-          >
-            {order.dropoff_address || order.region?.name || '—'}
-          </Text>
-        </>
-      )}
-
-      <TouchableOpacity
-        onPress={() => openNavigation(order.pickup_latitude, order.pickup_longitude)}
-        style={styles.navigationLink}
-        accessibilityRole="button"
-        accessibilityLabel="Навигация"
-      >
-        <Text style={[Typography.bodyBold, { color: DriverColors.primary }]}>
-          Открыть в Картах →
-        </Text>
-      </TouchableOpacity>
-    </View>
-  );
-}
-
-function ArrivedCard({
-  order,
-  onCancelRequest,
-}: {
-  order: Order;
-  onCancelRequest: () => void;
-}): React.ReactNode {
-  return (
-    <View style={styles.cardContent}>
-      <Text style={[Typography.caption, { color: DriverColors.textMuted }]}>
-        Адрес подачи
-      </Text>
-      <Text
-        style={[Typography.bodyBold, { color: DriverColors.textPrimary, marginTop: 4 }]}
-        numberOfLines={3}
-      >
-        {order.pickup_address || 'Геолокация клиента'}
-      </Text>
-
-      <TouchableOpacity
-        onPress={onCancelRequest}
-        style={styles.cancelLink}
-        accessibilityRole="button"
-        testID="driver-cancel-button"
-      >
-        <Text style={[Typography.bodyBold, { color: DriverColors.danger }]}>
-          Клиент не пришёл — отменить
-        </Text>
-      </TouchableOpacity>
-    </View>
-  );
-}
-
-function InProgressCard({
-  order,
-}: {
-  order: Order;
-}): React.ReactNode {
-  return (
-    <View style={styles.cardContent}>
-      {order.is_inter_district ? (
-        <>
-          <Text style={[Typography.caption, { color: DriverColors.textMuted }]}>
-            Куда
-          </Text>
-          <Text
-            style={[Typography.bodyBold, { color: DriverColors.textPrimary, marginTop: 4 }]}
-            numberOfLines={3}
-          >
-            {order.dropoff_address || order.region?.name || '—'}
-          </Text>
-        </>
-      ) : (
-        <Text style={[Typography.caption, { color: DriverColors.textMuted }]}>
-          Поездка идёт. Сумма: {order.price} сом
-        </Text>
-      )}
-    </View>
-  );
-}
-
-function CompletedCard({
-  order,
-  onDismiss,
-}: {
-  order: Order;
-  onDismiss: () => void;
-}): React.ReactNode {
-  return (
-    <View style={[styles.cardContent, { alignItems: 'center', justifyContent: 'center' }]}>
-      <Icon name="check-circle" size={48} color={DriverColors.success} />
-      <Text
-        style={[Typography.h2, { color: DriverColors.textPrimary, marginTop: 12 }]}
-      >
-        Заказ завершён!
-      </Text>
-      <Text
-        style={[
-          Typography.h1,
-          { color: DriverColors.primary, marginTop: 16 },
-        ]}
-      >
-        + {order.price} сом
-      </Text>
-
-      <ActionButton
-        title="Готово"
-        onPress={onDismiss}
-        style={{ ...styles.actionButton, marginTop: 24 }}
-      />
-    </View>
   );
 }
 
@@ -444,10 +305,18 @@ export default function OrderActiveScreen(): React.ReactNode {
         phase === 'in_progress';
       if (isActive) {
         e.preventDefault();
+        return;
+      }
+      // На completed back-кнопка обычно не вызывается (модалка перекрывает),
+      // но если водитель всё-таки уходит без тапа «Готово» — корректно
+      // финализируем фазу, иначе экран размонтируется, а DriverOrderState
+      // зависнет в 'completed' до следующего ремаунта.
+      if (phase === 'completed') {
+        dismissCompleted();
       }
     });
     return sub;
-  }, [navigation, state.phase]);
+  }, [navigation, state.phase, dismissCompleted]);
 
   const order =
     state.phase === 'active' ||
@@ -490,14 +359,22 @@ export default function OrderActiveScreen(): React.ReactNode {
       ? { latitude: dropoffLat, longitude: dropoffLng }
       : null;
 
-  // Route to pickup while en-route; route to dropoff once ride is in progress.
-  const shouldRouteToPickup = state.phase === 'active';
+  // Route is shown:
+  // - active / arrived → линия к pickup (на arrived НЕ схлопываем — клиент
+  //   может быть в 80м между домов, обзор без линии — лотерея)
+  // - in_progress → линия к dropoff
+  const shouldRouteToPickup = state.phase === 'active' || state.phase === 'arrived';
   const shouldRouteToDropoff = state.phase === 'in_progress' && dropoffPoint !== null;
-  const routeOrigin = shouldRouteToPickup
-    ? driverPoint
-    : shouldRouteToDropoff
-      ? driverPoint
-      : null;
+  // Smoothed driver position для useRoute: raw GPS-фикс прыгает на ±5-10м
+  // в плотной застройке, и trimRouteFromPosition мог зашкаливать offRouteMeters
+  // > 50м из-за шума → лишний refetch. Smoothed точка обновляется ниже в
+  // Kalman-эффекте (setSmoothedDriverPoint).
+  const [smoothedDriverPoint, setSmoothedDriverPoint] = useState<{
+    latitude: number;
+    longitude: number;
+  } | null>(null);
+  const routeFrom = smoothedDriverPoint ?? driverPoint;
+  const routeOrigin = shouldRouteToPickup || shouldRouteToDropoff ? routeFrom : null;
   const routeDestination = shouldRouteToPickup
     ? pickupPoint
     : shouldRouteToDropoff
@@ -509,6 +386,43 @@ export default function OrderActiveScreen(): React.ReactNode {
     loading: routeLoading,
     error: routeError,
   } = useNavigationRoute(routeOrigin, routeDestination);
+
+  // ETA reporting: один раз после accept'а, когда у нас появляется первый
+  // route к pickup'у, отправляем durationSeconds на сервер — он зафиксирует
+  // expected_arrival_at. Сервер игнорирует повторные вызовы (rerouting не
+  // должен сбрасывать дедлайн). reportedEtaRef защищает от двойной отправки
+  // внутри одного маунта при ререндерах.
+  const reportedEtaRef = useRef<number | null>(null);
+  useEffect(() => {
+    if (state.phase !== 'active' || !order) return;
+    if (!route) return;
+    if (order.expected_arrival_at) return; // уже зафиксирован сервером
+    if (reportedEtaRef.current === order.id) return;
+    reportedEtaRef.current = order.id;
+    reportEta(order.id, route.durationSeconds).catch(() => {
+      // best-effort: сервер сам индемпотентен, если не дошло — пошлём в
+      // следующем маунте экрана. Молча игнорим сеть, чтобы не пугать
+      // водителя alert'ом из-за вспомогательного запроса.
+      reportedEtaRef.current = null;
+    });
+  }, [state.phase, order, route]);
+
+  // Локальный тикер для обратного отсчёта: каждую секунду пересчитываем
+  // оставшееся время до expected_arrival_at. Тикает только пока экран
+  // mounted и есть дедлайн — на arrived/in_progress дедлайн уже не важен.
+  const [nowMs, setNowMs] = useState<number>(() => Date.now());
+  useEffect(() => {
+    if (state.phase !== 'active' || !order?.expected_arrival_at) return;
+    const id = setInterval(() => setNowMs(Date.now()), 1000);
+    return () => clearInterval(id);
+  }, [state.phase, order?.expected_arrival_at]);
+
+  // Положительное число — секунд осталось; отрицательное — на сколько опаздываем.
+  const arrivalDeltaSeconds = useMemo(() => {
+    if (state.phase !== 'active' || !order?.expected_arrival_at) return null;
+    const deadline = new Date(order.expected_arrival_at).getTime();
+    return Math.round((deadline - nowMs) / 1000);
+  }, [state.phase, order?.expected_arrival_at, nowMs]);
 
   // Floating glass-card overlay — единственный UI заказа. Показывается
   // и в foreground, и в background (поверх внешнего навигатора).
@@ -643,6 +557,7 @@ export default function OrderActiveScreen(): React.ReactNode {
     kalmanRef.current = null;
     lastFedTsRef.current = null;
     targetBearingRef.current = null;
+    setSmoothedDriverPoint(null);
     setFollowing(true);
   }, [state.phase]);
 
@@ -652,11 +567,13 @@ export default function OrderActiveScreen(): React.ReactNode {
       if (!following) return; // user panned — WebView keeps their view (override lock)
 
       if (!kalmanRef.current) {
-        // minBearingSpeed 2.5 m/s (~9 km/h): below this the filter returns no
-        // heading and we hold the last one. Default 2.0 let the map still
-        // swing while crawling/turning slowly on village streets (velocity
-        // direction is noise-dominated at low speed) — раздражало водителя.
-        kalmanRef.current = new GeoKalmanFilter({ minBearingSpeed: 2.5 });
+        // minBearingSpeed 1.5 m/s (~5 km/h). Раньше было 2.5 — фильтр
+        // молчал когда водитель тормозил под поворот (5-8 км/ч), стрелка
+        // зависала в направлении ДО поворота, и камера показывала
+        // «прямо», когда машина уже шла в дуге. 1.5 m/s даёт меньше
+        // стабильности на самой остановке, но WebView lerp + dead-zone
+        // 4° глушит остаточный wobble.
+        kalmanRef.current = new GeoKalmanFilter({ minBearingSpeed: 1.5 });
       }
       // Feed each fix to the filter exactly once. The effect can re-run on
       // unrelated deps (route refetch, sheet state) with no new fix — skip
@@ -684,6 +601,20 @@ export default function OrderActiveScreen(): React.ReactNode {
         accuracy: driverLocation.accuracy,
       });
 
+      // Smoothed позиция → useRoute (см. routeFrom). Threshold 5м — реальное
+      // перемещение, не GPS-шум; иначе на каждом фикс'е useRoute-эффект
+      // дёргается впустую (его кулдаун всё равно отсечёт, но лишних ререндеров
+      // лучше избежать).
+      setSmoothedDriverPoint((prev) => {
+        if (
+          prev &&
+          haversineMeters(prev, { latitude: filtered.latitude, longitude: filtered.longitude }) < 5
+        ) {
+          return prev;
+        }
+        return { latitude: filtered.latitude, longitude: filtered.longitude };
+      });
+
       // Snap-to-route: pin position to the routed polyline when we're close
       // enough to it. Kalman уже сгладил GPS noise; snap корректирует
       // СИСТЕМНОЕ смещение, которое GPS даёт в плотной застройке (отражения
@@ -697,9 +628,27 @@ export default function OrderActiveScreen(): React.ReactNode {
               trimmedCoordinates,
             )
           : null;
-      const useSnap = snap !== null && snap.perpMeters <= SNAP_REJECT_METERS;
-      const posLat = useSnap ? snap.latitude : filtered.latitude;
-      const posLng = useSnap ? snap.longitude : filtered.longitude;
+      // Плавный blend snap↔raw на 18..45м. Это лечит «навигатор едет сбоку
+      // от дороги» на поворотах: GPS ~1с прыгает на 30-35м когда выходишь
+      // из-под зданий, бинарный reject выкидывал точку с маршрута → pin
+      // плыл по тротуару. snapWeight=1 на perp≤18м, 0 на ≥45м.
+      let snapWeight = 0;
+      if (snap !== null) {
+        if (snap.perpMeters <= SNAP_FULL_METERS) {
+          snapWeight = 1;
+        } else if (snap.perpMeters < SNAP_REJECT_METERS) {
+          snapWeight =
+            1 - (snap.perpMeters - SNAP_FULL_METERS) /
+              (SNAP_REJECT_METERS - SNAP_FULL_METERS);
+        }
+      }
+      const useSnap = snapWeight > 0 && snap !== null;
+      const posLat = useSnap
+        ? snap.latitude * snapWeight + filtered.latitude * (1 - snapWeight)
+        : filtered.latitude;
+      const posLng = useSnap
+        ? snap.longitude * snapWeight + filtered.longitude * (1 - snapWeight)
+        : filtered.longitude;
 
       // Bearing: вдоль линии маршрута, не вдоль velocity-вектора. Velocity от
       // Kalman'а — это «куда сейчас смотрит машина», route tangent — это «куда
@@ -723,7 +672,17 @@ export default function OrderActiveScreen(): React.ReactNode {
       ) {
         const segA = trimmedCoordinates[snap.segmentIndex];
         const segB = trimmedCoordinates[snap.segmentIndex + 1];
-        nextBearing = bearingBetween(segA, segB);
+        const tangent = bearingBetween(segA, segB);
+        // Если velocity и tangent сильно расходятся — водитель сейчас в
+        // повороте (или свернул не туда, и маршрут ещё не пересчитан).
+        // Tangent в этот момент показывает «вдоль СТАРОГО сегмента»,
+        // машина уже едет в дугу. Берём velocity — камера повернётся
+        // вместе с машиной. Порог 35°: меньшие отклонения — обычный шум,
+        // tangent точнее.
+        nextBearing =
+          angularGapDeg(tangent, filtered.bearing) > 35
+            ? filtered.bearing
+            : tangent;
       } else if (filtered.bearing !== null) {
         nextBearing = filtered.bearing;
       }
@@ -739,8 +698,10 @@ export default function OrderActiveScreen(): React.ReactNode {
       }
 
       // 60fps follow-loop в WebView dead-reckonит по velocity между fix'ами.
-      // NAV_PITCH=50° — на 55° горизонт уходит к верху экрана и ближняя
-      // дорога растягивается; 50° даёт Яндекс-style 3D без искажения.
+      // Pitch адаптивный: на скорости пешехода 50° даёт слишком узкий
+      // горизонт (видно метры перед капотом), на трассе наоборот — нужен
+      // более «нависающий» вид. pickPitch выбирает по filtered.speed.
+      const adaptivePitch = pickPitch(filtered.speed);
       lastNavRef.current = {
         latitude: posLat,
         longitude: posLng,
@@ -753,7 +714,7 @@ export default function OrderActiveScreen(): React.ReactNode {
         velLng: filtered.velLngPerMs,
         velLat: filtered.velLatPerMs,
         zoom: NAV_ZOOM,
-        pitch: NAV_PITCH,
+        pitch: adaptivePitch,
       });
       return;
     }
@@ -866,6 +827,41 @@ export default function OrderActiveScreen(): React.ReactNode {
         onUserGesture={handleUserGesture}
       />
 
+      {/* Индикатор пересчёта маршрута: ORS/OSRM может уходить на 4-6 сек
+          (cooldown + fetch), и без подсказки водитель думает, что
+          навигатор завис. Показываем только когда route УЖЕ был и его
+          пересчитывают (routeLoading + route !== null) — на первом фетче
+          линии всё равно нет, нечему «моргать». */}
+      {routeLoading && route !== null && (
+        <View style={styles.rerouteChip} pointerEvents="none">
+          <Icon name="navigation" size={14} color={DriverColors.textPrimary} />
+          <Text style={styles.rerouteChipText}>Пересчёт маршрута…</Text>
+        </View>
+      )}
+
+      {/* Обратный отсчёт до прибытия / красный индикатор «не успеваю».
+          arrivalDeltaSeconds — положителен пока успеваем, отрицателен на
+          опоздание. Показываем только на фазе active. */}
+      {arrivalDeltaSeconds !== null && (
+        <View
+          style={[
+            styles.etaChip,
+            arrivalDeltaSeconds < 0 ? styles.etaChipLate : styles.etaChipOk,
+          ]}
+          pointerEvents="none"
+        >
+          <Text
+            style={[
+              styles.etaChipText,
+              arrivalDeltaSeconds < 0 && styles.etaChipTextLate,
+            ]}
+          >
+            {arrivalDeltaSeconds < 0 ? 'Опоздание ' : 'До прибытия '}
+            {formatMmSs(Math.abs(arrivalDeltaSeconds))}
+          </Text>
+        </View>
+      )}
+
       {/* Re-engage follow camera. Shows only when driver opted out of
           follow by panning the map mid-navigation. Tap snaps back to
           the tilted heading-locked view. */}
@@ -887,6 +883,14 @@ export default function OrderActiveScreen(): React.ReactNode {
                 zoom: NAV_ZOOM,
                 pitch: NAV_PITCH,
               });
+              // Сразу обновляем точку восстановления — если WebView ремаунтится
+              // (MIUI/Doze) ДО следующего GPS-фикса, handleMapReady должен
+              // вернуть камеру именно сюда, а не к до-жестовой позиции.
+              lastNavRef.current = {
+                latitude: driverPoint.latitude,
+                longitude: driverPoint.longitude,
+                heading: bearing ?? 0,
+              };
             }
             setFollowing(true);
           }}
@@ -894,6 +898,26 @@ export default function OrderActiveScreen(): React.ReactNode {
         >
           <Icon name="navigation" size={16} color={DriverColors.primary} />
           <Text style={styles.recenterText}>Вернуться к маршруту</Text>
+        </TouchableOpacity>
+      )}
+
+      {/* Если ORS/OSRM упали (нет route, есть error), у водителя пустая карта
+          без линии — без этой кнопки он не сможет понять, как ехать. Точка
+          назначения: pickup на active/arrived, dropoff на in_progress. */}
+      {!routeLoading && routeError && (state.phase === 'active' || state.phase === 'arrived' || state.phase === 'in_progress') && (
+        <TouchableOpacity
+          style={styles.externalNavButton}
+          onPress={() => {
+            const target = state.phase === 'in_progress' ? dropoffPoint : pickupPoint;
+            if (target) {
+              openNavigation(target.latitude, target.longitude);
+            }
+          }}
+          activeOpacity={0.85}
+          accessibilityRole="button"
+        >
+          <Icon name="navigation" size={16} color={DriverColors.background} />
+          <Text style={styles.externalNavText}>Открыть в Картах</Text>
         </TouchableOpacity>
       )}
 
@@ -1053,14 +1077,6 @@ const styles = StyleSheet.create({
     color: DriverColors.background,
     letterSpacing: 0.4,
   },
-  cardContent: {
-    flex: 1,
-  },
-  etaRow: {
-    flexDirection: 'row',
-    alignItems: 'baseline',
-    marginBottom: 4,
-  },
   recenterButton: {
     position: 'absolute',
     top: Platform.OS === 'android' ? (StatusBar.currentHeight ?? 24) + 16 : 60,
@@ -1080,55 +1096,88 @@ const styles = StyleSheet.create({
     shadowOffset: { width: 0, height: 4 },
     elevation: 8,
   },
-  statusTitleRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-  },
   recenterText: {
     color: DriverColors.textPrimary,
     fontSize: 14,
     fontWeight: '700' as const,
   },
-  distanceHint: {
-    color: DriverColors.textMuted,
-    textAlign: 'center',
-    marginTop: 8,
-  },
-  navigationLink: {
-    marginTop: 12,
-    paddingVertical: 8,
-  },
-  cancelLink: {
-    marginTop: 12,
-    alignItems: 'center',
-    paddingVertical: 8,
-  },
-  spacer: {
-    flex: 1,
-  },
-  actionButton: {
-    marginTop: 16,
-  },
-  contactRow: {
+  rerouteChip: {
+    position: 'absolute',
+    top: Platform.OS === 'android' ? (StatusBar.currentHeight ?? 24) + 60 : 100,
+    alignSelf: 'center',
     flexDirection: 'row',
     alignItems: 'center',
-    marginTop: 12,
-    paddingVertical: 10,
+    gap: 6,
     paddingHorizontal: 12,
-    borderRadius: 12,
+    paddingVertical: 6,
+    borderRadius: 16,
     backgroundColor: DriverColors.cardBackground,
+    borderWidth: 1,
+    borderColor: DriverColors.border,
+    shadowColor: '#000',
+    shadowOpacity: 0.18,
+    shadowRadius: 6,
+    shadowOffset: { width: 0, height: 3 },
+    elevation: 4,
   },
-  contactInfo: {
-    flex: 1,
+  rerouteChipText: {
+    fontSize: 13,
+    fontWeight: '700' as const,
+    color: DriverColors.textPrimary,
   },
-  callButton: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    backgroundColor: DriverColors.success,
-    justifyContent: 'center',
+  etaChip: {
+    position: 'absolute',
+    top: Platform.OS === 'android' ? (StatusBar.currentHeight ?? 24) + 100 : 140,
+    alignSelf: 'center',
+    paddingHorizontal: 14,
+    paddingVertical: 7,
+    borderRadius: 18,
+    shadowColor: '#000',
+    shadowOpacity: 0.25,
+    shadowRadius: 8,
+    shadowOffset: { width: 0, height: 4 },
+    elevation: 6,
+  },
+  etaChipOk: {
+    backgroundColor: DriverColors.cardBackground,
+    borderWidth: 1,
+    borderColor: DriverColors.border,
+  },
+  etaChipLate: {
+    backgroundColor: DriverColors.danger,
+    shadowColor: DriverColors.danger,
+    shadowOpacity: 0.45,
+  },
+  etaChipText: {
+    fontSize: 14,
+    fontWeight: '800' as const,
+    color: DriverColors.textPrimary,
+    letterSpacing: 0.2,
+  },
+  etaChipTextLate: {
+    color: DriverColors.background,
+  },
+  externalNavButton: {
+    position: 'absolute',
+    top: Platform.OS === 'android' ? (StatusBar.currentHeight ?? 24) + 16 : 60,
+    left: 16,
+    flexDirection: 'row',
     alignItems: 'center',
+    gap: 6,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 20,
+    backgroundColor: DriverColors.primary,
+    shadowColor: DriverColors.primary,
+    shadowOpacity: 0.4,
+    shadowRadius: 10,
+    shadowOffset: { width: 0, height: 4 },
+    elevation: 6,
+  },
+  externalNavText: {
+    color: DriverColors.background,
+    fontSize: 14,
+    fontWeight: '800' as const,
   },
   sheetBackdrop: {
     flex: 1,
