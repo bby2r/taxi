@@ -11,10 +11,54 @@
         </a>
     </div>
 
+    {{-- Flash messages from cancel action --}}
+    @if (session('success'))
+        <div class="mb-4 rounded-lg border border-green-200 bg-green-50 px-4 py-3 text-sm text-green-800">
+            {{ session('success') }}
+        </div>
+    @endif
+    @if (session('error'))
+        <div class="mb-4 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800">
+            {{ session('error') }}
+        </div>
+    @endif
+
     {{-- Status & Price --}}
-    <div class="mb-6 flex items-center justify-between">
+    <div class="mb-6 flex items-center justify-between gap-4">
         @include('admin.partials.order-status-badge', ['status' => $order->status])
-        <span class="text-2xl font-bold text-gray-900">{{ number_format($order->price) }} сом</span>
+        <div class="flex items-center gap-4">
+            @php
+                $canAdminCancel = in_array($order->status, [
+                    \App\Enums\OrderStatus::Searching,
+                    \App\Enums\OrderStatus::Accepted,
+                    \App\Enums\OrderStatus::Arrived,
+                    \App\Enums\OrderStatus::InProgress,
+                ]);
+            @endphp
+            @if ($canAdminCancel)
+                <form
+                    method="POST"
+                    action="{{ route('admin.orders.cancel', $order) }}"
+                    onsubmit="return confirm('Точно отменить заказ #{{ $order->id }}? Действие необратимо. Клиент и водитель получат push.');"
+                >
+                    @csrf
+                    <input
+                        type="text"
+                        name="reason"
+                        maxlength="500"
+                        placeholder="Причина (опц.)"
+                        class="mr-2 w-48 rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-red-500 focus:outline-none focus:ring-1 focus:ring-red-500"
+                    />
+                    <button
+                        type="submit"
+                        class="inline-flex items-center rounded-lg bg-red-600 px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-red-700"
+                    >
+                        Отменить заказ
+                    </button>
+                </form>
+            @endif
+            <span class="text-2xl font-bold text-gray-900">{{ number_format($order->price) }} сом</span>
+        </div>
     </div>
 
     {{-- Client & Driver Cards --}}
@@ -122,6 +166,24 @@
             <div>
                 <dt class="text-xs text-gray-500">Принят</dt>
                 <dd class="text-sm text-gray-700">{{ $order->accepted_at?->format('d.m.Y H:i:s') ?? '—' }}</dd>
+            </div>
+            <div>
+                <dt class="text-xs text-gray-500">Расч. прибытие</dt>
+                <dd class="text-sm text-gray-700">
+                    {{ $order->expected_arrival_at?->format('d.m.Y H:i:s') ?? '—' }}
+                    @if ($order->status === \App\Enums\OrderStatus::Accepted && $order->expected_arrival_at)
+                        @php
+                            $deltaSeconds = now()->diffInSeconds($order->expected_arrival_at, false);
+                            $isLate = $deltaSeconds < 0;
+                            $absSeconds = abs((int) $deltaSeconds);
+                            $mm = intdiv($absSeconds, 60);
+                            $ss = str_pad((string) ($absSeconds % 60), 2, '0', STR_PAD_LEFT);
+                        @endphp
+                        <span class="ml-2 inline-flex items-center rounded-full px-2 py-0.5 text-xs font-bold {{ $isLate ? 'animate-pulse bg-red-100 text-red-700' : 'bg-gray-100 text-gray-600' }}">
+                            {{ $isLate ? 'Опоздание ' : 'До приб. ' }}{{ $mm }}:{{ $ss }}
+                        </span>
+                    @endif
+                </dd>
             </div>
             <div>
                 <dt class="text-xs text-gray-500">Водитель на месте</dt>

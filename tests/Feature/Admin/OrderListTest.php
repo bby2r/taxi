@@ -169,4 +169,93 @@ class OrderListTest extends TestCase
 
         $response->assertRedirect(route('admin.login'));
     }
+
+    public function test_admin_can_cancel_accepted_order(): void
+    {
+        $admin = User::factory()->admin()->create();
+        $client = User::factory()->create();
+        $driver = User::factory()->driver()->create();
+
+        $order = Order::factory()->accepted($driver)->create([
+            'client_id' => $client->id,
+        ]);
+
+        $response = $this->actingAs($admin)->post(
+            route('admin.orders.cancel', $order),
+            ['reason' => 'водитель не отвечает'],
+        );
+
+        $response->assertRedirect(route('admin.orders.show', $order));
+        $order->refresh();
+        $this->assertSame(OrderStatus::Cancelled, $order->status);
+        $this->assertSame('admin', $order->cancelled_by);
+        $this->assertSame('водитель не отвечает', $order->cancellation_reason);
+        $this->assertNotNull($order->cancelled_at);
+    }
+
+    public function test_admin_can_force_cancel_in_progress_order(): void
+    {
+        // in_progress нельзя отменить через клиент/водительский API
+        // (isCancellable() возвращает false), но админский override
+        // обходит проверку. Это сценарий «водитель пропал в поездке».
+        $admin = User::factory()->admin()->create();
+        $client = User::factory()->create();
+        $driver = User::factory()->driver()->create();
+
+        $order = Order::factory()->create([
+            'client_id' => $client->id,
+            'driver_id' => $driver->id,
+            'status' => OrderStatus::InProgress,
+            'accepted_at' => now()->subMinutes(10),
+            'arrived_at' => now()->subMinutes(8),
+            'in_progress_at' => now()->subMinutes(5),
+        ]);
+
+        $response = $this->actingAs($admin)->post(
+            route('admin.orders.cancel', $order),
+        );
+
+        $response->assertRedirect(route('admin.orders.show', $order));
+        $order->refresh();
+        $this->assertSame(OrderStatus::Cancelled, $order->status);
+        $this->assertSame('admin', $order->cancelled_by);
+    }
+
+    public function test_admin_cannot_cancel_completed_order(): void
+    {
+        $admin = User::factory()->admin()->create();
+        $client = User::factory()->create();
+        $driver = User::factory()->driver()->create();
+
+        $order = Order::factory()->completed($driver)->create([
+            'client_id' => $client->id,
+        ]);
+
+        $response = $this->actingAs($admin)->post(
+            route('admin.orders.cancel', $order),
+        );
+
+        $response->assertRedirect(route('admin.orders.show', $order));
+        $order->refresh();
+        $this->assertSame(OrderStatus::Completed, $order->status);
+        $this->assertSame('Order cannot be cancelled.', session('error'));
+    }
+
+    public function test_non_admin_cannot_cancel_order(): void
+    {
+        $client = User::factory()->create();
+        $driver = User::factory()->driver()->create();
+
+        $order = Order::factory()->accepted($driver)->create([
+            'client_id' => $client->id,
+        ]);
+
+        $response = $this->actingAs($client)->post(
+            route('admin.orders.cancel', $order),
+        );
+
+        $response->assertRedirect(route('admin.login'));
+        $order->refresh();
+        $this->assertSame(OrderStatus::Accepted, $order->status);
+    }
 }

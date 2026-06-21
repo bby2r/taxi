@@ -71,6 +71,7 @@ Route::prefix('admin')->name('admin.')->group(function () {
         Route::post('intercity-trips/{intercityTrip}/cancel', [IntercityTripController::class, 'cancel'])->name('intercity-trips.cancel');
 
         Route::resource('orders', OrderController::class)->only(['index', 'show']);
+        Route::post('orders/{order}/cancel', [OrderController::class, 'cancel'])->name('orders.cancel');
 
         Route::resource('tickets', DriverTicketController::class)->only(['index', 'show']);
         Route::post('tickets/{ticket}/approve', [DriverTicketController::class, 'approve'])->name('tickets.approve');

@@ -539,13 +539,22 @@ class OrderService
 
     /**
      * Cancel the order. Applies cancellation fee if client cancels after driver accepted.
+     *
+     * $force=true позволяет админу отменять заказы в фазе in_progress
+     * (когда обычная отмена клиентом/водителем уже невозможна) — это
+     * override для случаев типа «водитель пропал», «мошенник», и т.п.
+     * Никогда не выставляется со стороны клиент/водительского API.
      */
-    public function cancelOrder(Order $order, string $cancelledBy, ?string $reason = null): Order
+    public function cancelOrder(Order $order, string $cancelledBy, ?string $reason = null, bool $force = false): Order
     {
-        $order = DB::transaction(function () use ($order, $cancelledBy, $reason) {
+        $order = DB::transaction(function () use ($order, $cancelledBy, $reason, $force) {
             $order = Order::lockForUpdate()->findOrFail($order->id);
 
-            if (! $order->isCancellable()) {
+            $cancellableNow = $force
+                ? $order->status !== OrderStatus::Cancelled && $order->status !== OrderStatus::Completed
+                : $order->isCancellable();
+
+            if (! $cancellableNow) {
                 throw new \RuntimeException('Order cannot be cancelled.');
             }
 
