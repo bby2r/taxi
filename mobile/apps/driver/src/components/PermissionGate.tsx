@@ -24,31 +24,30 @@ try {
   Notifications = null;
 }
 
-/**
- * Полная проверка всех критичных разрешений (overlay + notifications +
- * battery). Возвращает `true` если ВСЁ выдано или фича вообще
- * недоступна (iOS, старая сборка без overlay-модуля). Используется
- * `HomeScreen.handleToggle` как gate перед выходом «На линию» — гарантирует,
- * что водитель не зайдёт в онлайн, пока хоть одно разрешение не выдано
- * (раньше проверялись только overlay + battery, и водитель мог тапнуть
- * «Позже» в гейте и выйти без notifications-grant, после чего FCM-офферы
- * молча терялись когда экран заблокирован).
- */
+// `perm.ios?.status === 3` = iOS `provisional` grant — котел silent
+// notification без баннера, но FCM-data всё равно проходит и triggers
+// background JS task, нам этого достаточно. На Android поле просто
+// undefined, fallback на `granted`.
+async function isNotificationsGranted(): Promise<boolean> {
+  if (!Notifications) return true;
+  try {
+    const perm = await Notifications.getPermissionsAsync();
+    return perm.granted || perm.ios?.status === 3;
+  } catch {
+    return true;
+  }
+}
+
+// Гейт для «На линию». Раньше проверялись только overlay + battery —
+// водитель мог тапнуть «Позже» в PermissionGate и выйти без
+// notifications-grant'а, после чего FCM-офферы молча терялись при
+// заблокированном экране.
 export async function arePermissionsOk(): Promise<boolean> {
   if (Platform.OS !== 'android') return true;
   if (!isOfferOverlayAvailable()) return true;
   if (!hasOverlayPermission()) return false;
   if (!isIgnoringBatteryOptimizations()) return false;
-  if (Notifications) {
-    try {
-      const perm = await Notifications.getPermissionsAsync();
-      const ok = perm.granted || perm.ios?.status === 3;
-      if (!ok) return false;
-    } catch {
-      // ignore — assume granted
-    }
-  }
-  return true;
+  return await isNotificationsGranted();
 }
 
 interface PermissionStatus {
@@ -97,15 +96,7 @@ export default function PermissionGate({
     }
     const overlay = isOfferOverlayAvailable() ? hasOverlayPermission() : true;
     const battery = isIgnoringBatteryOptimizations();
-    let notifications = true;
-    if (Notifications) {
-      try {
-        const perm = await Notifications.getPermissionsAsync();
-        notifications = perm.granted || perm.ios?.status === 3;
-      } catch {
-        // ignore — assume granted
-      }
-    }
+    const notifications = await isNotificationsGranted();
     setStatus({ overlay, notifications, battery });
   }, []);
 
