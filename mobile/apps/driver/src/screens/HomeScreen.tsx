@@ -48,7 +48,7 @@ import {
   openOemPowerSettings,
 } from '../../modules/offer-overlay/src';
 import OrderOfferCard from '../components/OrderOfferCard';
-import PermissionGate from '../components/PermissionGate';
+import PermissionGate, { arePermissionsOk } from '../components/PermissionGate';
 import OemSetupWizard, { PROBLEMATIC_OEMS } from '../components/OemSetupWizard';
 import MapLibreMapView, { type MapLibreMapHandle } from '../components/MapLibreMapView';
 
@@ -356,15 +356,14 @@ export default function HomeScreen(): React.ReactNode {
       );
       return;
     }
-    // Going ONLINE — block until critical permissions are in place,
-    // otherwise the driver sits on shift with offers silently dropping.
-    if (Platform.OS === 'android') {
-      const overlayOk = isOfferOverlayAvailable() ? hasOverlayPermission() : true;
-      const batteryOk = isIgnoringBatteryOptimizations();
-      if (!overlayOk || !batteryOk) {
-        setPermissionGateVisible(true);
-        return;
-      }
+    // Going ONLINE — block until ALL critical permissions are in place
+    // (overlay + battery + notifications), otherwise water sits on shift
+    // with offers silently dropping. Если водитель в PermissionGate
+    // нажал «Позже» и НЕ выдал что-то — следующий тап «На линию» снова
+    // откроет гейт, проход в онлайн до выдачи всего невозможен.
+    if (!(await arePermissionsOk())) {
+      setPermissionGateVisible(true);
+      return;
     }
     await performToggle();
   };

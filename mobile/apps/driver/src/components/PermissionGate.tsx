@@ -24,6 +24,33 @@ try {
   Notifications = null;
 }
 
+/**
+ * Полная проверка всех критичных разрешений (overlay + notifications +
+ * battery). Возвращает `true` если ВСЁ выдано или фича вообще
+ * недоступна (iOS, старая сборка без overlay-модуля). Используется
+ * `HomeScreen.handleToggle` как gate перед выходом «На линию» — гарантирует,
+ * что водитель не зайдёт в онлайн, пока хоть одно разрешение не выдано
+ * (раньше проверялись только overlay + battery, и водитель мог тапнуть
+ * «Позже» в гейте и выйти без notifications-grant, после чего FCM-офферы
+ * молча терялись когда экран заблокирован).
+ */
+export async function arePermissionsOk(): Promise<boolean> {
+  if (Platform.OS !== 'android') return true;
+  if (!isOfferOverlayAvailable()) return true;
+  if (!hasOverlayPermission()) return false;
+  if (!isIgnoringBatteryOptimizations()) return false;
+  if (Notifications) {
+    try {
+      const perm = await Notifications.getPermissionsAsync();
+      const ok = perm.granted || perm.ios?.status === 3;
+      if (!ok) return false;
+    } catch {
+      // ignore — assume granted
+    }
+  }
+  return true;
+}
+
 interface PermissionStatus {
   overlay: boolean;
   notifications: boolean;

@@ -28,6 +28,13 @@ interface Step {
 // description names the actual MIUI/EMUI/etc. label in quotes so the
 // driver knows exactly what to look for after we land them on the
 // settings screen (deep-links can't pre-select the row, only the page).
+//
+// Battery optimisation НЕ входит сюда — она проверяется реально через
+// PermissionGate (с зелёной галочкой когда выдано). Раньше она была и
+// здесь и там — водитель видел двойную модалку, а в визарде кнопка
+// «Готово, я всё настроил» НЕ проверяла фактическое состояние и тупо
+// закрывала окно. Оставляем здесь только OEM-specific autostart и
+// pin-to-recent шаги — то, что программно проверить нельзя.
 const OEM_STEPS: Record<string, Step[]> = {
   xiaomi: [
     {
@@ -35,12 +42,6 @@ const OEM_STEPS: Record<string, Step[]> = {
       description:
         'Откройте «Автозапуск» и включите переключатель напротив Alif Taxi. Без этого MIUI выгружает приложение через 5 минут.',
       action: 'oem',
-    },
-    {
-      title: 'Отключить экономию батареи',
-      description:
-        'Откройте «Без ограничений» в разделе расхода батареи. По умолчанию стоит «Экономия батареи» — это убивает приложение в фоне.',
-      action: 'standard',
     },
     {
       title: 'Закрепить в недавних',
@@ -58,12 +59,6 @@ const OEM_STEPS: Record<string, Step[]> = {
         'Откройте «Запуск приложений» → Alif Taxi → «Управлять вручную» → включите все три переключателя (автозапуск, вторичный запуск, фоновая активность).',
       action: 'oem',
     },
-    {
-      title: 'Отключить экономию батареи',
-      description:
-        'Откройте экран батареи и выберите «Без ограничений» для Alif Taxi.',
-      action: 'standard',
-    },
   ],
   honor: [],
   vivo: [
@@ -73,12 +68,6 @@ const OEM_STEPS: Record<string, Step[]> = {
         'Откройте «Управление автозапуском» и включите Alif Taxi. Vivo жёстко режет фон без этого.',
       action: 'oem',
     },
-    {
-      title: 'Высокое потребление разрешено',
-      description:
-        'В настройках батареи установите Alif Taxi → «Не ограничивать в фоне».',
-      action: 'standard',
-    },
   ],
   iqoo: [],
   oppo: [
@@ -87,12 +76,6 @@ const OEM_STEPS: Record<string, Step[]> = {
       description:
         'Откройте «Запуск приложений» / «Startup Manager» и включите Alif Taxi. ColorOS блокирует автозапуск по умолчанию.',
       action: 'oem',
-    },
-    {
-      title: 'Отключить экономию батареи',
-      description:
-        'В настройках батареи Alif Taxi установите «Не оптимизировать».',
-      action: 'standard',
     },
   ],
   realme: [],
@@ -104,15 +87,11 @@ OEM_STEPS.honor = OEM_STEPS.huawei;
 OEM_STEPS.iqoo = OEM_STEPS.vivo;
 OEM_STEPS.realme = OEM_STEPS.oppo;
 
-// Standard-Android OEMs — Samsung, OnePlus, Pixel, Nothing, etc.
-const GENERIC_STEPS: Step[] = [
-  {
-    title: 'Отключить экономию батареи',
-    description:
-      'Откройте «Батарея» для Alif Taxi и выберите «Без ограничений». Без этого Android может выгрузить приложение когда экран выключен.',
-    action: 'standard',
-  },
-];
+// Standard-Android OEMs (Samsung, OnePlus, Pixel, Nothing) — никаких
+// OEM-специфичных шагов не нужно, battery optimisation покрывается
+// PermissionGate'ом. Пустой массив → визард не открывается вообще
+// (`if (!visible || steps.length === 0) return null` ниже).
+const GENERIC_STEPS: Step[] = [];
 
 // Manufacturers we know need the OEM-specific autostart dance on top
 // of the standard battery toggle. Used by HomeScreen to decide whether
