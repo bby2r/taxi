@@ -136,6 +136,71 @@ export interface SnapResult {
 }
 
 /**
+ * Bearing касательной полилинии в точке, отстоящей на `aheadMeters` ВПЕРЁД
+ * по маршруту от позиции `snap`. Используется для упреждающего поворота
+ * камеры навигатора: Яндекс/2GIS начинают доворот за несколько метров ДО
+ * самого поворота, потому что читают форму дороги впереди, а не реагируют
+ * на отклонение velocity-вектора.
+ *
+ * Алгоритм: накопительно проходит по сегментам от текущего, пока не
+ * наберётся нужная дистанция; bearing берётся со «следующего» сегмента в
+ * этой точке. Если look-ahead упирается в конец маршрута (доехали до
+ * pickup'а) — возвращает `null`, чтобы caller откатился на ближайший
+ * tangent или Kalman-velocity. Расстояния — equirectangular в meters,
+ * точность достаточна для look-ahead на 12-55м (километровая погрешность
+ * не накапливается, мы суммируем десятки метров).
+ *
+ * `snap` должен быть результатом `snapToPolyline(point, polyline)` —
+ * именно тот же `polyline`, иначе segmentIndex смысла не имеет.
+ */
+export function lookAheadBearing(
+  polyline: ReadonlyArray<{ latitude: number; longitude: number }>,
+  snap: SnapResult,
+  aheadMeters: number,
+): number | null {
+  if (polyline.length < 2) return null;
+  if (snap.segmentIndex >= polyline.length - 1) return null;
+
+  const M_PER_DEG_LAT = 111_320;
+  const cosLat = Math.cos((polyline[snap.segmentIndex].latitude * Math.PI) / 180);
+  const mPerDegLng = M_PER_DEG_LAT * cosLat;
+
+  // Дистанция от snap до конца текущего сегмента.
+  const segEnd = polyline[snap.segmentIndex + 1];
+  let dxEnd = (segEnd.longitude - snap.longitude) * mPerDegLng;
+  let dyEnd = (segEnd.latitude - snap.latitude) * M_PER_DEG_LAT;
+  let remaining = Math.sqrt(dxEnd * dxEnd + dyEnd * dyEnd);
+
+  // Если look-ahead полностью укладывается в текущий сегмент —
+  // tangent текущего сегмента (он один и тот же по всей длине прямой).
+  if (aheadMeters <= remaining) {
+    return bearingBetween(
+      { latitude: snap.latitude, longitude: snap.longitude },
+      segEnd,
+    );
+  }
+
+  // Иначе шагаем дальше по сегментам, накапливая дистанцию.
+  let distanceLeft = aheadMeters - remaining;
+  for (let i = snap.segmentIndex + 1; i < polyline.length - 1; i++) {
+    const a = polyline[i];
+    const b = polyline[i + 1];
+    const dx = (b.longitude - a.longitude) * mPerDegLng;
+    const dy = (b.latitude - a.latitude) * M_PER_DEG_LAT;
+    const len = Math.sqrt(dx * dx + dy * dy);
+    if (distanceLeft <= len) {
+      return bearingBetween(a, b);
+    }
+    distanceLeft -= len;
+  }
+
+  // Look-ahead вылез за конец маршрута (короткий хвост перед pickup'ом) —
+  // caller должен решить, что делать. Возвращаем null, не финальный
+  // tangent, чтобы не «приморозить» камеру направлением последнего метра.
+  return null;
+}
+
+/**
  * Project a point onto the nearest segment of a polyline (route line) and
  * return the snapped position + perpendicular distance from the input point.
  *

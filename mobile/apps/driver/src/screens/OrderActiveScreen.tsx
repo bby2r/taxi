@@ -34,6 +34,7 @@ import {
   snapToPolyline,
   bearingBetween,
   angularGapDeg,
+  lookAheadBearing,
   GeoKalmanFilter,
 } from '@taxi/shared';
 import type { DriverCancellationReason } from '@taxi/shared';
@@ -650,42 +651,79 @@ export default function OrderActiveScreen(): React.ReactNode {
         ? snap.longitude * snapWeight + filtered.longitude * (1 - snapWeight)
         : filtered.longitude;
 
-      // Bearing: вдоль линии маршрута, не вдоль velocity-вектора. Velocity от
-      // Kalman'а — это «куда сейчас смотрит машина», route tangent — это «куда
-      // идёт дорога». На прямой это одно и то же, но в повороте/перекрёстке
-      // velocity размазана по дуге (машина едет по кривой), а tangent чётко
-      // следует за улицей. Так делает Яндекс.Навигатор — поэтому камера у него
-      // не «съезжает» в стену на повороте.
+      // Bearing — теперь ДВА разных значения:
       //
-      // Берём tangent ТОЛЬКО когда мы реально на маршруте (useSnap) и есть
-      // следующий сегмент — это значит у нас валидная улица под колёсами.
-      // Иначе откатываемся на velocity-bearing от Kalman'а (стабильный, но
-      // следует за машиной, а не за дорогой). Сглаживание целевого bearing'а
-      // на 60fps делает WebView (FOLLOW_BRG_A=0.12 + dead-zone 4°), так что
-      // переход с одного сегмента на другой не «прыгает» — лерпится мягко.
-      let nextBearing: number | null = null;
+      // 1. cameraBearing — куда смотрит камера. С УПРЕЖДЕНИЕМ: tangent
+      //    маршрута в точке `s + L` впереди, где L растёт со скоростью.
+      //    Яндекс/2GIS делают именно это — начинают доворот в поворот за
+      //    несколько метров ДО самого поворота, потому что «читают»
+      //    форму дороги впереди. Раньше у нас был чисто реактивный
+      //    fallback на velocity при angularGap>35° — камера ждала пока
+      //    машина въедет в дугу и только тогда докручивалась.
+      //
+      // 2. markerBearing — куда смотрит стрелка. БЕЗ упреждения, по
+      //    касательной СЕГМЕНТА ПОД МАШИНОЙ. Pin должен стоять «по
+      //    дороге под капотом», камера — слегка ведёт вперёд. С
+      //    rotationAlignment='map' разность углов даёт правильный
+      //    визуальный наклон стрелки в кадре.
+      //
+      // Velocity-fallback оставлен ТОЛЬКО для краевых случаев:
+      //  - snap слабый/потерянный (snapWeight < SNAP_TRUST_THRESHOLD) →
+      //    мы не на дороге, доверять route-геометрии нельзя;
+      //  - look-ahead упёрся в конец маршрута (короткий хвост перед
+      //    pickup'ом) — tangent текущего сегмента + velocity-fallback.
+      // На нормальном повороте по маршруту переключения tangent↔velocity
+      // больше не происходит — есть плавный look-ahead.
+      const SNAP_TRUST_THRESHOLD = 0.6;
+      const LOOKAHEAD_MIN_M = 12;
+      const LOOKAHEAD_MAX_M = 55;
+      const lookaheadDist = Math.max(
+        LOOKAHEAD_MIN_M,
+        Math.min(LOOKAHEAD_MAX_M, filtered.speed * 1.4),
+      );
+
+      let cameraBearing: number | null = null;
+      let markerBearing: number | null = null;
+
       if (
         useSnap &&
         snap !== null &&
-        snap.segmentIndex < trimmedCoordinates.length - 1 &&
-        filtered.bearing !== null
+        snap.segmentIndex < trimmedCoordinates.length - 1
       ) {
         const segA = trimmedCoordinates[snap.segmentIndex];
         const segB = trimmedCoordinates[snap.segmentIndex + 1];
-        const tangent = bearingBetween(segA, segB);
-        // Если velocity и tangent сильно расходятся — водитель сейчас в
-        // повороте (или свернул не туда, и маршрут ещё не пересчитан).
-        // Tangent в этот момент показывает «вдоль СТАРОГО сегмента»,
-        // машина уже едет в дугу. Берём velocity — камера повернётся
-        // вместе с машиной. Порог 35°: меньшие отклонения — обычный шум,
-        // tangent точнее.
-        nextBearing =
-          angularGapDeg(tangent, filtered.bearing) > 35
-            ? filtered.bearing
-            : tangent;
+        const tangentHere = bearingBetween(segA, segB);
+        markerBearing = tangentHere;
+
+        if (snapWeight >= SNAP_TRUST_THRESHOLD) {
+          // Уверенно на маршруте → look-ahead tangent ведёт камеру.
+          const ahead = lookAheadBearing(trimmedCoordinates, snap, lookaheadDist);
+          if (ahead !== null) {
+            cameraBearing = ahead;
+          } else {
+            // Look-ahead вылез за конец маршрута — едем к pickup'у в
+            // упор. Tangent текущего сегмента + velocity-fallback на
+            // случай если водитель уже отворачивает к парковке.
+            cameraBearing =
+              filtered.bearing !== null &&
+              angularGapDeg(tangentHere, filtered.bearing) > 35
+                ? filtered.bearing
+                : tangentHere;
+          }
+        } else if (filtered.bearing !== null) {
+          // Слабый snap (perp близко к 45м) — route-геометрии не
+          // доверяем, камеру ведёт velocity.
+          cameraBearing = filtered.bearing;
+        } else {
+          cameraBearing = tangentHere;
+        }
       } else if (filtered.bearing !== null) {
-        nextBearing = filtered.bearing;
+        // Снап потерян (off-route, ждём refetch) — обе цели по velocity.
+        cameraBearing = filtered.bearing;
+        markerBearing = filtered.bearing;
       }
+
+      const nextBearing = cameraBearing;
       const seedHeading = rawHeading(driverLocation.heading);
       if (nextBearing !== null) {
         targetBearingRef.current = nextBearing;
@@ -711,6 +749,10 @@ export default function OrderActiveScreen(): React.ReactNode {
         latitude: posLat,
         longitude: posLng,
         bearing: targetBearingRef.current ?? undefined,
+        // markerBearing — отдельный угол для pin'а (касательная под
+        // машиной, без look-ahead). Если null — WebView крутит маркер
+        // на bearing камеры (старое поведение для off-route).
+        markerBearing: markerBearing ?? undefined,
         velLng: filtered.velLngPerMs,
         velLat: filtered.velLatPerMs,
         zoom: NAV_ZOOM,
@@ -1078,23 +1120,28 @@ const styles = StyleSheet.create({
     letterSpacing: 0.4,
   },
   recenterButton: {
+    // Раньше была в правом-верхнем — нативный glass-overlay «Еду к
+    // клиенту» (~60-220px от верха) её закрывал, и водитель не мог её
+    // нажать чтобы вернуть камеру в course-up режим. Перенесли в
+    // нижний-правый: место свободно, по высоте не пересекается с
+    // карточкой.
     position: 'absolute',
-    top: Platform.OS === 'android' ? (StatusBar.currentHeight ?? 24) + 16 : 60,
+    bottom: 32,
     right: 16,
     flexDirection: 'row',
     alignItems: 'center',
     gap: 6,
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    borderRadius: 20,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    borderRadius: 22,
     backgroundColor: DriverColors.cardBackground,
     borderWidth: 1,
     borderColor: DriverColors.border,
     shadowColor: '#000',
-    shadowOpacity: 0.25,
-    shadowRadius: 8,
-    shadowOffset: { width: 0, height: 4 },
-    elevation: 8,
+    shadowOpacity: 0.3,
+    shadowRadius: 10,
+    shadowOffset: { width: 0, height: 5 },
+    elevation: 10,
   },
   recenterText: {
     color: DriverColors.textPrimary,

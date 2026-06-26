@@ -44,7 +44,15 @@ export type MapLibreMapHandle = {
   // doesn't have to re-derive a (noisier) velocity from target deltas.
   setFollowTarget: (
     target: LatLng & {
+      // bearing — куда смотрит КАМЕРА. С look-ahead (упреждённая дуга по
+      // маршруту впереди), чтобы камера доворачивала за несколько метров
+      // ДО самого поворота — Yandex/2GIS-style.
       bearing?: number;
+      // markerBearing — куда смотрит СТРЕЛКА (driver-pin). Касательная
+      // сегмента под машиной, без look-ahead, иначе pin будет визуально
+      // «улетать» вперёд раньше машины. Если не задан — pin крутится на
+      // bearing камеры (старое поведение / off-route).
+      markerBearing?: number;
       zoom?: number;
       pitch?: number;
       velLng?: number;
@@ -117,18 +125,7 @@ function buildHtml(apiKey: string, styleName: string, center: [number, number], 
         width: 60px; height: 60px;
         filter: drop-shadow(0 3px 6px rgba(0,0,0,0.55)) drop-shadow(0 1px 2px rgba(0,0,0,0.4));
       }
-      /* Rotation сидит на ВНУТРЕННЕМ div'е, а не на .driver-pin —
-         MapLibre владеет CSS transform внешнего элемента (translate
-         для позиционирования). Если писать rotate на внешний,
-         каждый кадр followStep'а наш rotate стирает translate, и
-         маркер мигает в угол map-контейнера. */
-      .driver-pin-rot {
-        width: 100%; height: 100%;
-        display: flex; align-items: center; justify-content: center;
-        transform-origin: center;
-        will-change: transform;
-      }
-      .driver-pin-rot svg { width: 100%; height: 100%; }
+      .driver-pin svg { width: 100%; height: 100%; }
       .pickup-pin {
         width: 36px; height: 36px;
         filter: drop-shadow(0 2px 4px rgba(0,0,0,0.5));
@@ -237,45 +234,59 @@ function buildHtml(apiKey: string, styleName: string, center: [number, number], 
         }
       }
 
-      function makeDriverEl(heading) {
+      function makeDriverEl() {
         // Яндекс-style стрелка: яркий синий конус с белой обводкой
         // (читается на любой подложке), мягкая тень-эллипс под ним
-        // имитирует поднятие над картой.
-        var rot = (heading == null || isNaN(heading)) ? 0 : heading;
-        var outer = document.createElement('div');
-        outer.className = 'driver-pin';
-        var inner = document.createElement('div');
-        inner.className = 'driver-pin-rot';
-        inner.style.transform = 'rotate(' + rot + 'deg)';
-        inner.innerHTML =
+        // имитирует поднятие над картой. Rotation НЕ ставится здесь:
+        // MapLibre сам управляет transform через marker.setRotation()
+        // + rotationAlignment:'map' (стрелка живёт в map-space,
+        // course-up даёт «всегда вверх экрана»).
+        var el = document.createElement('div');
+        el.className = 'driver-pin';
+        el.innerHTML =
           '<svg viewBox="0 0 48 48" xmlns="http://www.w3.org/2000/svg">' +
-            // Контактная тень-эллипс — отрывает стрелку от карты
             '<ellipse cx="24" cy="36" rx="12" ry="3" fill="#000" opacity="0.22"/>' +
-            // Белая обводка конуса (рисуется чуть шире контура)
             '<path d="M24 4 L37 34 L24 28 L11 34 Z" fill="#fff"/>' +
-            // Правая грань — затемнённая, даёт объём
             '<path d="M24 7 L35 33 L24 28 Z" fill="#1E40AF"/>' +
-            // Левая грань — основной синий
             '<path d="M24 7 L13 33 L24 28 Z" fill="#3B82F6"/>' +
-            // Световой блик по килю — добавляет «3D»
             '<path d="M24 7 L24 28" stroke="#fff" stroke-width="1.2" opacity="0.6"/>' +
           '</svg>';
-        outer.appendChild(inner);
-        return outer;
+        return el;
       }
 
-      var __driverInner = null;
+      // Плавный rotation tween (как position tween в setDriver). Между
+      // GPS-фиксами (1Hz) heading может прыгнуть на 30+°, mgnoвенный
+      // setRotation выглядит как щелчок. Лёгкий 250ms ease-out по
+      // КРАТЧАЙШЕЙ дуге (350° → 10° поворачивает на +20°, не -340°).
+      var __driverRotTweenRaf = null;
       var __driverLastRot = null;
       function setDriverRotation(rot) {
-        if (!__driverMarker) return;
-        if (rot === __driverLastRot) return;
-        if (!__driverInner) {
-          __driverInner = __driverMarker.getElement().querySelector('.driver-pin-rot');
-        }
-        if (__driverInner) {
-          __driverInner.style.transform = 'rotate(' + rot + 'deg)';
+        if (!__driverMarker || rot == null || isNaN(rot)) return;
+        if (__driverRotTweenRaf) cancelAnimationFrame(__driverRotTweenRaf);
+        var start = __driverLastRot == null ? rot : __driverLastRot;
+        var delta = ((rot - start + 540) % 360) - 180;
+        if (Math.abs(delta) < 0.5) {
+          __driverMarker.setRotation(rot);
           __driverLastRot = rot;
+          return;
         }
+        var startTs = null;
+        var duration = 250;
+        function step(ts) {
+          if (startTs === null) startTs = ts;
+          var t = Math.min(1, (ts - startTs) / duration);
+          var e = 1 - Math.pow(1 - t, 2);
+          var cur = (start + delta * e + 360) % 360;
+          __driverMarker.setRotation(cur);
+          __driverLastRot = cur;
+          if (t < 1) {
+            __driverRotTweenRaf = requestAnimationFrame(step);
+          } else {
+            __driverRotTweenRaf = null;
+            __driverLastRot = rot;
+          }
+        }
+        __driverRotTweenRaf = requestAnimationFrame(step);
       }
 
       function makePickupEl() {
@@ -306,11 +317,23 @@ function buildHtml(apiKey: string, styleName: string, center: [number, number], 
         var rot = (loc.heading == null || isNaN(loc.heading)) ? 0 : loc.heading;
         if (!__driverMarker) {
           __driverMarker = new maplibregl.Marker({
-            element: makeDriverEl(loc.heading),
+            element: makeDriverEl(),
             anchor: 'center',
+            // rotationAlignment 'map' — стрелка живёт в map-space, а не
+            // на экране. Это то самое, почему при course-up камере pin
+            // ВСЕГДА смотрит вверх экрана (по ходу машины). Дефолт
+            // 'viewport' выкручивает pin относительно экрана независимо
+            // от поворота карты — в итоге pin и camera вращались в одном
+            // направлении и взаимно вычитались: едешь вперёд, а стрелка
+            // визуально показывает «в бок» или «назад».
+            rotationAlignment: 'map',
+            // pitch остаётся 'viewport' (дефолт) — иначе на наклонённой
+            // 3D-карте стрелка ляжет плашмя на землю и станет нечитаемой.
+            rotation: rot,
           })
             .setLngLat([loc.longitude, loc.latitude])
             .addTo(__map);
+          __driverLastRot = rot;
           return;
         }
         // Поворот применяем сразу (CSS-трансформ дешёвый) — глаз ловит
@@ -475,8 +498,14 @@ function buildHtml(apiKey: string, styleName: string, center: [number, number], 
         if (!__map) return;
         var rot = (rotDeg == null || isNaN(rotDeg)) ? 0 : rotDeg;
         if (!__driverMarker) {
-          __driverMarker = new maplibregl.Marker({ element: makeDriverEl(rot), anchor: 'center' })
+          __driverMarker = new maplibregl.Marker({
+            element: makeDriverEl(),
+            anchor: 'center',
+            rotationAlignment: 'map',
+            rotation: rot,
+          })
             .setLngLat([lng, lat]).addTo(__map);
+          __driverLastRot = rot;
           return;
         }
         __driverMarker.setLngLat([lng, lat]);
@@ -489,7 +518,15 @@ function buildHtml(apiKey: string, styleName: string, center: [number, number], 
       // position+bearing; DEAD ignores sub-threshold heading noise so the map
       // doesn't shimmer on a jittery bearing.
       var FOLLOW_POS_A = 0.10;
-      var FOLLOW_BRG_A = 0.12;
+      // FOLLOW_BRG_A_MIN/_MAX — адаптивный коэффициент доворота камеры:
+      // плавно на мелких корректировках (шум, лёгкие изгибы) и быстрее
+      // на крутых поворотах. Раньше был фикс 0.12 — на резком повороте
+      // 80° камера тянулась за машиной 1+ сек, было ощущение что
+      // навигатор отстаёт. Дельта свыше FOLLOW_BRG_FAST_DEG ускоряет до
+      // _MAX (линейная интерполяция между точками). Dead-zone сохранена.
+      var FOLLOW_BRG_A_MIN = 0.10;
+      var FOLLOW_BRG_A_MAX = 0.25;
+      var FOLLOW_BRG_FAST_DEG = 35;
       var FOLLOW_DEAD_DEG = 4; // ignore sub-4° heading wobble so the map doesn't shimmer on low-speed GPS noise
       var PREDICT_MAX_MS = 2500; // clamp dead-reckoning so a dropped fix can't run away; 2.5с покрывает типичный туннель/двор без видимого скачка на возврате
       var VEL_EMA = 0.4; // legacy fallback only (used when RN sends no velocity)
@@ -537,20 +574,44 @@ function buildHtml(apiKey: string, styleName: string, center: [number, number], 
         var ex1 = f.baseTc[1] + (f.vel ? f.vel[1] * dt : 0);
         f.cc[0] += (ex0 - f.cc[0]) * FOLLOW_POS_A;
         f.cc[1] += (ex1 - f.cc[1]) * FOLLOW_POS_A;
+        var d = 0;
         if (f.tb != null) {
-          var d = ((f.tb - f.cb + 540) % 360) - 180;
+          d = ((f.tb - f.cb + 540) % 360) - 180;
           if (Math.abs(d) > FOLLOW_DEAD_DEG) {
-            f.cb = ((f.cb + d * FOLLOW_BRG_A) % 360 + 360) % 360;
+            // Адаптивный коэффициент: линейно от _MIN (плавно) до _MAX
+            // (резво) по мере роста модуля дельты. На крутом повороте
+            // камера докручивается заметно быстрее без потери плавности.
+            var absD = Math.abs(d);
+            var k = absD >= FOLLOW_BRG_FAST_DEG
+              ? FOLLOW_BRG_A_MAX
+              : FOLLOW_BRG_A_MIN + (FOLLOW_BRG_A_MAX - FOLLOW_BRG_A_MIN) *
+                  (absD - FOLLOW_DEAD_DEG) / (FOLLOW_BRG_FAST_DEG - FOLLOW_DEAD_DEG);
+            f.cb = ((f.cb + d * k) % 360 + 360) % 360;
           }
         }
+        // Marker bearing — собственный lerp, чтобы стрелка плавно
+        // следовала по дороге под машиной, пока камера упреждает поворот.
+        // Если RN не прислала markerBearing — используем bearing камеры
+        // (старое поведение для off-route и init).
+        var markerTb = (f.tmb != null) ? f.tmb : f.cb;
+        var md = ((markerTb - f.cmb + 540) % 360) - 180;
+        if (Math.abs(md) > FOLLOW_DEAD_DEG) {
+          var absMd = Math.abs(md);
+          var mk = absMd >= FOLLOW_BRG_FAST_DEG
+            ? FOLLOW_BRG_A_MAX
+            : FOLLOW_BRG_A_MIN + (FOLLOW_BRG_A_MAX - FOLLOW_BRG_A_MIN) *
+                (absMd - FOLLOW_DEAD_DEG) / (FOLLOW_BRG_FAST_DEG - FOLLOW_DEAD_DEG);
+          f.cmb = ((f.cmb + md * mk) % 360 + 360) % 360;
+        }
         __map.jumpTo({ center: [f.cc[0], f.cc[1]], bearing: f.cb, zoom: f.zoom, pitch: f.pitch, padding: __navPadding });
-        placeDriver(f.cc[0], f.cc[1], f.cb);
+        placeDriver(f.cc[0], f.cc[1], f.cmb);
         // Keep the 60fps loop alive while moving (velocity) or not yet
         // converged; idle out only when genuinely stopped + settled.
         var velMag = f.vel ? (Math.abs(f.vel[0]) + Math.abs(f.vel[1])) : 0;
         var dcx = ex0 - f.cc[0], dcy = ex1 - f.cc[1];
-        var bd = (f.tb == null) ? 0 : Math.abs(((f.tb - f.cb + 540) % 360) - 180);
-        if (velMag < 1e-9 && (dcx * dcx + dcy * dcy) < 1e-12 && bd <= FOLLOW_DEAD_DEG) return;
+        var bd = (f.tb == null) ? 0 : Math.abs(d);
+        var mbd = (f.tmb == null) ? 0 : Math.abs(md);
+        if (velMag < 1e-9 && (dcx * dcx + dcy * dcy) < 1e-12 && bd <= FOLLOW_DEAD_DEG && mbd <= FOLLOW_DEAD_DEG) return;
         __followRaf = requestAnimationFrame(followStep);
       }
 
@@ -558,6 +619,9 @@ function buildHtml(apiKey: string, styleName: string, center: [number, number], 
         if (!__map) return;
         var tc = [cmd.longitude, cmd.latitude];
         var tb = (typeof cmd.bearing === 'number') ? cmd.bearing : (__follow ? __follow.tb : null);
+        // markerBearing — отдельный target для маркера. Если RN не
+        // прислала — pin крутится на bearing камеры (старое поведение).
+        var tmb = (typeof cmd.markerBearing === 'number') ? cmd.markerBearing : (__follow ? __follow.tmb : null);
         var zoom = (typeof cmd.zoom === 'number') ? cmd.zoom : (__follow ? __follow.zoom : __map.getZoom());
         var pitch = (typeof cmd.pitch === 'number') ? cmd.pitch : (__follow ? __follow.pitch : __map.getPitch());
         var hasVel = (typeof cmd.velLng === 'number' && typeof cmd.velLat === 'number');
@@ -567,15 +631,18 @@ function buildHtml(apiKey: string, styleName: string, center: [number, number], 
           // marker now. First target snaps current=target so we don't sweep
           // across the map from the initial center.
           if (__driverTweenRaf) { cancelAnimationFrame(__driverTweenRaf); __driverTweenRaf = null; }
+          var seedCb = (tb == null) ? __map.getBearing() : tb;
+          var seedCmb = (tmb == null) ? seedCb : tmb;
           __follow = {
             baseTc: [tc[0], tc[1]], baseTs: nowTs,
             vel: hasVel ? [cmd.velLng, cmd.velLat] : null, skipVel: false,
-            tb: tb, cc: [tc[0], tc[1]], cb: (tb == null ? __map.getBearing() : tb),
+            tb: tb, tmb: tmb,
+            cc: [tc[0], tc[1]], cb: seedCb, cmb: seedCmb,
             zoom: zoom, pitch: pitch,
           };
           if (!__userOverride) {
             __map.jumpTo({ center: [tc[0], tc[1]], bearing: __follow.cb, zoom: zoom, pitch: pitch, padding: __navPadding });
-            placeDriver(tc[0], tc[1], __follow.cb);
+            placeDriver(tc[0], tc[1], __follow.cmb);
           }
         } else {
           var f = __follow;
@@ -603,6 +670,7 @@ function buildHtml(apiKey: string, styleName: string, center: [number, number], 
           f.baseTc = [tc[0], tc[1]];
           f.baseTs = nowTs;
           if (tb != null) f.tb = tb;
+          if (tmb != null) f.tmb = tmb;
           f.zoom = zoom;
           f.pitch = pitch;
         }
@@ -675,6 +743,9 @@ function buildHtml(apiKey: string, styleName: string, center: [number, number], 
                 var c = __map.getCenter();
                 __follow.cc = [c.lng, c.lat];
                 __follow.cb = __map.getBearing();
+                // Маркер на recenter подтянем к bearing'у камеры — он
+                // сам мягко вернётся к route-tangent на следующем GPS-фиксе.
+                __follow.cmb = __follow.cb;
                 __follow.baseTc = [c.lng, c.lat];
                 __follow.baseTs = perfNow();
                 __follow.vel = null;
