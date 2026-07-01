@@ -44,9 +44,20 @@ type Props = {
   onPickupDragEnd?: (coord: LatLng) => void;
   // Координаты водителя + опциональный heading из Pusher-broadcast'а
   // (driver-app шлёт GPS-курс). Если heading отсутствует — WebView
-  // вычисляет bearing локально из двух последних позиций. Маркер
-  // плавно интерполируется (~1200мс) между фиксами.
-  driver?: (LatLng & { heading?: number | null }) | null;
+  // вычисляет bearing локально из двух последних позиций.
+  //
+  // velLngPerMs / velLatPerMs — сглаженная Kalman-velocity (deg/мс) с
+  // RN-стороны (см. useDriverTrack). Если переданы — WebView включает
+  // dead-reckoning rAF-loop и непрерывно экстраполирует положение
+  // маркера между фиксами, как у Yandex/2GIS. Если null — fallback на
+  // линейный 700мс tween от старой к новой точке.
+  driver?:
+    | (LatLng & {
+        heading?: number | null;
+        velLngPerMs?: number | null;
+        velLatPerMs?: number | null;
+      })
+    | null;
   style?: object;
   onReady?: () => void;
 };
@@ -157,6 +168,35 @@ function buildHtml(apiKey: string, styleName: string, center: [number, number], 
       var __driverMarker = null;
       var __driverPrev = null;
       var __driverTweenRaf = null;
+      // Dead-reckoning state: live target (baseLng/baseLat/baseTs +
+      // velocity deg/мс) + currently rendered position. Loop tick'ает
+      // requestAnimationFrame пока маркер ползёт к extrapolated target;
+      // когда current сошёлся И velocity ≈ 0 — loop останавливается,
+      // никакой нагрузки на простаивающий маркер не создаётся.
+      var __driverDR = null;
+      var __driverDRRaf = null;
+      // Параметры lerp (как в driver-app, slightly slower potому что
+      // апдейты у клиента приходят раз в 2-3с, а не 1Hz).
+      var DR_POS_A = 0.18;            // [0..1], доля смещения к target за кадр
+      var DR_BRG_A_MIN = 0.06;        // плавный поворот стрелки
+      var DR_BRG_A_MAX = 0.22;        // резкий поворот на крутых дельтах
+      var DR_BRG_FAST_DEG = 25;       // выше этого — DR_BRG_A_MAX
+      var DR_DEAD_DEG = 0.5;          // зона нечувствительности bearing
+      // Velocity decay при «тишине» от сервера. До soft машина едет с
+      // полной Kalman-скоростью (норма — фиксы раз в 2-3с). После soft
+      // начинаем плавно гасить скорость к нулю, к hard — velocity = 0
+      // и маркер замрёт. Цель — на мёртвой зоне (туннель, лифт, заехал
+      // в подвал) маркер не уезжает на полную длину PREDICT_MAX вперёд,
+      // а плавно «тормозит» в ~30м от последнего фикса вместо ~67м.
+      var DR_DECAY_SOFT_MS = 1800;
+      var DR_DECAY_HARD_MS = 3500;
+      var DR_PREDICT_MAX_MS = DR_DECAY_HARD_MS;
+
+      function perfNowDR() {
+        return (typeof performance !== 'undefined' && performance.now)
+          ? performance.now()
+          : Date.now();
+      }
       var __styleLoaded = false;
       var __padding = { top: 0, bottom: 0, left: 0, right: 0 };
 
@@ -346,29 +386,95 @@ function buildHtml(apiKey: string, styleName: string, center: [number, number], 
         return (b + 360) % 360;
       }
 
+      // Применяет rotation к SVG внутри маркера (поворот стрелки).
+      function applyDriverBearing(deg) {
+        if (!__driverMarker) return;
+        var svg = __driverMarker.getElement().querySelector('svg');
+        if (svg) svg.style.transform = 'rotate(' + deg + 'deg)';
+        __driverMarker._lastBearing = deg;
+      }
+
+      function driverDRStep() {
+        __driverDRRaf = null;
+        if (!__driverDR || !__driverMarker) return;
+        var s = __driverDR;
+        // Dead-reckoning: ekstrapolируем target вперёд по сглаженной
+        // Kalman-velocity. Между фиксами (которые приходят раз в 2-3с)
+        // точка не «стоит и ждёт», а ползёт по дороге, как у Yandex.
+        // На длинной паузе (мёртвая зона / потеря сети) velocity мягко
+        // угасает к нулю — маркер плавно тормозит, не «телепортируясь»
+        // в стоп и не уезжая на полные 4с экстраполяции от реального
+        // последнего фикса.
+        var rawDt = perfNowDR() - s.baseTs;
+        if (rawDt < 0) rawDt = 0;
+        var dt = rawDt > DR_PREDICT_MAX_MS ? DR_PREDICT_MAX_MS : rawDt;
+        var vScale = 1;
+        if (rawDt > DR_DECAY_SOFT_MS) {
+          if (rawDt >= DR_DECAY_HARD_MS) {
+            vScale = 0;
+          } else {
+            // Linear ramp 1 → 0 на отрезке [SOFT, HARD]. Plenty smooth
+            // на 60 fps: переход за ~1.7с не вызывает рывка.
+            vScale = 1 - (rawDt - DR_DECAY_SOFT_MS) / (DR_DECAY_HARD_MS - DR_DECAY_SOFT_MS);
+          }
+        }
+        var effVLng = (s.vLng || 0) * vScale;
+        var effVLat = (s.vLat || 0) * vScale;
+        var eLng = s.baseLng + effVLng * dt;
+        var eLat = s.baseLat + effVLat * dt;
+        // Low-pass lerp текущей рендер-позиции к extrapolated target.
+        s.curLng += (eLng - s.curLng) * DR_POS_A;
+        s.curLat += (eLat - s.curLat) * DR_POS_A;
+        // Bearing — отдельный smooth с адаптивным шагом.
+        if (s.tBrg != null) {
+          var d = ((s.tBrg - s.curBrg + 540) % 360) - 180;
+          if (Math.abs(d) > DR_DEAD_DEG) {
+            var absD = Math.abs(d);
+            var k = absD >= DR_BRG_FAST_DEG
+              ? DR_BRG_A_MAX
+              : DR_BRG_A_MIN + (DR_BRG_A_MAX - DR_BRG_A_MIN) *
+                  (absD - DR_DEAD_DEG) / (DR_BRG_FAST_DEG - DR_DEAD_DEG);
+            s.curBrg = ((s.curBrg + d * k) % 360 + 360) % 360;
+            applyDriverBearing(s.curBrg);
+          }
+        }
+        __driverMarker.setLngLat([s.curLng, s.curLat]);
+        // Loop alive пока effective velocity ненулевая ИЛИ ещё не сошлись
+        // на target ИЛИ bearing не докрутился. На мёртвой зоне vScale → 0,
+        // целевая точка стабилизируется, current плавно подтягивается и
+        // loop сам выходит — никакой нагрузки на простаивающий маркер.
+        var velMag = Math.abs(effVLng) + Math.abs(effVLat);
+        var dcx = eLng - s.curLng, dcy = eLat - s.curLat;
+        var bd = (s.tBrg == null) ? 0 : Math.abs(((s.tBrg - s.curBrg + 540) % 360) - 180);
+        if (velMag < 1e-12 && (dcx * dcx + dcy * dcy) < 1e-14 && bd <= DR_DEAD_DEG) {
+          return;
+        }
+        __driverDRRaf = requestAnimationFrame(driverDRStep);
+      }
+
       function setDriver(loc) {
         if (!__map) return;
         if (!loc) {
           if (__driverMarker) { __driverMarker.remove(); __driverMarker = null; }
           __driverPrev = null;
-          if (__driverTweenRaf) cancelAnimationFrame(__driverTweenRaf);
-          __driverTweenRaf = null;
+          if (__driverTweenRaf) { cancelAnimationFrame(__driverTweenRaf); __driverTweenRaf = null; }
+          if (__driverDRRaf) { cancelAnimationFrame(__driverDRRaf); __driverDRRaf = null; }
+          __driverDR = null;
           return;
         }
-        var from = __driverPrev;
         var to = { latitude: loc.latitude, longitude: loc.longitude };
-        // Bearing: приоритет heading из payload (это GPS-курс с самого
-        // устройства водителя, точнее чем наш local-compute). Если null
-        // — fallback на азимут между двумя последними фиксами с порогом
-        // ~3м чтобы GPS-джиттер не крутил иконку в стоячем состоянии.
+        var hasVel = (typeof loc.velLngPerMs === 'number' && typeof loc.velLatPerMs === 'number');
+        // Bearing: приоритет heading из payload (GPS-курс с устройства
+        // водителя). Иначе — азимут между двумя последними фиксами
+        // с порогом ~3м (анти-джиттер на стоянке).
         var bearing = (__driverMarker && __driverMarker._lastBearing) || 0;
         if (typeof loc.heading === 'number' && loc.heading >= 0) {
           bearing = loc.heading;
-        } else if (from) {
-          var dLat = Math.abs(to.latitude - from.latitude);
-          var dLng = Math.abs(to.longitude - from.longitude);
+        } else if (__driverPrev) {
+          var dLat = Math.abs(to.latitude - __driverPrev.latitude);
+          var dLng = Math.abs(to.longitude - __driverPrev.longitude);
           if (dLat > 0.00003 || dLng > 0.00003) {
-            bearing = computeBearing(from, to);
+            bearing = computeBearing(__driverPrev, to);
           }
         }
         if (!__driverMarker) {
@@ -378,34 +484,63 @@ function buildHtml(apiKey: string, styleName: string, center: [number, number], 
           }).setLngLat([to.longitude, to.latitude]).addTo(__map);
           __driverMarker._lastBearing = bearing;
           __driverPrev = to;
+          if (hasVel) {
+            __driverDR = {
+              baseLng: to.longitude, baseLat: to.latitude, baseTs: perfNowDR(),
+              vLng: loc.velLngPerMs, vLat: loc.velLatPerMs,
+              tBrg: bearing, curLng: to.longitude, curLat: to.latitude, curBrg: bearing,
+            };
+            if (!__driverDRRaf) __driverDRRaf = requestAnimationFrame(driverDRStep);
+          }
           return;
         }
-        __driverMarker._lastBearing = bearing;
-        // Обновляем rotation у внутреннего svg.
-        var svg = __driverMarker.getElement().querySelector('svg');
-        if (svg) svg.style.transform = 'rotate(' + bearing + 'deg)';
-        // Smooth-tween от текущей позиции к новой за 700мс. Раньше было
-        // 1200мс при апдейтах раз в ~2с — RAF был активен большую часть
-        // времени и грел WebView. 700мс хватает чтобы глаз воспринял как
-        // плавное движение, и оставляет 1.3с «отдыха» между апдейтами.
-        if (__driverTweenRaf) cancelAnimationFrame(__driverTweenRaf);
-        var start = __driverMarker.getLngLat();
-        var startTs = null;
-        var duration = 700;
-        function step(ts) {
-          if (startTs === null) startTs = ts;
-          var t = Math.min(1, (ts - startTs) / duration);
-          var lng = start.lng + (to.longitude - start.lng) * t;
-          var lat = start.lat + (to.latitude - start.lat) * t;
-          __driverMarker.setLngLat([lng, lat]);
-          if (t < 1) {
-            __driverTweenRaf = requestAnimationFrame(step);
+        __driverPrev = to;
+        if (hasVel) {
+          // DR-ветка: Kalman прислал сглаженную velocity → переключаемся
+          // (или продолжаем) на dead-reckoning loop. Lerp 700мс tween не
+          // нужен — DR сам плавно подползает к новой baseLng/baseLat.
+          if (__driverTweenRaf) { cancelAnimationFrame(__driverTweenRaf); __driverTweenRaf = null; }
+          if (!__driverDR) {
+            var cur = __driverMarker.getLngLat();
+            __driverDR = {
+              baseLng: to.longitude, baseLat: to.latitude, baseTs: perfNowDR(),
+              vLng: loc.velLngPerMs, vLat: loc.velLatPerMs,
+              tBrg: bearing, curLng: cur.lng, curLat: cur.lat, curBrg: __driverMarker._lastBearing || bearing,
+            };
           } else {
-            __driverTweenRaf = null;
-            __driverPrev = to;
+            __driverDR.baseLng = to.longitude;
+            __driverDR.baseLat = to.latitude;
+            __driverDR.baseTs = perfNowDR();
+            __driverDR.vLng = loc.velLngPerMs;
+            __driverDR.vLat = loc.velLatPerMs;
+            __driverDR.tBrg = bearing;
           }
+          if (!__driverDRRaf) __driverDRRaf = requestAnimationFrame(driverDRStep);
+        } else {
+          // Fallback-ветка (нет Kalman'а с RN, или координаты пришли
+          // отдельно от velocity): прежний 700мс linear tween. Остановим
+          // DR loop, если он почему-то ещё крутится.
+          if (__driverDRRaf) { cancelAnimationFrame(__driverDRRaf); __driverDRRaf = null; }
+          __driverDR = null;
+          applyDriverBearing(bearing);
+          if (__driverTweenRaf) cancelAnimationFrame(__driverTweenRaf);
+          var start = __driverMarker.getLngLat();
+          var startTs = null;
+          var duration = 700;
+          function step(ts) {
+            if (startTs === null) startTs = ts;
+            var t = Math.min(1, (ts - startTs) / duration);
+            var lng = start.lng + (to.longitude - start.lng) * t;
+            var lat = start.lat + (to.latitude - start.lat) * t;
+            __driverMarker.setLngLat([lng, lat]);
+            if (t < 1) {
+              __driverTweenRaf = requestAnimationFrame(step);
+            } else {
+              __driverTweenRaf = null;
+            }
+          }
+          __driverTweenRaf = requestAnimationFrame(step);
         }
-        __driverTweenRaf = requestAnimationFrame(step);
       }
 
       function setPadding(p) {
@@ -764,7 +899,9 @@ export default React.memo(MapLibreMapView, (prev, next) => {
     coordEq(prev.userLocation, next.userLocation) &&
     coordEq(prev.pickup, next.pickup) &&
     coordEq(prev.driver, next.driver) &&
-    (prev.driver?.heading ?? null) === (next.driver?.heading ?? null)
+    (prev.driver?.heading ?? null) === (next.driver?.heading ?? null) &&
+    (prev.driver?.velLngPerMs ?? null) === (next.driver?.velLngPerMs ?? null) &&
+    (prev.driver?.velLatPerMs ?? null) === (next.driver?.velLatPerMs ?? null)
   );
 });
 

@@ -33,6 +33,7 @@ const HEIGHT_ACTIVE = 340;
 import { useLocation, ActionButton, ClientColors, ErrorPill, FadeInView, Haptics, Radius, Skeleton, Spacing, Typography, reverseGeocode, Region } from '@taxi/shared';
 import { Shadow } from '../theme/tokens';
 import { useOrder } from '../hooks/useOrder';
+import { useDriverTrack } from '../hooks/useDriverTrack';
 import DriverCard from '../components/DriverCard';
 import Icon from '../components/Icon';
 import IntervillageModal from '../components/IntervillageModal';
@@ -334,20 +335,38 @@ export default function HomeScreen(): React.ReactNode {
   const inVillageTariffMissing =
     inServiceArea === true && detectedVillage !== null && inVillagePrice <= 0;
 
-  const driverCoords =
-    state.phase !== 'idle' &&
-    state.phase !== 'cancelled' &&
-    state.order?.driver &&
-    typeof state.order.driver.latitude === 'number' &&
-    typeof state.order.driver.longitude === 'number' &&
-    Number.isFinite(state.order.driver.latitude) &&
-    Number.isFinite(state.order.driver.longitude)
-      ? {
-          latitude: state.order.driver.latitude,
-          longitude: state.order.driver.longitude,
-          heading: state.order.driver.heading,
-        }
-      : null;
+  // Raw-фикс из Pusher (state.order.driver обновляется на event
+  // 'driver.location'). Прогоняем через Kalman → получаем smoothed
+  // позицию + velocity для dead-reckoning. Без useMemo каждый ре-рендер
+  // HomeScreen (шторка, таймеры) генерил новый объект, дёргая Kalman
+  // зря — здесь зависим только от реально меняющихся примитивов.
+  const driverForMemo =
+    state.phase === 'idle' || state.phase === 'cancelled' ? null : state.order.driver ?? null;
+  const driverLat = driverForMemo?.latitude;
+  const driverLng = driverForMemo?.longitude;
+  const driverHeading = driverForMemo?.heading;
+  const rawDriverFix = useMemo(() => {
+    if (typeof driverLat !== 'number' || typeof driverLng !== 'number') return null;
+    if (!Number.isFinite(driverLat) || !Number.isFinite(driverLng)) return null;
+    return { latitude: driverLat, longitude: driverLng, heading: driverHeading ?? null };
+  }, [driverLat, driverLng, driverHeading]);
+  const smoothed = useDriverTrack(rawDriverFix);
+  const driverCoords = useMemo(() => {
+    if (!smoothed) return null;
+    return {
+      latitude: smoothed.latitude,
+      longitude: smoothed.longitude,
+      heading: smoothed.heading,
+      velLngPerMs: smoothed.velLngPerMs,
+      velLatPerMs: smoothed.velLatPerMs,
+    };
+  }, [
+    smoothed?.latitude,
+    smoothed?.longitude,
+    smoothed?.heading,
+    smoothed?.velLngPerMs,
+    smoothed?.velLatPerMs,
+  ]);
 
   // Содержимое peek-бара зависит от фазы заказа и состояния детекции.
   // Делаем компактным — в свёрнутом виде шторки видна только эта часть.
