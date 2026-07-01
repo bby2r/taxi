@@ -73,6 +73,7 @@ function OrderOfferCardComponent({
   const [reasonSheetOpen, setReasonSheetOpen] = useState(false);
   const opacityAnim = useRef(new Animated.Value(1)).current;
   const pulseAnim = useRef(new Animated.Value(0)).current;
+  const pulseLoopRef = useRef<Animated.CompositeAnimation | null>(null);
   const declineCalledRef = useRef(false);
 
   // Hide the SYSTEM_ALERT_WINDOW overlay ONLY if the driver is actively
@@ -120,12 +121,19 @@ function OrderOfferCardComponent({
     opacityAnim.setValue(remaining > 0 ? remaining / countdownSeconds : 0);
   }, [remaining, countdownSeconds, opacityAnim]);
 
-  // "Hurry up" red border pulse in the final 5 seconds.
+  // "Hurry up" red border pulse в финальные 5 секунд. Запускаем ОДИН
+  // раз при входе в warning-окно и останавливаем при выходе — раньше
+  // эффект пересоздавал Animated.loop каждый tick countdown (~5 раз за
+  // офер), генерил мусор для GC и лишние JS-stops для нативного драйвера.
+  const inWarningWindow = remaining > 0 && remaining <= WARNING_THRESHOLD;
   useEffect(() => {
-    if (remaining > WARNING_THRESHOLD || remaining <= 0) {
+    if (!inWarningWindow) {
+      pulseLoopRef.current?.stop();
+      pulseLoopRef.current = null;
       pulseAnim.setValue(0);
       return;
     }
+    if (pulseLoopRef.current) return;
     const loop = Animated.loop(
       Animated.sequence([
         Animated.timing(pulseAnim, {
@@ -140,12 +148,16 @@ function OrderOfferCardComponent({
         }),
       ]),
     );
+    pulseLoopRef.current = loop;
     loop.start();
-    return () => loop.stop();
-  }, [remaining, pulseAnim]);
+    return () => {
+      pulseLoopRef.current?.stop();
+      pulseLoopRef.current = null;
+    };
+  }, [inWarningWindow, pulseAnim]);
 
   const warningOpacity = pulseAnim;
-  const inWarning = remaining > 0 && remaining <= WARNING_THRESHOLD;
+  const inWarning = inWarningWindow;
 
   const handlePickReason = (reason: DeclineReason): void => {
     setReasonSheetOpen(false);

@@ -3,6 +3,7 @@ import * as Location from 'expo-location';
 import { API_BASE_URL, getToken } from '@taxi/shared';
 import { updateLocation } from '../api/driver';
 import {
+  isOfferOverlayAvailable,
   setNativeAuth,
   startNativeLocationPings,
   stopNativeLocationPings,
@@ -63,6 +64,8 @@ export function useDriverLocation({ enabled }: UseDriverLocationOptions): Locati
       return;
     }
 
+    let nativePingsRunning = false;
+
     (async () => {
       const { status } = await Location.requestForegroundPermissionsAsync();
       if (status !== 'granted') return;
@@ -83,9 +86,10 @@ export function useDriverLocation({ enabled }: UseDriverLocationOptions): Locati
       // compile-time EXPO_PUBLIC_API_URL.
       try {
         const token = await getToken();
-        if (token) {
+        if (token && isOfferOverlayAvailable()) {
           setNativeAuth(token, API_BASE_URL);
           startNativeLocationPings();
+          nativePingsRunning = true;
         }
       } catch {
         // Native bridge missing — foreground JS interval below
@@ -142,10 +146,14 @@ export function useDriverLocation({ enabled }: UseDriverLocationOptions): Locati
         },
       );
 
-      // Foreground JS heartbeat — uploads coordsRef every 3 s. Safety
-      // net when the native service didn't start (no bg-location
-      // permission, OEM blocked, older APK build without the native
-      // module). Server doesn't mind seeing pings from both sources.
+      // Foreground JS heartbeat — uploads coordsRef. Safety net for
+      // когда native service не запустился (нет bg-location, OEM, старый
+      // build без native-модуля). Если native pings уже работают, держим
+      // редкий интервал (10 с) чтобы не дублировать сеть/CPU/батарею —
+      // native шлёт каждые ~3 с, и наш JS-тик нужен лишь чтобы не
+      // потерять координаты, если native-сервис вдруг убили. Без native
+      // остаёмся на 3 с — это единственный источник.
+      const heartbeatMs = nativePingsRunning ? 10000 : 3000;
       intervalRef.current = setInterval(async () => {
         if (coordsRef.current) {
           try {
@@ -158,7 +166,7 @@ export function useDriverLocation({ enabled }: UseDriverLocationOptions): Locati
             // Silent — next interval retries
           }
         }
-      }, 3000);
+      }, heartbeatMs);
     })();
 
     return () => {

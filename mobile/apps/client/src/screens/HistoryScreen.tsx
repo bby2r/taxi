@@ -116,6 +116,11 @@ export default function HistoryScreen(): React.ReactNode {
         onEndReached={handleEndReached}
         onEndReachedThreshold={0.5}
         contentContainerStyle={{ flexGrow: 1 }}
+        removeClippedSubviews
+        initialNumToRender={10}
+        maxToRenderPerBatch={8}
+        windowSize={7}
+        updateCellsBatchingPeriod={50}
         ListFooterComponent={
           loadingMore ? (
             <ActivityIndicator

@@ -703,9 +703,12 @@ function useDriverOrderState(): UseDriverOrderReturn {
       }
     };
 
-    // Poll immediately, then every 5 seconds
+    // Poll immediately, then every 15s. Pusher — primary канал для
+    // offer-broadcast; этот интервал — fallback на случай отвалившегося
+    // сокета. 5 с давали 12 запросов/мин просто за ожидание офера —
+    // лишняя нагрузка на батарею и сеть.
     poll();
-    const interval = setInterval(poll, 5000);
+    const interval = setInterval(poll, 15000);
 
     return () => {
       cancelled = true;
@@ -751,7 +754,10 @@ function useDriverOrderState(): UseDriverOrderReturn {
       }
     };
 
-    const interval = setInterval(poll, 7000);
+    // 15s fallback — Pusher доставляет order.cancelled мгновенно,
+    // а 7-секундный poll просто грел сеть/батарею. 15 с — допустимая
+    // верхняя граница, чтобы заметить «зависший» отменённый заказ.
+    const interval = setInterval(poll, 15000);
 
     return () => {
       cancelled = true;
