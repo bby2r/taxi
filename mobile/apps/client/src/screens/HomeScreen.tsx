@@ -337,36 +337,20 @@ export default function HomeScreen(): React.ReactNode {
 
   // Raw-фикс из Pusher (state.order.driver обновляется на event
   // 'driver.location'). Прогоняем через Kalman → получаем smoothed
-  // позицию + velocity для dead-reckoning. Без useMemo каждый ре-рендер
-  // HomeScreen (шторка, таймеры) генерил новый объект, дёргая Kalman
-  // зря — здесь зависим только от реально меняющихся примитивов.
-  const driverForMemo =
+  // позицию + velocity для dead-reckoning. useDriverTrack сам следит
+  // за примитивами и держит внутренний state; ре-рендер HomeScreen
+  // без изменения координат не триггерит новый Kalman-tick.
+  const rawDriver =
     state.phase === 'idle' || state.phase === 'cancelled' ? null : state.order.driver ?? null;
-  const driverLat = driverForMemo?.latitude;
-  const driverLng = driverForMemo?.longitude;
-  const driverHeading = driverForMemo?.heading;
-  const rawDriverFix = useMemo(() => {
-    if (typeof driverLat !== 'number' || typeof driverLng !== 'number') return null;
-    if (!Number.isFinite(driverLat) || !Number.isFinite(driverLng)) return null;
-    return { latitude: driverLat, longitude: driverLng, heading: driverHeading ?? null };
-  }, [driverLat, driverLng, driverHeading]);
-  const smoothed = useDriverTrack(rawDriverFix);
-  const driverCoords = useMemo(() => {
-    if (!smoothed) return null;
-    return {
-      latitude: smoothed.latitude,
-      longitude: smoothed.longitude,
-      heading: smoothed.heading,
-      velLngPerMs: smoothed.velLngPerMs,
-      velLatPerMs: smoothed.velLatPerMs,
-    };
-  }, [
-    smoothed?.latitude,
-    smoothed?.longitude,
-    smoothed?.heading,
-    smoothed?.velLngPerMs,
-    smoothed?.velLatPerMs,
-  ]);
+  const rawDriverFix =
+    rawDriver &&
+    typeof rawDriver.latitude === 'number' &&
+    typeof rawDriver.longitude === 'number' &&
+    Number.isFinite(rawDriver.latitude) &&
+    Number.isFinite(rawDriver.longitude)
+      ? { latitude: rawDriver.latitude, longitude: rawDriver.longitude, heading: rawDriver.heading ?? null }
+      : null;
+  const driverCoords = useDriverTrack(rawDriverFix);
 
   // Содержимое peek-бара зависит от фазы заказа и состояния детекции.
   // Делаем компактным — в свёрнутом виде шторки видна только эта часть.

@@ -398,13 +398,11 @@ function buildHtml(apiKey: string, styleName: string, center: [number, number], 
         __driverDRRaf = null;
         if (!__driverDR || !__driverMarker) return;
         var s = __driverDR;
-        // Dead-reckoning: ekstrapolируем target вперёд по сглаженной
-        // Kalman-velocity. Между фиксами (которые приходят раз в 2-3с)
-        // точка не «стоит и ждёт», а ползёт по дороге, как у Yandex.
-        // На длинной паузе (мёртвая зона / потеря сети) velocity мягко
-        // угасает к нулю — маркер плавно тормозит, не «телепортируясь»
-        // в стоп и не уезжая на полные 4с экстраполяции от реального
-        // последнего фикса.
+        // Dead-reckoning: экстраполируем target по Kalman-velocity, чтобы
+        // маркер полз между 2-3-секундными Pusher-фиксами вместо дёргания.
+        // На длинной паузе (мёртвая зона / потеря сети) velocity плавно
+        // гаснет между SOFT/HARD порогами и маркер тормозит — иначе
+        // ушёл бы на всю длину PREDICT_MAX от реального последнего фикса.
         var rawDt = perfNowDR() - s.baseTs;
         if (rawDt < 0) rawDt = 0;
         var dt = rawDt > DR_PREDICT_MAX_MS ? DR_PREDICT_MAX_MS : rawDt;
@@ -425,11 +423,13 @@ function buildHtml(apiKey: string, styleName: string, center: [number, number], 
         // Low-pass lerp текущей рендер-позиции к extrapolated target.
         s.curLng += (eLng - s.curLng) * DR_POS_A;
         s.curLat += (eLat - s.curLat) * DR_POS_A;
-        // Bearing — отдельный smooth с адаптивным шагом.
+        // Bearing — отдельный smooth с адаптивным шагом. Считаем delta
+        // один раз, переиспользуем для exit-condition ниже.
+        var absD = 0;
         if (s.tBrg != null) {
           var d = ((s.tBrg - s.curBrg + 540) % 360) - 180;
-          if (Math.abs(d) > DR_DEAD_DEG) {
-            var absD = Math.abs(d);
+          absD = Math.abs(d);
+          if (absD > DR_DEAD_DEG) {
             var k = absD >= DR_BRG_FAST_DEG
               ? DR_BRG_A_MAX
               : DR_BRG_A_MIN + (DR_BRG_A_MAX - DR_BRG_A_MIN) *
@@ -445,8 +445,7 @@ function buildHtml(apiKey: string, styleName: string, center: [number, number], 
         // loop сам выходит — никакой нагрузки на простаивающий маркер.
         var velMag = Math.abs(effVLng) + Math.abs(effVLat);
         var dcx = eLng - s.curLng, dcy = eLat - s.curLat;
-        var bd = (s.tBrg == null) ? 0 : Math.abs(((s.tBrg - s.curBrg + 540) % 360) - 180);
-        if (velMag < 1e-12 && (dcx * dcx + dcy * dcy) < 1e-14 && bd <= DR_DEAD_DEG) {
+        if (velMag < 1e-12 && (dcx * dcx + dcy * dcy) < 1e-14 && absD <= DR_DEAD_DEG) {
           return;
         }
         __driverDRRaf = requestAnimationFrame(driverDRStep);
