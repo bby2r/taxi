@@ -540,12 +540,10 @@ class OrderService
             );
         }
 
-        $this->pushService->sendToUser(
-            $driver,
-            'Поездка завершена',
-            "Заработано: {$order->price} сом",
-            ['order_id' => $order->id, 'type' => 'order_completed'],
-        );
+        // Уведомление водителю о заработке убрано — водитель и так видит
+        // сумму в статистике смены + в completed-модалке; push дублировал
+        // сумму со звуком заказа (канал driver_offers_v3), а пользователь
+        // просит эти громкие звуки только на входящий offer.
 
         return $order;
     }
