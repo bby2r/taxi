@@ -34,6 +34,21 @@ class ExpoPushService
                 : 'driver_offers_v3';
         }
 
+        // По умолчанию Expo Push использует FCM priority=normal, а его
+        // Android откладывает под Doze mode на минуту-две. Для событий
+        // заказа нужна мгновенная доставка — форсим high priority + ttl 60с
+        // (просрочившийся вход не имеет смысла показывать) + iOS
+        // content-available, чтобы APNs разбудил backgrounded app.
+        if (! isset($options['priority'])) {
+            $options['priority'] = 'high';
+        }
+        if (! isset($options['ttl'])) {
+            $options['ttl'] = 60;
+        }
+        if (! isset($options['_contentAvailable'])) {
+            $options['_contentAvailable'] = true;
+        }
+
         return $this->send($user->expo_push_token, $title, $body, $data, $options);
     }
 
