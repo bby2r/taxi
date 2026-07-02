@@ -454,6 +454,13 @@ export default function HomeScreen(): React.ReactNode {
         pickupDraggable={state.phase === 'idle' && location.hasRealFix}
         onPickupDragEnd={handlePinDragEnd}
         driver={driverCoords}
+        mapPhase={
+          state.phase === 'searching'
+            ? 'searching'
+            : state.phase === 'accepted' || state.phase === 'arrived' || state.phase === 'in_progress'
+              ? 'matched'
+              : 'idle'
+        }
       />
 
       {/* «Моя локация» FAB — приклеен к верхнему краю шторки. Тот

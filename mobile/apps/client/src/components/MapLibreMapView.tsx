@@ -58,6 +58,14 @@ type Props = {
         velLatPerMs?: number | null;
       })
     | null;
+  // Жизненный цикл заказа для UI карты. Управляет только новым
+  // pulse-radar'ом (см. #pulse-radar в HTML): 'searching' — включена
+  // спокойная лаймовая волна из pickup-точки (маркер водителя при этом
+  // прячется, даже если координаты пришли — предотвращает мигание при
+  // отказе одного водителя и переходе к следующему); 'matched' — волна
+  // плавно гаснет, driver-маркер живёт по своей обычной логике;
+  // 'idle' — карта чистая. Умолчание 'idle' сохраняет старое поведение.
+  mapPhase?: 'searching' | 'matched' | 'idle';
   style?: object;
   onReady?: () => void;
 };
@@ -78,6 +86,55 @@ function buildHtml(apiKey: string, styleName: string, center: [number, number], 
       html, body, #map { margin: 0; padding: 0; width: 100%; height: 100%; background: #13111f; }
       .maplibregl-ctrl-bottom-left, .maplibregl-ctrl-bottom-right,
       .maplibregl-ctrl-top-left, .maplibregl-ctrl-top-right { display: none !important; }
+      /* ═══ Pulse-radar «Ищем машину…» ═══
+         3 концентрических кольца из pickup-точки, спокойный ритм
+         (1.8с cycle) с stagger'ом фаз. Позиционируется из RN через
+         map.project(pickup) в setMapPhase/updateRadar. Когда фаза
+         не 'searching' — родитель ставит display:none и CSS-анимация
+         полностью паузится (браузер её не тикает), нулевой CPU.
+         Цвет вынесен в CSS-var --radar-color: bright teal (#14B8A6).
+         Легко поменять на лайм #A3E635 из RN-стороны, если понадобится
+         больше контраста. pointer-events:none — не мешает drag pickup. */
+      #pulse-radar {
+        --radar-color: #14B8A6;
+        position: absolute;
+        left: 0; top: 0;
+        width: 0; height: 0;
+        pointer-events: none;
+        z-index: 5;
+        display: none;
+        transform: translate3d(-9999px, -9999px, 0);
+        will-change: transform;
+      }
+      #pulse-radar .ring {
+        position: absolute;
+        left: 50%; top: 50%;
+        width: 32px; height: 32px;
+        margin: -16px 0 0 -16px;
+        border-radius: 50%;
+        border: 2px solid var(--radar-color);
+        opacity: 0;
+        animation: radar-pulse 1800ms ease-out infinite;
+      }
+      #pulse-radar .ring.r2 { animation-delay: 600ms; }
+      #pulse-radar .ring.r3 { animation-delay: 1200ms; }
+      #pulse-radar .core {
+        position: absolute;
+        left: 50%; top: 50%;
+        width: 10px; height: 10px;
+        margin: -5px 0 0 -5px;
+        border-radius: 50%;
+        background: var(--radar-color);
+        box-shadow: 0 0 12px rgba(20, 184, 166, 0.55);
+      }
+      @keyframes radar-pulse {
+        0%   { transform: scale(0.4); opacity: 0.7; }
+        70%  { opacity: 0.15; }
+        100% { transform: scale(3.6); opacity: 0; }
+      }
+      /* Плавное появление/затухание всего блока при show/hide из RN. */
+      #pulse-radar.on { display: block; opacity: 1; transition: opacity 400ms ease-out; }
+      #pulse-radar.off { opacity: 0; transition: opacity 400ms ease-out; }
       /* Pickup pin: классический teardrop (Google-Maps style). Острый
          кончик внизу — анкор 'bottom' ставит его прямо на координату
          подачи. Раньше был triangle-up + stem, визуально неотличимый
@@ -161,6 +218,12 @@ function buildHtml(apiKey: string, styleName: string, center: [number, number], 
   </head>
   <body>
     <div id="map"></div>
+    <div id="pulse-radar" aria-hidden="true">
+      <div class="ring r1"></div>
+      <div class="ring r2"></div>
+      <div class="ring r3"></div>
+      <div class="core"></div>
+    </div>
     <script>
       var __map = null;
       var __pickupMarker = null;
@@ -574,6 +637,60 @@ function buildHtml(apiKey: string, styleName: string, center: [number, number], 
         __map.easeTo(opts);
       }
 
+      // ═══ Pulse-radar controller ═══
+      // Держит DOM-элемент #pulse-radar синхронно с pickup lng/lat и
+      // текущей фазой заказа. Обычный DOM-overlay поверх canvas'а
+      // MapLibre — не гео-слой, никаких source/layer. Позиция берётся
+      // через __map.project(pickup) — синхронно с move камеры.
+      var __radarEl = null;
+      var __radarPhase = 'idle';
+      var __radarPickup = null; // { lat, lng } или null
+      var __radarFadeTimeout = null;
+      function ensureRadarEl() {
+        if (!__radarEl) __radarEl = document.getElementById('pulse-radar');
+        return __radarEl;
+      }
+      function positionRadar() {
+        var el = ensureRadarEl();
+        if (!el || !__map || !__radarPickup) return;
+        if (__radarPhase === 'idle') return;
+        var p = __map.project([__radarPickup.lng, __radarPickup.lat]);
+        // translate3d вместо left/top — GPU-компонент, отдельный
+        // composite-layer, не триггерит layout на каждый move.
+        el.style.transform = 'translate3d(' + p.x + 'px, ' + p.y + 'px, 0)';
+      }
+      function setMapPhase(phase, pickup) {
+        var el = ensureRadarEl();
+        if (!el) return;
+        if (pickup && typeof pickup.latitude === 'number' && typeof pickup.longitude === 'number') {
+          __radarPickup = { lat: pickup.latitude, lng: pickup.longitude };
+        }
+        var prev = __radarPhase;
+        __radarPhase = phase || 'idle';
+        if (__radarFadeTimeout) { clearTimeout(__radarFadeTimeout); __radarFadeTimeout = null; }
+        if (__radarPhase === 'searching') {
+          if (!__radarPickup) return; // без pickup показывать нечего
+          positionRadar();
+          el.classList.remove('off');
+          el.classList.add('on');
+        } else {
+          if (prev !== 'searching') return;
+          // fade-out 400мс, потом display:none — CSS-анимация
+          // полностью останавливается (браузер её не тикает),
+          // нулевой CPU в фоне.
+          el.classList.remove('on');
+          el.classList.add('off');
+          __radarFadeTimeout = setTimeout(function () {
+            if (__radarPhase !== 'searching') {
+              el.classList.remove('off');
+              el.style.display = 'none';
+              // Reset для следующей активации.
+              setTimeout(function () { el.style.display = ''; }, 20);
+            }
+          }, 420);
+        }
+      }
+
       window.applyCommand = function (cmd) {
         try {
           switch (cmd.type) {
@@ -581,6 +698,7 @@ function buildHtml(apiKey: string, styleName: string, center: [number, number], 
             case 'setUser': setUser(cmd.coord); break;
             case 'setDriver': setDriver(cmd.coord); break;
             case 'setPadding': setPadding(cmd.padding); break;
+            case 'setMapPhase': setMapPhase(cmd.phase, cmd.pickup); break;
             case 'animateToRegion': animateToRegion(cmd.coord, cmd.duration, cmd.delta); break;
           }
         } catch (e) {
@@ -606,6 +724,10 @@ function buildHtml(apiKey: string, styleName: string, center: [number, number], 
             __styleLoaded = true;
             post({ type: 'ready' });
           });
+          // Pulse-radar следует за pickup-точкой при панораме/зуме.
+          // Событие 'move' на MapLibre эмитится каждый кадр pan/zoom —
+          // положение колец обновляется синхронно, без rAF со стороны JS.
+          __map.on('move', positionRadar);
           __map.on('error', function (e) {
             var parts = [];
             try {
@@ -658,6 +780,7 @@ const MapLibreMapView = forwardRef<MapLibreMapHandle, Props>(function MapLibreMa
     pickupDraggable = false,
     onPickupDragEnd,
     driver = null,
+    mapPhase = 'idle',
     style,
     onReady,
   },
@@ -739,8 +862,20 @@ const MapLibreMapView = forwardRef<MapLibreMapHandle, Props>(function MapLibreMa
   }, [pickup, pickupDraggable, dispatch]);
 
   useEffect(() => {
-    dispatch({ type: 'setDriver', coord: driver });
-  }, [driver, dispatch]);
+    // В phase 'searching' маркер водителя скрыт даже если из RN пришли
+    // координаты (пришёл offer конкретному водителю, но он ещё не принял).
+    // Иначе машина появлялась бы и исчезала при отказе — плохой UX
+    // (см. ТЗ по mapPhase).
+    dispatch({ type: 'setDriver', coord: mapPhase === 'searching' ? null : driver });
+  }, [driver, mapPhase, dispatch]);
+
+  useEffect(() => {
+    dispatch({
+      type: 'setMapPhase',
+      phase: mapPhase,
+      pickup,
+    });
+  }, [mapPhase, pickup, dispatch]);
 
   useEffect(() => {
     dispatch({
@@ -900,7 +1035,8 @@ export default React.memo(MapLibreMapView, (prev, next) => {
     coordEq(prev.driver, next.driver) &&
     (prev.driver?.heading ?? null) === (next.driver?.heading ?? null) &&
     (prev.driver?.velLngPerMs ?? null) === (next.driver?.velLngPerMs ?? null) &&
-    (prev.driver?.velLatPerMs ?? null) === (next.driver?.velLatPerMs ?? null)
+    (prev.driver?.velLatPerMs ?? null) === (next.driver?.velLatPerMs ?? null) &&
+    (prev.mapPhase ?? 'idle') === (next.mapPhase ?? 'idle')
   );
 });
 
