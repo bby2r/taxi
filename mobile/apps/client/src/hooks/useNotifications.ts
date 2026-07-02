@@ -39,22 +39,27 @@ if (Notifications && Platform.OS !== 'web') {
 
 async function ensureChannel(): Promise<void> {
   if (!Notifications || Platform.OS !== 'android') return;
-  await Notifications.setNotificationChannelAsync(CLIENT_PUSH_CHANNEL, {
+  // Настройки для СМС-стиля (обычная шторка + системный звук, без heads-up).
+  const config: Parameters<typeof Notifications.setNotificationChannelAsync>[1] = {
     name: 'События заказа',
     description: 'Водитель принял, прибыл, поездка началась/завершена, отмена.',
-    // DEFAULT = обычная шторка + системный звук СМС, без heads-up
-    // всплывающего сверху. Клиент попросил «как смски» — не громко,
-    // не как звонок.
     importance: Notifications.AndroidImportance.DEFAULT,
     sound: 'default',
-    // Короткий «вжик», не длинная тревожная серия.
     vibrationPattern: [0, 200],
     lockscreenVisibility: Notifications.AndroidNotificationVisibility.PUBLIC,
     enableLights: false,
     enableVibrate: true,
     showBadge: false,
     bypassDnd: false,
-  });
+  };
+  await Notifications.setNotificationChannelAsync(CLIENT_PUSH_CHANNEL, config);
+  // Fallback-канал 'default': сюда попадает push, если backend не задеплоен
+  // с channelId-фиксом ExpoPushService (шлёт notification без channelId).
+  // Android 8+ иначе отправляет такой push в системный «Miscellaneous»,
+  // который у пользователя часто отключён — тогда шторка не появляется
+  // вообще. Явно создаём канал 'default' с теми же настройками, чтобы
+  // клиент не оставался без уведомления до раскатки backend'а.
+  await Notifications.setNotificationChannelAsync('default', config);
 }
 
 async function registerToken(): Promise<void> {
