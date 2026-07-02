@@ -19,7 +19,7 @@ class CreateIntercityBookingRequest extends FormRequest
         return [
             'route_id' => ['required', 'integer', 'exists:intercity_routes,id'],
             'departure_date' => ['required', 'date', 'after_or_equal:today'],
-            'seats_count' => ['required', 'integer', 'between:1,3'],
+            'seats_count' => ['required', 'integer', 'between:1,4'],
             'pickup_address' => ['nullable', 'string', 'max:500'],
         ];
     }

@@ -85,7 +85,7 @@ class ClientIntercityController extends Controller
     {
         $validated = $request->validate([
             'trip_id' => ['required', 'integer', 'exists:intercity_trips,id'],
-            'seats_count' => ['required', 'integer', 'between:1,3'],
+            'seats_count' => ['required', 'integer', 'between:1,4'],
             'pickup_address' => ['nullable', 'string', 'max:500'],
         ]);
 
