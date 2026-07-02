@@ -29,9 +29,16 @@ class ExpoPushService
         // соответственно). Без channelId push уходит в системный
         // дефолтный канал, который у клиента был беззвучный.
         if (! isset($options['channelId'])) {
+            // Для водителя разделяем два канала:
+            // - driver_offers_v3 — offer'ы (ringing, громкий order_arrived.wav).
+            //   Отправляются через sendOfferToDriver(), не через sendToUser().
+            // - driver_events_v1 — cancelled / completed / прочие информ.
+            //   уведомления. Тихий СМС-стиль (importance DEFAULT, sound=default).
+            //   Раньше все шли в driver_offers_v3 и водитель слышал громкий
+            //   рингtone при отмене — пользователь просит «как СМС».
             $options['channelId'] = $user->role === UserRole::Client
                 ? 'client_order_push_v2'
-                : 'driver_offers_v3';
+                : 'driver_events_v1';
         }
 
         // По умолчанию Expo Push использует FCM priority=normal, а его

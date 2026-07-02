@@ -13,6 +13,12 @@ let moduleLoadError: string | null = null;
 // been created — the only way to apply changes without an app reinstall
 // is to give the channel a NEW id.
 const DRIVER_OFFER_CHANNEL = 'driver_offers_v3';
+// Тихий канал для non-offer уведомлений (отмена клиентом, завершение,
+// сообщения от диспетчера). СМС-стиль: обычная шторка + системный звук
+// уведомления, DEFAULT importance. Раньше все backend push уходили
+// в driver_offers_v3 и водитель слышал громкий рингtone при отмене
+// заказа — пользователь просит стандартный звук уведомления.
+const DRIVER_EVENTS_CHANNEL = 'driver_events_v1';
 const RIDE_OFFER_CATEGORY = 'ride_offer';
 const PROJECT_ID = '6a367005-44a7-40d0-a95a-ec0d133c661c';
 
@@ -149,6 +155,23 @@ async function configureAndroidChannel(): Promise<void> {
     // audioAttributes but the native side reads it.
     ...(audioAttributes ? { audioAttributes } : {}),
   } as Parameters<typeof Notifications.setNotificationChannelAsync>[1]);
+
+  // Тихий канал для отмены / завершения / прочих информ. push'ей.
+  const eventsConfig: Parameters<typeof Notifications.setNotificationChannelAsync>[1] = {
+    name: 'События заказа',
+    description: 'Отмена клиентом, завершение поездки, сообщения от диспетчера.',
+    importance: Notifications.AndroidImportance.DEFAULT,
+    sound: 'default',
+    vibrationPattern: [0, 200],
+    lockscreenVisibility: Notifications.AndroidNotificationVisibility.PUBLIC,
+    enableLights: false,
+    enableVibrate: true,
+    showBadge: false,
+    bypassDnd: false,
+  };
+  await Notifications.setNotificationChannelAsync(DRIVER_EVENTS_CHANNEL, eventsConfig);
+  // Fallback 'default' — как у клиента, пока backend не задеплоен.
+  await Notifications.setNotificationChannelAsync('default', eventsConfig);
 }
 
 export async function registerToken(): Promise<{ ok: boolean; reason?: string; token?: string }> {
