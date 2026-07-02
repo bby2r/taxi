@@ -700,7 +700,11 @@ export default function HomeScreen(): React.ReactNode {
         {(state.phase === 'accepted' || state.phase === 'arrived' || state.phase === 'in_progress') &&
           state.order.driver && (
             <>
-              <DriverCard driver={state.order.driver} status={state.phase} />
+              <DriverCard
+                driver={state.order.driver}
+                status={state.phase}
+                expectedArrivalAt={state.order.expected_arrival_at ?? null}
+              />
               {(state.phase === 'accepted' || state.phase === 'arrived') && (
                 <ActionButton
                   title="Отменить"

@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import {
   View,
   Text,
@@ -25,6 +25,17 @@ import CarPhoto from './CarPhoto';
 interface DriverCardProps {
   driver: Driver;
   status: 'accepted' | 'arrived' | 'in_progress';
+  // Расчётное время прибытия водителя (ISO). Ставится сервером
+  // однократно после первого reportEta от driver-app'а — durationSeconds
+  // из его же ORS/OSRM-маршрута. У клиента идёт тикающий обратный
+  // отсчёт «mm:ss до вас», при просрочке — красный «Опоздание».
+  expectedArrivalAt?: string | null;
+}
+
+function formatMmSs(totalSeconds: number): string {
+  const mm = Math.floor(totalSeconds / 60);
+  const ss = totalSeconds % 60;
+  return `${mm}:${ss.toString().padStart(2, '0')}`;
 }
 
 function getStatusInfo(status: DriverCardProps['status']): {
@@ -58,10 +69,25 @@ function getStatusInfo(status: DriverCardProps['status']): {
   }
 }
 
-function DriverCardComponent({ driver, status }: DriverCardProps): React.ReactNode {
+function DriverCardComponent({ driver, status, expectedArrivalAt }: DriverCardProps): React.ReactNode {
   const statusInfo = getStatusInfo(status);
   const initial = driver.name.charAt(0).toUpperCase();
   const hasFullPlate = isFullPlate(driver.car_number);
+
+  // Тикер для обратного отсчёта: раз в секунду, только пока фаза
+  // 'accepted' (водитель едет к клиенту) и есть дедлайн. На arrived/
+  // in_progress отсчёт не имеет смысла и мы его прячем.
+  const showCountdown = status === 'accepted' && !!expectedArrivalAt;
+  const [nowMs, setNowMs] = useState<number>(() => Date.now());
+  useEffect(() => {
+    if (!showCountdown) return;
+    const id = setInterval(() => setNowMs(Date.now()), 1000);
+    return () => clearInterval(id);
+  }, [showCountdown]);
+  const arrivalDeltaSeconds = showCountdown && expectedArrivalAt
+    ? Math.round((new Date(expectedArrivalAt).getTime() - nowMs) / 1000)
+    : null;
+  const isLate = arrivalDeltaSeconds !== null && arrivalDeltaSeconds < 0;
 
   const handleCall = (): void => {
     Haptics.light();
@@ -71,17 +97,43 @@ function DriverCardComponent({ driver, status }: DriverCardProps): React.ReactNo
   return (
     <FadeInView style={styles.outer}>
       <View style={styles.card}>
-        <FadeInView
-          key={status}
-          translateY={6}
-          duration={280}
-          style={[styles.statusPill, { backgroundColor: statusInfo.bg }]}
-        >
-          <Icon name={statusInfo.icon} size={13} color={statusInfo.color} strokeWidth={2.4} />
-          <Text style={[styles.statusLabel, { color: statusInfo.color }]}>
-            {statusInfo.label}
-          </Text>
-        </FadeInView>
+        <View style={styles.statusRow}>
+          <FadeInView
+            key={status}
+            translateY={6}
+            duration={280}
+            style={[styles.statusPill, { backgroundColor: statusInfo.bg }]}
+          >
+            <Icon name={statusInfo.icon} size={13} color={statusInfo.color} strokeWidth={2.4} />
+            <Text style={[styles.statusLabel, { color: statusInfo.color }]}>
+              {statusInfo.label}
+            </Text>
+          </FadeInView>
+          {arrivalDeltaSeconds !== null && (
+            <View
+              style={[
+                styles.etaPill,
+                isLate ? styles.etaPillLate : styles.etaPillOk,
+              ]}
+            >
+              <Icon
+                name={isLate ? 'alert' : 'clock'}
+                size={12}
+                color={isLate ? ClientColors.danger : ClientColors.primaryDark}
+                strokeWidth={2.6}
+              />
+              <Text
+                style={[
+                  styles.etaText,
+                  isLate ? styles.etaTextLate : styles.etaTextOk,
+                ]}
+              >
+                {isLate ? 'Опозд ' : ''}
+                {formatMmSs(Math.abs(arrivalDeltaSeconds))}
+              </Text>
+            </View>
+          )}
+        </View>
 
         <View style={styles.heroRow}>
           <PopInView fromScale={0.85} duration={340}>
@@ -184,20 +236,53 @@ const styles = StyleSheet.create({
     elevation: 6,
     overflow: 'hidden',
   },
+  statusRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 10,
+    gap: 8,
+  },
   statusPill: {
-    alignSelf: 'flex-start',
     flexDirection: 'row',
     alignItems: 'center',
     paddingHorizontal: 9,
     paddingVertical: 4,
     borderRadius: Radius.round,
-    marginBottom: 10,
     gap: 5,
   },
   statusLabel: {
     fontSize: 11,
     fontWeight: '700' as const,
     letterSpacing: 0.2,
+  },
+  // ETA-таблетка «до вас mm:ss» рядом со статусом, справа. Тикает live,
+  // при просрочке — красная c иконкой alert.
+  etaPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: Radius.round,
+    gap: 4,
+  },
+  etaPillOk: {
+    backgroundColor: ClientColors.primaryTint,
+  },
+  etaPillLate: {
+    backgroundColor: '#FFE4E4',
+  },
+  etaText: {
+    fontSize: 11,
+    fontWeight: '800' as const,
+    letterSpacing: 0.3,
+    fontVariant: ['tabular-nums'],
+  },
+  etaTextOk: {
+    color: ClientColors.primaryDark,
+  },
+  etaTextLate: {
+    color: ClientColors.danger,
   },
   heroRow: {
     flexDirection: 'row',

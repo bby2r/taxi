@@ -459,14 +459,26 @@ export default function OrderActiveScreen(): React.ReactNode {
       arrived: 'Начать',
       in_progress: 'Завершить',
     } as const;
+    // На фазе active показываем в overlay «живой» обратный отсчёт до
+    // клиента (mm:ss) или «Опозд» — этого раньше не было на прозрачной
+    // карточке, только в fullscreen'e экрана. Раз в секунду шлём
+    // updateActiveOrderOverlay ниже, чтобы native-текст тикал live.
+    let etaText: string;
+    if (state.phase === 'active' && arrivalDeltaSeconds !== null) {
+      etaText = arrivalDeltaSeconds < 0
+        ? `Опозд ${formatMmSs(Math.abs(arrivalDeltaSeconds))}`
+        : `До вас ${formatMmSs(arrivalDeltaSeconds)}`;
+    } else if (route) {
+      etaText = `${formatDuration(route.durationSeconds)} · ${formatDistance(route.distanceMeters)}`;
+    } else {
+      etaText = '';
+    }
     return {
       orderId: order.id,
       clientName: order.client.name ?? 'Клиент',
       ratingText: undefined,
       statusText: phaseLabel[state.phase],
-      etaText: route
-        ? `${formatDuration(route.durationSeconds)} · ${formatDistance(route.distanceMeters)}`
-        : '',
+      etaText,
       pickupAddress: order.pickup_address ?? '',
       dropoffAddress: order.dropoff_address ?? undefined,
       priceText: `${order.price} сом`,
@@ -475,7 +487,7 @@ export default function OrderActiveScreen(): React.ReactNode {
       // На overlay это рендерится как полупрозрачная неактивная кнопка.
       primaryDisabled: state.phase === 'active' && !canArrive,
     };
-  }, [order, state.phase, route, canArrive]);
+  }, [order, state.phase, route, canArrive, arrivalDeltaSeconds]);
 
   // Дедуп идентичных payload'ов: RN bridge не диффает аргументы и сериализует
   // каждый вызов. Около границы canArrive (150м) рендеры идут ~1Hz с тем же
@@ -891,28 +903,9 @@ export default function OrderActiveScreen(): React.ReactNode {
         </View>
       )}
 
-      {/* Обратный отсчёт до прибытия / красный индикатор «не успеваю».
-          arrivalDeltaSeconds — положителен пока успеваем, отрицателен на
-          опоздание. Показываем только на фазе active. */}
-      {arrivalDeltaSeconds !== null && (
-        <View
-          style={[
-            styles.etaChip,
-            arrivalDeltaSeconds < 0 ? styles.etaChipLate : styles.etaChipOk,
-          ]}
-          pointerEvents="none"
-        >
-          <Text
-            style={[
-              styles.etaChipText,
-              arrivalDeltaSeconds < 0 && styles.etaChipTextLate,
-            ]}
-          >
-            {arrivalDeltaSeconds < 0 ? 'Опоздание ' : 'До прибытия '}
-            {formatMmSs(Math.abs(arrivalDeltaSeconds))}
-          </Text>
-        </View>
-      )}
+      {/* Обратный отсчёт живёт теперь на прозрачной карточке overlay
+          (etaText в payload'e), убран отсюда чтобы не дублировать
+          информацию и не тратить место на full-screen карте. */}
 
       {/* Re-engage follow camera. Shows only when driver opted out of
           follow by panning the map mid-navigation. Tap snaps back to
