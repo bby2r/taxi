@@ -174,7 +174,10 @@ class DriverController extends Controller
     public function reportEta(Request $request, Order $order): JsonResponse
     {
         $validated = $request->validate([
-            'eta_seconds' => ['required', 'integer', 'min:0', 'max:7200'],
+            // min:30 — защита от «мгновенного опоздания»: если клиент прислал
+            // 0 (route не рассчитался), expected_arrival_at был бы установлен
+            // на now() и через секунду UI показывал бы «опоздание».
+            'eta_seconds' => ['required', 'integer', 'min:30', 'max:7200'],
         ]);
 
         if ($order->driver_id !== $request->user()->id) {

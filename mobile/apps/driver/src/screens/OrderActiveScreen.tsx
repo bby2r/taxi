@@ -397,6 +397,12 @@ export default function OrderActiveScreen(): React.ReactNode {
   useEffect(() => {
     if (state.phase !== 'active' || !order) return;
     if (!route) return;
+    // Защита от 0-длительности: если ORS/OSRM ответил быстро, но
+    // маршрут ещё не свернулся (промежуточное состояние), duration может
+    // быть 0 или отрицательное. Не отправляем — сервер сохранит
+    // expected_arrival_at=now() и клиент увидит «опоздание» через
+    // секунду. Ждём валидное значение >= 30 сек.
+    if (!Number.isFinite(route.durationSeconds) || route.durationSeconds < 30) return;
     if (order.expected_arrival_at) return; // уже зафиксирован сервером
     if (reportedEtaRef.current === order.id) return;
     reportedEtaRef.current = order.id;

@@ -100,15 +100,17 @@ object ActiveOrderOverlayManager {
         }
     }
 
-    // Защита от зависшего overlay: если за 60 секунд не пришло ни одного
-    // update'а — значит JS-сторона мертва (приложение убито OEM'ом /
-    // потеряла подписку Pusher / не пересчитала useEffect). Гасим сами,
-    // чтобы overlay не висел поверх Instagram после реально-завершённого
-    // заказа.
+    // Защита от зависшего overlay: если за 10 минут не пришло ни одного
+    // update'а — значит JS-сторона мертва. Прежние 60 сек были слишком
+    // жёсткими: RN замораживает setInterval в background на большинстве
+    // OEM'ов (Xiaomi/Huawei/Oppo), heartbeat из JS не тикает пока
+    // водитель едет с телефоном в кармане — карточка исчезала посреди
+    // заказа. 10 минут даёт запас на все реалистичные background-паузы,
+    // при этом гарантирует что «мёртвый» overlay всё-таки уйдёт.
     private val autoHideRunnable = Runnable { hideOnMain() }
     private fun scheduleAutoHide() {
         mainHandler.removeCallbacks(autoHideRunnable)
-        mainHandler.postDelayed(autoHideRunnable, 60_000)
+        mainHandler.postDelayed(autoHideRunnable, 600_000)
     }
     private fun cancelAutoHide() {
         mainHandler.removeCallbacks(autoHideRunnable)

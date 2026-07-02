@@ -264,11 +264,22 @@ export default function ProfileScreen(): React.ReactNode {
             accessibilityRole="button"
             accessibilityLabel="Загрузить фото профиля"
           >
-            {profile?.photo_url ? (
-              <Image source={{ uri: profile.photo_url }} style={styles.avatarImage} />
-            ) : (
-              <Text style={styles.avatarText}>{initial}</Text>
-            )}
+            {(() => {
+              // UserResource в текущей версии backend'а кладёт photo_url
+              // внутрь driver_profile.photo_url — старая версия клиента
+              // читала плоское profile.photo_url и всегда показывала
+              // инициалы. Поддерживаем обе структуры для forward-совместимости.
+              const rawProfile = profile as unknown as {
+                photo_url?: string | null;
+                driver_profile?: { photo_url?: string | null };
+              } | null;
+              const photoUrl = rawProfile?.photo_url ?? rawProfile?.driver_profile?.photo_url ?? null;
+              return photoUrl ? (
+                <Image source={{ uri: photoUrl }} style={styles.avatarImage} />
+              ) : (
+                <Text style={styles.avatarText}>{initial}</Text>
+              );
+            })()}
             <View style={styles.avatarEdit}>
               {photoUploading ? (
                 <ActivityIndicator size="small" color={DriverColors.white} />
