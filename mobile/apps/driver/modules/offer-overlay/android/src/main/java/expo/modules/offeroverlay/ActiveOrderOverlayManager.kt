@@ -42,27 +42,35 @@ object ActiveOrderOverlayManager {
     private var params: WindowManager.LayoutParams? = null
     private var activeContext: Context? = null
     private var currentOrderId: Int = -1
+    private var expanded = false
     private val mainHandler = Handler(Looper.getMainLooper())
 
     /**
-     * Опережает LAUNCHER Activity данными deep-link'а. singleTask
-     * launchMode + FLAG_ACTIVITY_NEW_TASK гарантирует, что existing
-     * instance получит onNewIntent(); RN Linking конвертирует intent
-     * data в 'url' event, который useNotifications уже слушает.
+     * ACTION_VIEW + scheme uri → Android intent-resolver находит
+     * MainActivity через intent-filter, который Expo prebuild
+     * автоматически генерит из app.json:scheme. RN Linking конвертирует
+     * intent data в 'url' event для JS. singleTask + NEW_TASK
+     * гарантирует что existing instance получит onNewIntent().
+     *
+     * Прежняя попытка через getLaunchIntentForPackage + intent.data не
+     * работала: LAUNCHER intent имеет ACTION_MAIN + CATEGORY_LAUNCHER,
+     * Android игнорирует data на нём и Linking.getInitialURL возвращал
+     * null — визуально app открывался, но ни один action не долетал.
      */
     private fun launchAppForOverlayAction(context: Context, action: String, orderId: Int) {
-        val launch = context.packageManager.getLaunchIntentForPackage(context.packageName) ?: return
-        launch.data = Uri.parse("aliftaxidriver://active-order/$action?order_id=$orderId")
-        launch.addFlags(
+        val uri = Uri.parse("aliftaxidriver://active-order/$action?order_id=$orderId")
+        val intent = Intent(Intent.ACTION_VIEW, uri)
+        intent.setPackage(context.packageName)
+        intent.addFlags(
             Intent.FLAG_ACTIVITY_NEW_TASK or
                 Intent.FLAG_ACTIVITY_CLEAR_TOP or
                 Intent.FLAG_ACTIVITY_SINGLE_TOP,
         )
         try {
-            context.startActivity(launch)
+            context.startActivity(intent)
         } catch (_: Exception) {
-            // Actiivty недоступна — fallback пути нет, но и без action'а
-            // приложение просто не откроется. Пользователь пере-тапнет.
+            // MainActivity не найдена intent-resolver'ом — на здоровом
+            // билде такого не бывает.
         }
     }
 
@@ -134,7 +142,6 @@ object ActiveOrderOverlayManager {
             cardBg.setBackgroundResource(R.drawable.active_order_card_bg_blur)
         }
 
-        ensureExpanded(view)
         bindActions(view, orderId)
         applyPayload(payload, view)
 
@@ -241,11 +248,11 @@ object ActiveOrderOverlayManager {
                 }
                 MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> {
                     if (!dragging && event.action == MotionEvent.ACTION_UP) {
-                        // Тап (не drag) по «шапке» карточки → открываем app.
-                        // Именно то, что просит пользователь: «когда нажимаешь
-                        // где инфа клиента — надо чтоб заходил в само
-                        // приложение через это прозрачное».
-                        launchAppForOverlayAction(view.context.applicationContext, "open", currentOrderId)
+                        // Тап (не drag) по body → сворачивает/разворачивает
+                        // карточку. В app'у водитель попадает через любую
+                        // из кнопок (Позвонить / Прибыл / Открыть в
+                        // навигаторе) — они уходят через deep-link.
+                        toggleExpanded(view)
                     }
                     dragging = false
                     true
@@ -277,15 +284,10 @@ object ActiveOrderOverlayManager {
         }
     }
 
-    /**
-     * Всегда показываем «expanded» вид (полная карточка с кнопками).
-     * Раньше карточка стартовала в collapsed виде, тап по body
-     * разворачивал её; теперь единственный тап открывает приложение —
-     * expand-toggle больше не нужен.
-     */
-    private fun ensureExpanded(view: View) {
-        view.findViewById<View>(R.id.active_collapsed_block)?.visibility = View.GONE
-        view.findViewById<View>(R.id.active_expanded_block)?.visibility = View.VISIBLE
+    private fun toggleExpanded(view: View) {
+        expanded = !expanded
+        view.findViewById<View>(R.id.active_collapsed_block)?.visibility = if (expanded) View.GONE else View.VISIBLE
+        view.findViewById<View>(R.id.active_expanded_block)?.visibility = if (expanded) View.VISIBLE else View.GONE
     }
 
     private var primaryDisabled = false
@@ -345,6 +347,7 @@ object ActiveOrderOverlayManager {
         params = null
         activeContext = null
         currentOrderId = -1
+        expanded = false
     }
 
     private fun dp(context: Context, value: Int): Int =
