@@ -89,12 +89,17 @@ function DriverCardComponent({ driver, status }: DriverCardProps): React.ReactNo
               {driver.photo_url ? (
                 <Image
                   source={{ uri: driver.photo_url }}
-                  style={styles.avatar}
+                  style={styles.avatarImage}
                   accessibilityLabel={`Фото водителя ${driver.name}`}
                 />
               ) : (
-                <View style={styles.avatar}>
+                <View style={styles.avatarFallback}>
                   <Text style={styles.avatarText}>{initial}</Text>
+                </View>
+              )}
+              {driver.photo_url && (
+                <View style={styles.verifiedBadge} pointerEvents="none">
+                  <Icon name="check" size={11} color={ClientColors.white} strokeWidth={3.2} />
                 </View>
               )}
             </View>
@@ -200,27 +205,58 @@ const styles = StyleSheet.create({
     gap: 10,
   },
   avatarRing: {
+    width: 60,
+    height: 60,
+    borderRadius: 30,
+    backgroundColor: ClientColors.white,
+    borderWidth: 2,
+    borderColor: ClientColors.primaryTint,
+    alignItems: 'center',
+    justifyContent: 'center',
+    // Мягкая тень под фото — как в Uber/Yandex Go, добавляет глубину
+    // без ощущения «плоской» карточки, но не перекрывает соседний
+    // status pill сверху.
+    shadowColor: ClientColors.primaryDark,
+    shadowOpacity: 0.18,
+    shadowRadius: 8,
+    shadowOffset: { width: 0, height: 3 },
+    elevation: 3,
+  },
+  avatarImage: {
     width: 52,
     height: 52,
     borderRadius: 26,
-    backgroundColor: ClientColors.primaryTint,
-    padding: 2.5,
-    alignItems: 'center',
-    justifyContent: 'center',
   },
-  avatar: {
-    width: 47,
-    height: 47,
-    borderRadius: 23.5,
+  avatarFallback: {
+    width: 52,
+    height: 52,
+    borderRadius: 26,
     backgroundColor: ClientColors.primary,
     alignItems: 'center',
     justifyContent: 'center',
   },
   avatarText: {
-    fontSize: 20,
+    fontSize: 22,
     fontWeight: '700' as const,
     color: ClientColors.white,
     letterSpacing: -0.5,
+  },
+  // Зелёная checkmark-галочка в углу фото — сигнал что водитель
+  // прошёл верификацию (фото загружено = профиль подтверждён
+  // модерацией). Клиент видит «настоящего» человека, а не иконку по
+  // умолчанию.
+  verifiedBadge: {
+    position: 'absolute',
+    right: -1,
+    bottom: -1,
+    width: 20,
+    height: 20,
+    borderRadius: 10,
+    backgroundColor: ClientColors.success,
+    borderWidth: 2,
+    borderColor: ClientColors.white,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   info: {
     flex: 1,

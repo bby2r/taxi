@@ -6,6 +6,7 @@ use App\Http\Controllers\Api\V1\ClientOrderController;
 use App\Http\Controllers\Api\V1\ClientProfileController;
 use App\Http\Controllers\Api\V1\DriverController;
 use App\Http\Controllers\Api\V1\DriverIntercityController;
+use App\Http\Controllers\Api\V1\DriverPhotoController;
 use App\Http\Controllers\Api\V1\DriverProfileController;
 use App\Http\Controllers\Api\V1\RegionController;
 use Illuminate\Support\Facades\Route;
@@ -78,6 +79,7 @@ Route::prefix('v1')->middleware('auth:sanctum')->group(function () {
         Route::get('/profile', [DriverController::class, 'profile'])->name('api.v1.driver.profile');
         Route::post('/profile/request-changes', [DriverProfileController::class, 'requestChanges'])->name('api.v1.driver.profile.request-changes');
         Route::get('/profile/change-requests', [DriverProfileController::class, 'changeRequests'])->name('api.v1.driver.profile.change-requests');
+        Route::post('/profile/photo', [DriverPhotoController::class, 'upload'])->name('api.v1.driver.profile.photo.upload');
         Route::get('/stats', [DriverController::class, 'stats'])->name('api.v1.driver.stats');
         Route::get('/balance', [DriverController::class, 'balance'])->name('api.v1.driver.balance');
         Route::get('/orders/active', [DriverController::class, 'activeOrder'])->name('api.v1.driver.orders.active');
@@ -100,3 +102,11 @@ Route::prefix('v1')->middleware('auth:sanctum')->group(function () {
         Route::post('/intercity/bookings/{booking}/no-show', [DriverIntercityController::class, 'noShow'])->name('api.v1.driver.intercity.bookings.no-show');
     });
 });
+
+// Publically accessible signed URL for streaming a driver's profile photo.
+// Клиент получает готовый temporarySignedRoute через OrderResource — сам
+// endpoint без auth, но подпись действительна 24ч и привязана к user.id,
+// так что подменить или предсказать URL нельзя. Storage остаётся private.
+Route::get('/driver-photo/{user}', [DriverPhotoController::class, 'show'])
+    ->middleware('signed')
+    ->name('driver.photo');
