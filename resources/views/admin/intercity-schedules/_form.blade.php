@@ -55,9 +55,9 @@
             type="number"
             id="max_seats"
             name="max_seats"
-            value="{{ old('max_seats', $schedule?->max_seats ?? 7) }}"
+            value="{{ old('max_seats', $schedule?->max_seats ?? 4) }}"
             min="2"
-            max="15"
+            max="4"
             class="w-full rounded-lg border border-gray-300 px-4 py-2.5 text-sm focus:border-amber-400 focus:ring-2 focus:ring-amber-400"
         >
         @error('max_seats') <p class="mt-1 text-sm text-red-600">{{ $message }}</p> @enderror

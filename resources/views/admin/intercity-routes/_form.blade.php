@@ -26,8 +26,8 @@
 <div class="mb-5 grid grid-cols-2 gap-4">
     <div>
         <label for="max_seats" class="mb-1.5 block text-sm font-medium text-gray-700">Мест в машине</label>
-        <input type="number" id="max_seats" name="max_seats" value="{{ old('max_seats', $route?->max_seats ?? 4) }}" min="2" max="15" class="w-full rounded-lg border border-gray-300 px-4 py-2.5 text-sm focus:border-amber-400 focus:ring-2 focus:ring-amber-400">
-        <p class="mt-1 text-xs text-gray-500">2–4 для седана, 6–8 для минивэна, до 15 для микроавтобуса</p>
+        <input type="number" id="max_seats" name="max_seats" value="{{ old('max_seats', $route?->max_seats ?? 4) }}" min="2" max="4" class="w-full rounded-lg border border-gray-300 px-4 py-2.5 text-sm focus:border-amber-400 focus:ring-2 focus:ring-amber-400">
+        <p class="mt-1 text-xs text-gray-500">Максимум 4 — седан-класс (2, 3 или 4 места).</p>
         @error('max_seats') <p class="mt-1 text-sm text-red-600">{{ $message }}</p> @enderror
     </div>
     <div>

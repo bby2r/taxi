@@ -76,7 +76,7 @@ class IntercityRouteController extends Controller
         return [
             'from_region_id' => ['required', 'integer', 'exists:regions,id', 'different:to_region_id'],
             'to_region_id' => ['required', 'integer', 'exists:regions,id'],
-            'max_seats' => ['required', 'integer', 'between:2,15'],
+            'max_seats' => ['required', 'integer', 'between:2,4'],
             'price_per_seat' => ['required', 'integer', 'min:0'],
             'is_active' => ['boolean'],
             'sort_order' => ['integer', 'min:0'],

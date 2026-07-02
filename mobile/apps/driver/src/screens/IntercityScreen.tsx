@@ -518,29 +518,39 @@ const styles = StyleSheet.create({
   offerMetaRow: {
     flexDirection: 'row',
     gap: 8,
-    marginBottom: 10,
+    marginBottom: 12,
   },
   offerMetaCell: {
     flex: 1,
     paddingHorizontal: 10,
-    paddingVertical: 10,
-    borderRadius: 12,
+    paddingVertical: 12,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: DriverColors.border,
     backgroundColor: DriverColors.background,
     alignItems: 'center',
   },
   offerMetaTotal: {
-    backgroundColor: DriverColors.backgroundSecondary,
+    borderColor: DriverColors.primary,
+    // Тёплый amber-tint под DriverColors.primary (#FBBF24). Отдельного
+    // token'а нет — inline rgba, чтобы «свободно» бросалось в глаза
+    // на тёмной карте водителя.
+    backgroundColor: 'rgba(251, 191, 36, 0.18)',
   },
   offerMetaLabel: {
-    fontSize: 11,
+    fontSize: 10,
     color: DriverColors.textSecondary,
     fontWeight: '600' as const,
+    letterSpacing: 0.4,
+    textTransform: 'uppercase' as const,
   },
   offerMetaValue: {
-    fontSize: 16,
+    fontSize: 20,
     fontWeight: '800' as const,
     color: DriverColors.textPrimary,
-    marginTop: 4,
+    marginTop: 6,
+    letterSpacing: -0.3,
+    lineHeight: 22,
   },
   offerMetaTotalValue: {
     color: DriverColors.primaryDark,

@@ -95,7 +95,7 @@ class IntercityScheduleController extends Controller
             'days_of_week' => ['required', 'array', 'min:1'],
             'days_of_week.*' => ['integer', 'between:0,6'],
             'departure_time' => ['required', 'date_format:H:i'],
-            'max_seats' => ['required', 'integer', 'between:2,15'],
+            'max_seats' => ['required', 'integer', 'between:2,4'],
             'price_per_seat' => ['required', 'integer', 'min:0'],
             'is_active' => ['sometimes', 'boolean'],
         ]);

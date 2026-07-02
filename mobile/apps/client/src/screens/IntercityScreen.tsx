@@ -438,7 +438,11 @@ function BookingModal({
   if (!slot) return null;
 
   const free = slot.max_seats - slot.booked_seats;
-  const maxBookable = Math.min(3, free);
+  // Cap = размер седана. Если админ настроит 3-местный тариф — брать
+  // можно всё что осталось; при 4-местном — тоже до 4 (обычно 1-2
+  // пассажира, но семья из 4 может забрать машину целиком).
+  const CAB_CAP = 4;
+  const maxBookable = Math.min(CAB_CAP, free);
   const total = slot.price_per_seat * seats;
 
   return (
@@ -472,9 +476,10 @@ function BookingModal({
 
           <Text style={[styles.modalLabel, { marginTop: Spacing.xxl }]}>Сколько мест?</Text>
           <View style={styles.seatsRow}>
-            {[1, 2, 3].map((n) => {
+            {[1, 2, 3, 4].map((n) => {
               const disabled = n > maxBookable;
               const active = seats === n;
+              const suffix = n === 1 ? 'место' : 'места';
               return (
                 <TouchableOpacity
                   key={n}
@@ -495,6 +500,15 @@ function BookingModal({
                     ]}
                   >
                     {n}
+                  </Text>
+                  <Text
+                    style={[
+                      styles.seatChipSuffix,
+                      active && styles.seatChipSuffixActive,
+                      disabled && styles.seatChipTextDisabled,
+                    ]}
+                  >
+                    {suffix}
                   </Text>
                 </TouchableOpacity>
               );
@@ -824,27 +838,44 @@ const styles = StyleSheet.create({
     color: ClientColors.textSecondary,
     marginBottom: 10,
   },
-  seatsRow: { flexDirection: 'row', gap: Spacing.md },
+  seatsRow: { flexDirection: 'row', gap: 10 },
   seatChip: {
     flex: 1,
-    height: 52,
-    borderRadius: Radius.md,
-    borderWidth: 1,
+    height: 74,
+    borderRadius: 16,
+    borderWidth: 1.5,
     borderColor: ClientColors.border,
     backgroundColor: ClientColors.cardBackground,
     alignItems: 'center',
     justifyContent: 'center',
+    paddingVertical: 8,
   },
   seatChipActive: {
     borderColor: ClientColors.primary,
     backgroundColor: ClientColors.primaryTint,
+    // subtle lift, чтоб активный чип «выпрыгивал» из ряда
+    shadowColor: ClientColors.primary,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.18,
+    shadowRadius: 10,
+    elevation: 3,
   },
-  seatChipDisabled: { opacity: 0.4 },
+  seatChipDisabled: { opacity: 0.35 },
   seatChipText: {
-    fontSize: 22,
+    fontSize: 24,
     fontWeight: '700' as const,
     color: ClientColors.dark,
+    letterSpacing: -0.3,
+    lineHeight: 28,
   },
+  seatChipSuffix: {
+    fontSize: 11,
+    fontWeight: '600' as const,
+    color: ClientColors.textMuted,
+    marginTop: 2,
+    letterSpacing: 0.2,
+  },
+  seatChipSuffixActive: { color: ClientColors.primaryDark, opacity: 0.85 },
   seatChipTextActive: { color: ClientColors.primaryDark },
   seatChipTextDisabled: { color: ClientColors.textMuted },
   priceCard: {
