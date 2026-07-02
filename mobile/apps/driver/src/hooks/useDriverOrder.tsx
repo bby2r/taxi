@@ -315,13 +315,35 @@ function useDriverOrderState(): UseDriverOrderReturn {
     }
 
     const phase = stateRef.current.phase;
-    if (
-      phase === 'offer' ||
-      phase === 'active' ||
-      phase === 'arrived' ||
-      phase === 'in_progress' ||
-      phase === 'completed'
-    ) {
+    // Для активных фаз (active/arrived/in_progress) проверяем — не отменил
+    // ли клиент заказ, пока JS спал в background. Pusher-socket там
+    // мёртв, событие order.cancelled теряется, а без cancellation-check
+    // заказ висел бы до перезапуска app'а. Если сервер отдаёт 404 (нет
+    // активного) или status=cancelled — сбрасываем в online_idle и
+    // показываем алерт. Иначе ничего не трогаем — local state прав.
+    if (phase === 'active' || phase === 'arrived' || phase === 'in_progress') {
+      try {
+        const fresh = await getCurrentDriverOrder();
+        if (!fresh) {
+          const previousOrderId = stateRef.current.order?.id;
+          setState({ phase: 'online_idle', order: null });
+          if (previousOrderId !== undefined && alertedCancelOrderRef.current !== previousOrderId) {
+            alertedCancelOrderRef.current = previousOrderId;
+            showCancelledAlert(previousOrderId, true);
+          }
+        } else if (fresh.status === 'cancelled') {
+          setState({ phase: 'online_idle', order: null });
+          if (alertedCancelOrderRef.current !== fresh.id) {
+            alertedCancelOrderRef.current = fresh.id;
+            showCancelledAlert(fresh.id, true);
+          }
+        }
+      } catch {
+        // сеть моргнула — periodic polling подберёт
+      }
+      return;
+    }
+    if (phase === 'offer' || phase === 'completed') {
       return;
     }
 

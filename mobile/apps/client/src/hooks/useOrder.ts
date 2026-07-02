@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
-import { Platform, Vibration } from 'react-native';
+import { AppState, Platform, Vibration } from 'react-native';
 import { Order, OrderStatus, usePusher, useAuth, Haptics } from '@taxi/shared';
 import * as ordersApi from '../api/orders';
 
@@ -347,6 +347,49 @@ export function useOrder(): UseOrderReturn {
 
     return () => clearInterval(interval);
   }, [state.phase]);
+
+  // Foreground resync: RN замораживает JS-timer'ы и Pusher-socket когда
+  // app в background. Если водитель нажал «Прибыл» / клиент отменил заказ
+  // пока клиент был вне app'a — событие теряется. При возврате в
+  // foreground тянем актуальный order с сервера и синхронизируем phase.
+  useEffect(() => {
+    const sub = AppState.addEventListener('change', async (next) => {
+      if (next !== 'active') return;
+      const currentPhase = state.phase;
+      if (currentPhase === 'idle' || currentPhase === 'completed' || currentPhase === 'cancelled') {
+        try {
+          const current = await ordersApi.getCurrentOrder();
+          if (current) {
+            orderRef.current = current;
+            setState(buildState(statusToPhase(current.status), current));
+          }
+        } catch {
+          // network flake — polling подхватит
+        }
+        return;
+      }
+      const orderId = 'order' in state ? state.order.id : null;
+      if (!orderId) return;
+      try {
+        const fresh = await ordersApi.getOrder(orderId);
+        orderRef.current = fresh;
+        const phase = statusToPhase(fresh.status);
+        if (phase === 'cancelled') {
+          const reason = fresh.cancelled_by === 'system' ? 'no_drivers' : 'other';
+          orderRef.current = null;
+          setState({ phase: 'cancelled', reason });
+          setTimeout(() => {
+            setState((prev) => (prev.phase === 'cancelled' ? { phase: 'idle' } : prev));
+          }, 3000);
+          return;
+        }
+        setState(buildState(phase, fresh));
+      } catch {
+        // сеть моргнула — периодический polling выше подберёт
+      }
+    });
+    return () => sub.remove();
+  }, [state]);
 
   const callTaxi = useCallback(
     async (
