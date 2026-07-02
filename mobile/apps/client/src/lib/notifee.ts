@@ -16,30 +16,45 @@ if (Platform.OS === 'android') {
   }
 }
 
-export const CLIENT_ORDER_CHANNEL = 'client_order_events_v1';
+// Bump суффикс когда меняешь importance/sound/vibration канала —
+// Android фиксирует эти параметры при первом createChannel и не
+// обновляет для того же id. Старый _v1 создавался без sound на
+// первых сборках, поэтому даже с sound: 'default' в коде оставался
+// беззвучным. Новый id даёт свежий канал с полным звуком+вибрацией.
+export const CLIENT_ORDER_CHANNEL = 'client_order_events_v2';
 
-let channelEnsured = false;
+// Success-case: channelPromise остаётся resolved навсегда, все следующие
+// вызовы дешёвно возвращают уже resolved promise. Failure-case: сбрасываем
+// в null, чтобы следующий вызов попытался снова.
+let channelPromise: Promise<void> | null = null;
 
 export async function ensureClientChannel(): Promise<void> {
-  if (!Notifee || !NotifeeNs || channelEnsured) return;
-  try {
-    await Notifee.createChannel({
-      id: CLIENT_ORDER_CHANNEL,
-      name: 'События заказа',
-      description: 'Водитель принял, прибыл, поездка завершена',
-      importance: NotifeeNs.AndroidImportance.HIGH,
-      sound: 'default',
-      vibration: true,
-      vibrationPattern: [0, 250, 250, 250],
-      bypassDnd: false,
-      visibility: NotifeeNs.AndroidVisibility.PUBLIC,
-      lights: true,
-      lightColor: '#14B8A6',
-    });
-    channelEnsured = true;
-  } catch {
-    // best-effort
-  }
+  if (!Notifee || !NotifeeNs) return;
+  if (channelPromise) return channelPromise;
+  channelPromise = (async () => {
+    try {
+      await Notifee!.createChannel({
+        id: CLIENT_ORDER_CHANNEL,
+        name: 'События заказа',
+        description: 'Водитель принял, прибыл, поездка началась/завершена',
+        importance: NotifeeNs!.AndroidImportance.HIGH,
+        sound: 'default',
+        vibration: true,
+        vibrationPattern: [0, 300, 200, 300],
+        bypassDnd: false,
+        visibility: NotifeeNs!.AndroidVisibility.PUBLIC,
+        lights: true,
+        lightColor: '#14B8A6',
+      });
+    } catch {
+      channelPromise = null;
+      throw new Error('channel creation failed');
+    }
+  })();
+  // Проглатываем reject наружу, чтобы displayClientNotification не падал —
+  // при следующем вызове ensureClientChannel сам стартанёт новую попытку
+  // (channelPromise уже сброшен в catch выше).
+  return channelPromise.catch(() => undefined);
 }
 
 export async function requestNotificationPermission(): Promise<void> {
@@ -57,6 +72,11 @@ export async function displayClientNotification(opts: {
   body: string;
 }): Promise<void> {
   if (!Notifee || !NotifeeNs) return;
+  // Гарантируем что канал создан ДО первого displayNotification. Раньше
+  // ensureClientChannel был fire-and-forget при mount App'а, и первое
+  // событие могло прилететь до того как канал успел зарегистрироваться —
+  // Android silently отклонял displayNotification без канала.
+  await ensureClientChannel();
   try {
     await Notifee.displayNotification({
       id: opts.id,
@@ -67,9 +87,12 @@ export async function displayClientNotification(opts: {
         importance: NotifeeNs.AndroidImportance.HIGH,
         visibility: NotifeeNs.AndroidVisibility.PUBLIC,
         sound: 'default',
-        vibrationPattern: [0, 250, 250, 250],
+        vibrationPattern: [0, 300, 200, 300],
         smallIcon: 'ic_notification',
         color: '#14B8A6',
+        // Показывать heads-up (шторку сверху экрана) даже когда app
+        // открыт — раньше уведомление уходило прямо в трей без звука
+        // если клиент сидел в приложении.
         pressAction: {
           id: 'default',
           launchActivity: 'default',
@@ -77,6 +100,8 @@ export async function displayClientNotification(opts: {
       },
       ios: {
         sound: 'default',
+        critical: false,
+        interruptionLevel: 'timeSensitive',
       },
     });
   } catch {

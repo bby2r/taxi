@@ -128,14 +128,25 @@ export function useOrder(): UseOrderReturn {
         car_model?: string;
         car_number?: string;
       };
+      // Дедуп повторных Pusher-broadcast'ов: если водитель уже прописан
+      // на текущем заказе и order.status уже 'accepted' — это retry
+      // сокета/бекенда, не дёргаем notification+getOrder+setState снова.
+      const alreadyAssigned =
+        orderRef.current?.driver != null &&
+        orderRef.current.status === 'accepted';
+      if (alreadyAssigned) return;
+      // Звуковая шторка идёт БЕЗ условия на координаты — раньше при
+      // отсутствии coords в payload клиент вообще не получал алерт про
+      // назначение водителя. Optimistic-заполнение driver'а под if:
+      // без coords маркер на карте не построишь.
+      Haptics.success();
+      showLocalNotification(
+        'Водитель найден',
+        payload.driver_name
+          ? `${payload.driver_name} едет к вам`
+          : 'Ваш водитель в пути',
+      );
       if (orderRef.current && typeof payload.latitude === 'number' && typeof payload.longitude === 'number') {
-        Haptics.success();
-        showLocalNotification(
-          'Водитель найден',
-          payload.driver_name
-            ? `${payload.driver_name} едет к вам`
-            : 'Ваш водитель в пути',
-        );
         const prevDriver = orderRef.current.driver;
         const optimistic: Order = {
           ...orderRef.current,
@@ -209,6 +220,16 @@ export function useOrder(): UseOrderReturn {
   }, [refreshAndSetPhase]);
 
   const handleOrderInProgress = useCallback(() => {
+    // Клиент мог убрать телефон в карман после посадки — звуковое
+    // уведомление помогает не пропустить момент старта поездки
+    // (запускается отсчёт стоимости, включается таймер и т.д.).
+    Haptics.success();
+    Vibration.vibrate([0, 200, 100, 200]);
+    const driverName = orderRef.current?.driver?.name;
+    showLocalNotification(
+      'Поездка началась',
+      driverName ? `${driverName} везёт вас к точке назначения` : 'Мы в пути',
+    );
     refreshAndSetPhase('in_progress');
   }, [refreshAndSetPhase]);
 
@@ -256,6 +277,7 @@ export function useOrder(): UseOrderReturn {
 
   const handleOrderCancelled = useCallback(async () => {
     Haptics.warning();
+    Vibration.vibrate([0, 400, 200, 400]);
     let reason: 'no_drivers' | 'other' = 'other';
     const orderId = orderRef.current?.id;
     if (orderId) {
@@ -266,6 +288,12 @@ export function useOrder(): UseOrderReturn {
         // ignore, default 'other'
       }
     }
+    showLocalNotification(
+      reason === 'no_drivers' ? 'Свободных водителей нет' : 'Заказ отменён',
+      reason === 'no_drivers'
+        ? 'Попробуйте вызвать такси чуть позже'
+        : 'Мы вернём вас на главный экран',
+    );
     orderRef.current = null;
     setState({ phase: 'cancelled', reason });
     setTimeout(() => {
