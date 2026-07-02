@@ -1,5 +1,5 @@
 import { useEffect } from 'react';
-import { Platform } from 'react-native';
+import { Alert, AppState, Linking, Platform } from 'react-native';
 import { registerPushToken, useAuth } from '@taxi/shared';
 
 let Notifications: typeof import('expo-notifications') | null = null;
@@ -9,24 +9,11 @@ try {
   Notifications = null;
 }
 
-// Совпадает с channelId, который backend будет присылать через
-// ExpoPushService в поле 'channelId'. Bump суффикс, если меняешь
-// importance/sound канала — Android фиксирует эти параметры при первом
-// createChannel и не даёт обновить для того же id.
-// v2: снизили importance HIGH → DEFAULT (СМС-стиль вместо heads-up),
-// убрали bypassDnd и мигание LED — уведомление о поездке не должно
-// биться как звонок, клиент просит «как смски».
 const CLIENT_PUSH_CHANNEL = 'client_order_push_v2';
-// Тот же EAS project, что и у driver — оба app'а живут под одним
-// Expo-аккаунтом; Expo Push Service доставляет по token'у независимо
-// от projectId, так что split pool не нужен.
 const PROJECT_ID = '6a367005-44a7-40d0-a95a-ec0d133c661c';
 
 if (Notifications && Platform.OS !== 'web') {
   Notifications.setNotificationHandler({
-    // Пусть системная шторка показывает уведомление даже в foreground —
-    // клиент открыл app, положил в карман, водитель нажал «Прибыл» —
-    // должен услышать звук/вибрацию не заходя обратно в приложение.
     handleNotification: async () => ({
       shouldShowAlert: true,
       shouldPlaySound: true,
@@ -39,7 +26,6 @@ if (Notifications && Platform.OS !== 'web') {
 
 async function ensureChannel(): Promise<void> {
   if (!Notifications || Platform.OS !== 'android') return;
-  // Настройки для СМС-стиля (обычная шторка + системный звук, без heads-up).
   const config: Parameters<typeof Notifications.setNotificationChannelAsync>[1] = {
     name: 'События заказа',
     description: 'Водитель принял, прибыл, поездка началась/завершена, отмена.',
@@ -53,25 +39,52 @@ async function ensureChannel(): Promise<void> {
     bypassDnd: false,
   };
   await Notifications.setNotificationChannelAsync(CLIENT_PUSH_CHANNEL, config);
-  // Fallback-канал 'default': сюда попадает push, если backend не задеплоен
-  // с channelId-фиксом ExpoPushService (шлёт notification без channelId).
-  // Android 8+ иначе отправляет такой push в системный «Miscellaneous»,
-  // который у пользователя часто отключён — тогда шторка не появляется
-  // вообще. Явно создаём канал 'default' с теми же настройками, чтобы
-  // клиент не оставался без уведомления до раскатки backend'а.
   await Notifications.setNotificationChannelAsync('default', config);
 }
+
+// Идемпотентно: token регистрируется один раз за mount + повторно при
+// возврате в foreground если ещё не зарегистрирован (permission могла
+// быть отклонена, потом пользователь разрешил через настройки).
+let registeredTokenRef: string | null = null;
+let permissionAlertShown = false;
 
 async function registerToken(): Promise<void> {
   if (!Notifications) return;
   await ensureChannel();
-  const { status } = await Notifications.requestPermissionsAsync();
-  if (status !== 'granted') return;
+
+  // Сначала проверяем текущий статус — если already granted, не показываем
+  // диалог снова (Android бы всё равно проигнорировал). Если undetermined,
+  // запрашиваем — тогда покажется системный dialog.
+  let permission = await Notifications.getPermissionsAsync();
+  if (permission.status !== 'granted' && permission.canAskAgain) {
+    permission = await Notifications.requestPermissionsAsync();
+  }
+  if (permission.status !== 'granted') {
+    // eslint-disable-next-line no-console
+    console.warn('[push/client] permission not granted:', permission.status);
+    if (!permissionAlertShown) {
+      permissionAlertShown = true;
+      Alert.alert(
+        'Уведомления отключены',
+        'Разрешите уведомления в настройках, чтобы получать статус заказа: «Водитель едет», «Прибыл», «Поездка началась».',
+        [
+          { text: 'Позже', style: 'cancel' },
+          { text: 'Настройки', onPress: () => Linking.openSettings() },
+        ],
+      );
+    }
+    return;
+  }
+
   try {
     const tokenData = await Notifications.getExpoPushTokenAsync({ projectId: PROJECT_ID });
+    if (registeredTokenRef === tokenData.data) return;
     // eslint-disable-next-line no-console
     console.log('[push/client] Expo token:', tokenData.data);
     await registerPushToken(tokenData.data);
+    registeredTokenRef = tokenData.data;
+    // eslint-disable-next-line no-console
+    console.log('[push/client] token registered on backend');
   } catch (err) {
     // eslint-disable-next-line no-console
     console.warn('[push/client] register failed:', err instanceof Error ? err.message : err);
@@ -80,12 +93,9 @@ async function registerToken(): Promise<void> {
 
 /**
  * Регистрирует expo push token сервером и настраивает Android-канал
- * со звуком. Без этого backend `sendToUser` возвращает false и push
- * никогда не долетает до клиента — экран статусов «висит» пока
- * пользователь сам не откроет app.
- *
- * Тап по уведомлению открывает app (обработчик Linking уже настроен
- * в expo-notifications по умолчанию — нет доп. кода).
+ * со звуком. Ретрай на foreground: если пользователь отклонил permission
+ * и потом разрешил через настройки, следующий resume в app подтянет
+ * token без ручного перезапуска.
  */
 export function useNotifications(): void {
   const { isAuthenticated, user } = useAuth();
@@ -94,5 +104,9 @@ export function useNotifications(): void {
     if (!isAuthenticated || user?.role !== 'client' || Platform.OS === 'web') return;
     if (!Notifications) return;
     void registerToken();
+    const sub = AppState.addEventListener('change', (next) => {
+      if (next === 'active') void registerToken();
+    });
+    return () => sub.remove();
   }, [isAuthenticated, user?.role]);
 }
