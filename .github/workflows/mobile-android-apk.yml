@@ -113,18 +113,35 @@ jobs:
             sleep 20
           done
 
-      - name: Write google-services.json from secret (driver only)
-        if: matrix.app == 'driver'
+      - name: Write google-services.json from secret (both apps)
         working-directory: mobile/apps/${{ matrix.app }}
         env:
           GOOGLE_SERVICES_JSON: ${{ secrets.GOOGLE_SERVICES_JSON }}
+          GOOGLE_SERVICES_JSON_CLIENT: ${{ secrets.GOOGLE_SERVICES_JSON_CLIENT }}
         run: |
-          if [ -z "$GOOGLE_SERVICES_JSON" ]; then
-            echo "::error::GOOGLE_SERVICES_JSON secret is not set — Firebase config is required for FCM push to work in the driver app."
+          # Firebase config нужен обоим APK — без него FCM push от Expo
+          # Push Service не долетает до устройства (Pusher-WebSocket
+          # работает только в foreground, а push нужен и на killed app).
+          # Раньше писался только для driver'а: клиент собирался без
+          # Firebase, expo_push_token у клиента был технически валидный,
+          # но exp.host → FCM → device возвращал DeviceNotRegistered,
+          # шторка «Водитель прибыл» никогда не появлялась.
+          #
+          # Приоритет: если задан отдельный CLIENT-secret — используем его
+          # (у клиента и водителя разные package'ы, кг.aliftaxi.client vs
+          # кг.aliftaxi.app; в Firebase Console это могут быть разные
+          # проекты либо один общий с двумя app'ами). Fallback — общий
+          # secret, при условии что в файле есть оба package_name.
+          if [ "${{ matrix.app }}" = "client" ] && [ -n "$GOOGLE_SERVICES_JSON_CLIENT" ]; then
+            printf '%s' "$GOOGLE_SERVICES_JSON_CLIENT" > google-services.json
+            echo "google-services.json written from CLIENT secret ($(wc -c < google-services.json) bytes)"
+          elif [ -n "$GOOGLE_SERVICES_JSON" ]; then
+            printf '%s' "$GOOGLE_SERVICES_JSON" > google-services.json
+            echo "google-services.json written from shared secret ($(wc -c < google-services.json) bytes)"
+          else
+            echo "::error::${{ matrix.app }} APK нуждается в google-services.json (Firebase config). Задай GOOGLE_SERVICES_JSON (общий) или GOOGLE_SERVICES_JSON_CLIENT (только для клиента) в GitHub Secrets."
             exit 1
           fi
-          printf '%s' "$GOOGLE_SERVICES_JSON" > google-services.json
-          echo "google-services.json written ($(wc -c < google-services.json) bytes)"
 
       - name: Write Mapbox downloads token to ~/.gradle (driver only)
         if: matrix.app == 'driver'
