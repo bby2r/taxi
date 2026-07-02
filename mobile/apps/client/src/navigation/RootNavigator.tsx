@@ -7,11 +7,13 @@ import AuthStack from './AuthStack';
 import ClientTabs from './ClientTabs';
 import NameSetupScreen from '../screens/NameSetupScreen';
 import { RootStackParamList } from './types';
+import { useNotifications } from '../hooks/useNotifications';
 
 const Stack = createNativeStackNavigator<RootStackParamList>();
 
 export default function RootNavigator(): React.ReactNode {
   const { isLoading, isAuthenticated, user } = useAuth();
+  useNotifications();
 
   if (isLoading) {
     return (

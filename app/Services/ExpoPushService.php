@@ -2,6 +2,7 @@
 
 namespace App\Services;
 
+use App\Enums\UserRole;
 use App\Models\User;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
@@ -20,6 +21,17 @@ class ExpoPushService
     {
         if (! $user->expo_push_token) {
             return false;
+        }
+
+        // На Android параметры звука/вибрации/importance фиксируются на
+        // канале, а не на push'е. Явно указываем channelId, чтобы Android
+        // взял правильный канал (клиентский со звуком, водительский —
+        // соответственно). Без channelId push уходит в системный
+        // дефолтный канал, который у клиента был беззвучный.
+        if (! isset($options['channelId'])) {
+            $options['channelId'] = $user->role === UserRole::Client
+                ? 'client_order_push_v1'
+                : 'driver_offers_v3';
         }
 
         return $this->send($user->expo_push_token, $title, $body, $data, $options);
