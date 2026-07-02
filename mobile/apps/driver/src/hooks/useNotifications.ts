@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { Alert, AppState, Linking, Platform } from 'react-native';
 import { registerPushToken, useAuth, navigationRef } from '@taxi/shared';
 import { setPendingDriverAction } from '../utils/pendingNotificationAction';
+import { emitOverlayAction, isOverlayAction } from '../utils/overlayActionBus';
 
 let Notifications: typeof import('expo-notifications') | null = null;
 let moduleLoadError: string | null = null;
@@ -301,24 +302,51 @@ export function useNotifications(): void {
     // taps route through that scheme. Parse here so the existing
     // pendingDriverAction queue stays the single source of truth.
     const handleDeepLink = (url: string | null): void => {
-      if (!url || !url.startsWith('aliftaxidriver://offer')) return;
+      if (!url) return;
       try {
-        const parsed = new URL(url);
-        const action = parsed.searchParams.get('action');
-        const orderIdRaw = parsed.searchParams.get('order_id');
-        const orderId = orderIdRaw ? parseInt(orderIdRaw, 10) : NaN;
-        if (
-          Number.isFinite(orderId) &&
-          (action === 'accept' || action === 'decline')
-        ) {
-          setPendingDriverAction({ orderId, kind: action });
+        // aliftaxidriver://offer?action=accept&order_id=…
+        // ─ push-уведомления incoming offer'а (accept/decline).
+        if (url.startsWith('aliftaxidriver://offer')) {
+          const parsed = new URL(url);
+          const action = parsed.searchParams.get('action');
+          const orderIdRaw = parsed.searchParams.get('order_id');
+          const orderId = orderIdRaw ? parseInt(orderIdRaw, 10) : NaN;
+          if (
+            Number.isFinite(orderId) &&
+            (action === 'accept' || action === 'decline')
+          ) {
+            setPendingDriverAction({ orderId, kind: action });
+          }
+          if (navigationRef.isReady()) {
+            try {
+              navigationRef.navigate('DriverApp' as never);
+            } catch {
+              // navigation may not be mounted yet — useDriverOrder polls
+              // pendingDriverAction on mount anyway
+            }
+          }
+          return;
         }
-        if (navigationRef.isReady()) {
-          try {
-            navigationRef.navigate('DriverApp' as never);
-          } catch {
-            // navigation may not be mounted yet — useDriverOrder polls
-            // pendingDriverAction on mount anyway
+
+        // aliftaxidriver://active-order/<action>?order_id=…
+        // ─ клики по прозрачной карточке активного заказа. Действия
+        //   исполняются в OrderActiveScreen через overlayActionBus:
+        //   у него на руках current phase (arrived/start/complete)
+        //   и order info (phone, pickup coords).
+        if (url.startsWith('aliftaxidriver://active-order')) {
+          const parsed = new URL(url);
+          const rawAction = parsed.pathname.replace(/^\/+/, '');
+          const orderIdRaw = parsed.searchParams.get('order_id');
+          const orderId = orderIdRaw ? parseInt(orderIdRaw, 10) : NaN;
+          if (Number.isFinite(orderId) && isOverlayAction(rawAction)) {
+            emitOverlayAction({ action: rawAction, orderId });
+          }
+          if (navigationRef.isReady()) {
+            try {
+              navigationRef.navigate('DriverApp' as never);
+            } catch {
+              // ignore — экран сам подпишется на bus при mount
+            }
           }
         }
       } catch {

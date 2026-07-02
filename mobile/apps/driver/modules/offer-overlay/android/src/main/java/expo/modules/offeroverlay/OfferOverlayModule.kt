@@ -42,11 +42,12 @@ class OfferOverlayModule : Module() {
             OfferOverlayManager.isAppForeground = false
         }
 
-        // Wire native button presses → JS event "ActiveOrderAction" с
-        // полями action и orderId.
-        ActiveOrderOverlayManager.setActionEmitter { action, orderId ->
-            sendEvent("ActiveOrderAction", mapOf("action" to action, "orderId" to orderId))
-        }
+        // Note: раньше кнопки active-order overlay эмитили JS-event
+        // "ActiveOrderAction". Это не работало, если app в killed-state:
+        // модуль не инициализирован → sendEvent молча падал. Теперь
+        // клики уходят через startActivity + deep-link прямо из
+        // ActiveOrderOverlayManager, а JS-обработчик живёт в
+        // useNotifications.handleDeepLink (aliftaxidriver://active-order).
 
         Function("hasOverlayPermission") {
             val context = appContext.reactContext ?: return@Function false

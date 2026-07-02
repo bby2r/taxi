@@ -1,6 +1,7 @@
 package expo.modules.offeroverlay
 
 import android.content.Context
+import android.content.Intent
 import android.graphics.PixelFormat
 import android.net.Uri
 import android.os.Build
@@ -25,23 +26,44 @@ import android.widget.TextView
  * FLAG_NOT_FOCUSABLE, and is therefore touch-transparent outside its
  * own bounds — navigator below receives every tap.
  *
- * Button presses bubble up to JS via the Expo module's sendEvent
- * channel ("ActiveOrderAction"). JS-side useDriverOrder listens and
- * calls the existing requestArrived / requestStart / requestComplete
- * server actions — no new backend surface.
+ * Все клики (кнопки + тап по body) уходят через startActivity с
+ * `aliftaxidriver://active-order/<action>?order_id=<id>` deep-link.
+ * Это единственный надёжный канал: sendEvent через Expo module работал
+ * только когда JS-runtime уже был жив и listener смонтирован — а если
+ * app в background/killed, listener не подписан и action терялся
+ * (визуально кнопка нажималась, но ничего не происходило до открытия
+ * app вручную). launch-intent просыпает app даже из killed-state и
+ * JS-side handleDeepLink в useNotifications парсит URL и вызывает
+ * нужный API.
  */
 object ActiveOrderOverlayManager {
     private var overlayView: View? = null
     private var windowManager: WindowManager? = null
     private var params: WindowManager.LayoutParams? = null
     private var activeContext: Context? = null
-    private var actionEmitter: ((String, Int) -> Unit)? = null
     private var currentOrderId: Int = -1
-    private var expanded = false
     private val mainHandler = Handler(Looper.getMainLooper())
 
-    fun setActionEmitter(emit: (action: String, orderId: Int) -> Unit) {
-        actionEmitter = emit
+    /**
+     * Опережает LAUNCHER Activity данными deep-link'а. singleTask
+     * launchMode + FLAG_ACTIVITY_NEW_TASK гарантирует, что existing
+     * instance получит onNewIntent(); RN Linking конвертирует intent
+     * data в 'url' event, который useNotifications уже слушает.
+     */
+    private fun launchAppForOverlayAction(context: Context, action: String, orderId: Int) {
+        val launch = context.packageManager.getLaunchIntentForPackage(context.packageName) ?: return
+        launch.data = Uri.parse("aliftaxidriver://active-order/$action?order_id=$orderId")
+        launch.addFlags(
+            Intent.FLAG_ACTIVITY_NEW_TASK or
+                Intent.FLAG_ACTIVITY_CLEAR_TOP or
+                Intent.FLAG_ACTIVITY_SINGLE_TOP,
+        )
+        try {
+            context.startActivity(launch)
+        } catch (_: Exception) {
+            // Actiivty недоступна — fallback пути нет, но и без action'а
+            // приложение просто не откроется. Пользователь пере-тапнет.
+        }
     }
 
     fun hasPermission(context: Context): Boolean {
@@ -112,6 +134,7 @@ object ActiveOrderOverlayManager {
             cardBg.setBackgroundResource(R.drawable.active_order_card_bg_blur)
         }
 
+        ensureExpanded(view)
         bindActions(view, orderId)
         applyPayload(payload, view)
 
@@ -217,8 +240,12 @@ object ActiveOrderOverlayManager {
                     true
                 }
                 MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> {
-                    if (!dragging) {
-                        toggleExpanded(view)
+                    if (!dragging && event.action == MotionEvent.ACTION_UP) {
+                        // Тап (не drag) по «шапке» карточки → открываем app.
+                        // Именно то, что просит пользователь: «когда нажимаешь
+                        // где инфа клиента — надо чтоб заходил в само
+                        // приложение через это прозрачное».
+                        launchAppForOverlayAction(view.context.applicationContext, "open", currentOrderId)
                     }
                     dragging = false
                     true
@@ -250,25 +277,29 @@ object ActiveOrderOverlayManager {
         }
     }
 
-    private fun toggleExpanded(view: View) {
-        expanded = !expanded
-        view.findViewById<View>(R.id.active_collapsed_block).visibility = if (expanded) View.GONE else View.VISIBLE
-        view.findViewById<View>(R.id.active_expanded_block).visibility = if (expanded) View.VISIBLE else View.GONE
+    /**
+     * Всегда показываем «expanded» вид (полная карточка с кнопками).
+     * Раньше карточка стартовала в collapsed виде, тап по body
+     * разворачивал её; теперь единственный тап открывает приложение —
+     * expand-toggle больше не нужен.
+     */
+    private fun ensureExpanded(view: View) {
+        view.findViewById<View>(R.id.active_collapsed_block)?.visibility = View.GONE
+        view.findViewById<View>(R.id.active_expanded_block)?.visibility = View.VISIBLE
     }
 
     private var primaryDisabled = false
     private fun bindActions(view: View, orderId: Int) {
+        val ctx = view.context.applicationContext
         view.findViewById<View>(R.id.active_btn_call)?.setOnClickListener {
-            actionEmitter?.invoke("call", orderId)
+            launchAppForOverlayAction(ctx, "call", orderId)
         }
         view.findViewById<View>(R.id.active_btn_primary)?.setOnClickListener {
-            if (!primaryDisabled) actionEmitter?.invoke("primary", orderId)
+            if (!primaryDisabled) launchAppForOverlayAction(ctx, "primary", orderId)
         }
         view.findViewById<View>(R.id.active_btn_open_maps)?.setOnClickListener {
-            actionEmitter?.invoke("openMaps", orderId)
+            launchAppForOverlayAction(ctx, "open-maps", orderId)
         }
-        // Кнопка hide убрана из UI — overlay управляется автоматически
-        // через useOverlayLifecycle (DriverOrderProvider) + auto-TTL ниже.
     }
 
     private fun updateOnMain(payload: Map<String, Any?>) {
@@ -314,7 +345,6 @@ object ActiveOrderOverlayManager {
         params = null
         activeContext = null
         currentOrderId = -1
-        expanded = false
     }
 
     private fun dp(context: Context, value: Int): Int =

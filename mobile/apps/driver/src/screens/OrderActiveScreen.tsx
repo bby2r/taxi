@@ -11,13 +11,13 @@ import {
   Modal,
 } from 'react-native';
 import {
-  addActiveOrderListener,
   hasOverlayPermission,
   hideActiveOrderOverlay,
   showActiveOrderOverlay,
   updateActiveOrderOverlay,
   type ActiveOrderPayload,
 } from '../../modules/offer-overlay/src';
+import { subscribeOverlayAction } from '../utils/overlayActionBus';
 import { Icon } from '@taxi/shared';
 import { useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
@@ -507,9 +507,16 @@ export default function OrderActiveScreen(): React.ReactNode {
 
   useEffect(() => {
     if (!order) return undefined;
-    const sub = addActiveOrderListener((event) => {
+    // Клики по overlay-карточке уходят через deep-link из native-слоя
+    // (см. ActiveOrderOverlayManager.launchAppForOverlayAction);
+    // useNotifications.handleDeepLink парсит URL и стреляет в bus,
+    // а здесь мы выполняем действие с полным контекстом (phone, phase).
+    const unsub = subscribeOverlayAction((event) => {
       if (event.orderId !== order.id) return;
       switch (event.action) {
+        case 'open':
+          // App уже поднят deep-link'ом — просто на этом экране.
+          break;
         case 'call':
           if (order.client.phone) Linking.openURL(`tel:${order.client.phone}`);
           break;
@@ -518,15 +525,12 @@ export default function OrderActiveScreen(): React.ReactNode {
           else if (state.phase === 'arrived') requestStart();
           else if (state.phase === 'in_progress') requestComplete();
           break;
-        case 'openMaps':
+        case 'open-maps':
           openNavigation(order.pickup_latitude, order.pickup_longitude);
-          break;
-        case 'hide':
-          hideActiveOrderOverlay();
           break;
       }
     });
-    return () => sub.remove();
+    return unsub;
     // requestArrived/Start/Complete стабильны по ref в этом сетапе.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [order?.id, state.phase]);
