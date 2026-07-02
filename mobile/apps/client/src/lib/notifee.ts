@@ -18,10 +18,10 @@ if (Platform.OS === 'android') {
 
 // Bump суффикс когда меняешь importance/sound/vibration канала —
 // Android фиксирует эти параметры при первом createChannel и не
-// обновляет для того же id. Старый _v1 создавался без sound на
-// первых сборках, поэтому даже с sound: 'default' в коде оставался
-// беззвучным. Новый id даёт свежий канал с полным звуком+вибрацией.
-export const CLIENT_ORDER_CHANNEL = 'client_order_events_v2';
+// обновляет для того же id.
+// v3: понизили importance HIGH → DEFAULT (СМС-стиль без heads-up),
+// убрали lights + агрессивную вибрацию — клиент просит «как смски».
+export const CLIENT_ORDER_CHANNEL = 'client_order_events_v3';
 
 // Success-case: channelPromise остаётся resolved навсегда, все следующие
 // вызовы дешёвно возвращают уже resolved promise. Failure-case: сбрасываем
@@ -37,14 +37,13 @@ export async function ensureClientChannel(): Promise<void> {
         id: CLIENT_ORDER_CHANNEL,
         name: 'События заказа',
         description: 'Водитель принял, прибыл, поездка началась/завершена',
-        importance: NotifeeNs!.AndroidImportance.HIGH,
+        importance: NotifeeNs!.AndroidImportance.DEFAULT,
         sound: 'default',
         vibration: true,
-        vibrationPattern: [0, 300, 200, 300],
+        vibrationPattern: [0, 200],
         bypassDnd: false,
         visibility: NotifeeNs!.AndroidVisibility.PUBLIC,
-        lights: true,
-        lightColor: '#14B8A6',
+        lights: false,
       });
     } catch {
       channelPromise = null;
@@ -84,15 +83,12 @@ export async function displayClientNotification(opts: {
       body: opts.body,
       android: {
         channelId: CLIENT_ORDER_CHANNEL,
-        importance: NotifeeNs.AndroidImportance.HIGH,
+        importance: NotifeeNs.AndroidImportance.DEFAULT,
         visibility: NotifeeNs.AndroidVisibility.PUBLIC,
         sound: 'default',
-        vibrationPattern: [0, 300, 200, 300],
+        vibrationPattern: [0, 200],
         smallIcon: 'ic_notification',
         color: '#14B8A6',
-        // Показывать heads-up (шторку сверху экрана) даже когда app
-        // открыт — раньше уведомление уходило прямо в трей без звука
-        // если клиент сидел в приложении.
         pressAction: {
           id: 'default',
           launchActivity: 'default',
@@ -101,7 +97,9 @@ export async function displayClientNotification(opts: {
       ios: {
         sound: 'default',
         critical: false,
-        interruptionLevel: 'timeSensitive',
+        // 'active' = обычное уведомление (звук СМС), не 'timeSensitive'
+        // (которое пробивает Focus и звучит громче).
+        interruptionLevel: 'active',
       },
     });
   } catch {

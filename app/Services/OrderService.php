@@ -445,7 +445,7 @@ class OrderService
      */
     public function startRide(Order $order, User $driver): Order
     {
-        return DB::transaction(function () use ($order, $driver) {
+        $order = DB::transaction(function () use ($order, $driver) {
             $order = Order::lockForUpdate()->findOrFail($order->id);
 
             if ($order->status !== OrderStatus::Arrived || $order->driver_id !== $driver->id) {
@@ -461,6 +461,19 @@ class OrderService
 
             return $order;
         });
+
+        $client = User::find($order->client_id);
+
+        if ($client) {
+            $this->pushService->sendToUser(
+                $client,
+                'Поездка началась',
+                'Мы в пути',
+                ['order_id' => $order->id, 'type' => 'order_in_progress'],
+            );
+        }
+
+        return $order;
     }
 
     /**

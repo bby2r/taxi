@@ -30,7 +30,7 @@ class ExpoPushService
         // дефолтный канал, который у клиента был беззвучный.
         if (! isset($options['channelId'])) {
             $options['channelId'] = $user->role === UserRole::Client
-                ? 'client_order_push_v1'
+                ? 'client_order_push_v2'
                 : 'driver_offers_v3';
         }
 

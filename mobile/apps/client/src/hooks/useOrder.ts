@@ -176,16 +176,13 @@ export function useOrder(): UseOrderReturn {
   );
 
   const handleDriverArrived = useCallback(() => {
-    // Three-layer alert so the client can't miss the arrival, even when
-    // the phone is on silent or the TTS engine is mute / has no Russian
-    // voice installed:
-    //
-    //   1. Vibration — works in every audio mode, no permissions needed.
-    //   2. Audio mode bumped to play-in-silent + TTS through it. The
-    //      previous version called Speech.speak directly, which routes
-    //      through the media stream and is muted by ringer-silent mode.
-    //   3. TTS itself — Russian if available, fallback to default voice.
-    Vibration.vibrate([0, 400, 200, 400, 200, 400]);
+    // Раньше был 3-слойный alert (длинная вибрация + TTS «ваш водитель
+    // прибыл» + audio-mode bump), задумано чтобы клиент не пропустил
+    // прибытие даже на беззвучном. По UX это оказалось слишком громко:
+    // клиент попросил «звук как смски». Короткая вибрация + системный
+    // шторка со звуком уведомления делают то же самое, но не срывают
+    // разговор в аудио-приложении и не звучат как тревога.
+    Vibration.vibrate([0, 200]);
 
     const driverName = orderRef.current?.driver?.name;
     showLocalNotification(
@@ -193,38 +190,15 @@ export function useOrder(): UseOrderReturn {
       driverName ? `${driverName} прибыл в точку подачи` : 'Водитель прибыл',
     );
 
-    (async () => {
-      try {
-        await ExpoAudio?.setAudioModeAsync({
-          playsInSilentMode: true,
-          shouldPlayInBackground: false,
-          interruptionMode: 'duckOthers',
-          interruptionModeAndroid: 'duckOthers',
-          allowsRecording: false,
-        });
-      } catch {
-        // not critical
-      }
-      try {
-        Speech?.speak('Ваш водитель прибыл', {
-          language: Platform.OS === 'android' ? 'ru-RU' : 'ru',
-          rate: 1.0,
-          pitch: 1.0,
-        });
-      } catch {
-        // TTS engine missing the locale — vibration already alerted
-      }
-    })();
-
     refreshAndSetPhase('arrived');
   }, [refreshAndSetPhase]);
 
   const handleOrderInProgress = useCallback(() => {
-    // Клиент мог убрать телефон в карман после посадки — звуковое
+    // Клиент мог убрать телефон в карман после посадки — короткое
     // уведомление помогает не пропустить момент старта поездки
     // (запускается отсчёт стоимости, включается таймер и т.д.).
     Haptics.success();
-    Vibration.vibrate([0, 200, 100, 200]);
+    Vibration.vibrate([0, 200]);
     const driverName = orderRef.current?.driver?.name;
     showLocalNotification(
       'Поездка началась',
@@ -277,7 +251,7 @@ export function useOrder(): UseOrderReturn {
 
   const handleOrderCancelled = useCallback(async () => {
     Haptics.warning();
-    Vibration.vibrate([0, 400, 200, 400]);
+    Vibration.vibrate([0, 200]);
     let reason: 'no_drivers' | 'other' = 'other';
     const orderId = orderRef.current?.id;
     if (orderId) {

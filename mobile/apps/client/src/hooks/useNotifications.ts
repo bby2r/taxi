@@ -10,11 +10,13 @@ try {
 }
 
 // Совпадает с channelId, который backend будет присылать через
-// ExpoPushService в поле 'channelId'. Именно на нём настроены звук и
-// вибрация. Bump суффикс, если меняешь importance/sound канала —
-// Android фиксирует эти параметры при первом createChannel и не даёт
-// обновить для того же id.
-const CLIENT_PUSH_CHANNEL = 'client_order_push_v1';
+// ExpoPushService в поле 'channelId'. Bump суффикс, если меняешь
+// importance/sound канала — Android фиксирует эти параметры при первом
+// createChannel и не даёт обновить для того же id.
+// v2: снизили importance HIGH → DEFAULT (СМС-стиль вместо heads-up),
+// убрали bypassDnd и мигание LED — уведомление о поездке не должно
+// биться как звонок, клиент просит «как смски».
+const CLIENT_PUSH_CHANNEL = 'client_order_push_v2';
 // Тот же EAS project, что и у driver — оба app'а живут под одним
 // Expo-аккаунтом; Expo Push Service доставляет по token'у независимо
 // от projectId, так что split pool не нужен.
@@ -40,12 +42,15 @@ async function ensureChannel(): Promise<void> {
   await Notifications.setNotificationChannelAsync(CLIENT_PUSH_CHANNEL, {
     name: 'События заказа',
     description: 'Водитель принял, прибыл, поездка началась/завершена, отмена.',
-    importance: Notifications.AndroidImportance.HIGH,
+    // DEFAULT = обычная шторка + системный звук СМС, без heads-up
+    // всплывающего сверху. Клиент попросил «как смски» — не громко,
+    // не как звонок.
+    importance: Notifications.AndroidImportance.DEFAULT,
     sound: 'default',
-    vibrationPattern: [0, 300, 200, 300],
-    lightColor: '#14B8A6',
+    // Короткий «вжик», не длинная тревожная серия.
+    vibrationPattern: [0, 200],
     lockscreenVisibility: Notifications.AndroidNotificationVisibility.PUBLIC,
-    enableLights: true,
+    enableLights: false,
     enableVibrate: true,
     showBadge: false,
     bypassDnd: false,
